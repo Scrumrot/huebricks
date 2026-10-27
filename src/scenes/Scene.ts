@@ -1,0 +1,38 @@
+import type { GameType } from "../core/constants";
+import type { SpriteMap } from "../engine/assets";
+import type { AudioSystem } from "../engine/audio";
+import type { Input } from "../engine/input";
+import type { SaveData } from "../engine/save";
+import type { Palette, ThemeName } from "../engine/theme";
+
+/** State that outlives a single scene (the GML globals). */
+export interface Session {
+  gameType: GameType;
+  /** 0 = tutorial, 1..7 = real worlds. */
+  world: number;
+  /** 0..5 within a world. */
+  level: number;
+  score: number;
+}
+
+export interface GameContext {
+  /** Active sprite set; swapped when the theme changes. */
+  sprites: SpriteMap;
+  /** Colours and fonts for everything drawn directly by the scenes. */
+  palette: Palette;
+  audio: AudioSystem;
+  input: Input;
+  save: SaveData;
+  session: Session;
+  setScene(scene: Scene): void;
+  setTheme(theme: ThemeName): void;
+  persist(): void;
+}
+
+export interface Scene {
+  /** Advance one 30 Hz step. */
+  update(): void;
+  render(ctx: CanvasRenderingContext2D): void;
+  /** Called once when the scene becomes active. */
+  enter?(): void;
+}
