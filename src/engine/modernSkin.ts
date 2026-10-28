@@ -1,37 +1,51 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
+import { SCREEN_H, SCREEN_W } from "../core/constants";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
 import { buildTutorialSlides } from "./modernSlides";
 
 /**
- * Procedurally generated "modern" sprite set.
+ * "Pigment": the modern sprite set, generated on offscreen canvases.
  *
- * Every sprite the game draws is rebuilt here on offscreen canvases with a
- * flat, rounded, high-contrast look, under the same names and frame layouts
- * as the original GameMaker sprites so the scenes need no changes. Sprites
- * without a modern equivalent (tutorial slides, unused store buttons) fall
- * back to the classic art.
+ * Paint chips on warm paper. Bricks are thick flat gouache chips with a
+ * darker cut edge, a single inner highlight and hand-cut wobble baked into
+ * the outline; glyphs are ink. Every sprite the game draws is rebuilt here
+ * under the same names and frame layouts as the original GameMaker sprites.
  */
 
-export const FONT = '"Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif';
+export const FONT = 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+export const DISPLAY = 'Fredoka, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
-/** Modern brick colours, indexed by colour bits. */
+export const PAPER = "#F3EEE4";
+export const PAPER_EDGE = "#E6DFD2";
+export const PAPER_CELL = "#E9E3D7";
+export const LEDGE = "#DCD4C6";
+export const CARD = "#FBF8F2";
+export const CARD_PRESSED = "#EDE7DB";
+export const INK = "#1F1C18";
+export const INK_MUTED = "#8A8378";
+export const INK_SOFT = "rgba(20,16,12,0.78)";
+export const INK_LIGHT = "rgba(255,255,255,0.85)";
+export const SHADOW = "rgba(60,40,20,0.18)";
+export const NEUTRAL = "#D9D2C5";
+/** Kept for callers that want plain white. */
+export const WHITE = "#FFFFFF";
+
+/** Paint colours, indexed by colour bits. */
 export const MODERN_COLORS: Record<Color, string> = {
-  1: "#ef3f4f", // red
-  2: "#3b7cff", // blue
-  3: "#9b5de5", // purple
-  4: "#ffc12b", // yellow
-  5: "#ff8a2a", // orange
-  6: "#2fcc71", // green
-  7: "#4b5563", // black / chromatic gray
+  1: "#E04A3F", // red
+  2: "#2E6FD8", // blue
+  3: "#7D4FC2", // purple
+  4: "#F2C230", // yellow
+  5: "#F28B2B", // orange
+  6: "#3FB26A", // green
+  7: "#2B2B30", // black / chromatic gray
 };
 
 /** `brick_noicon_sprite` frame -> colour (frames 0..5 colours, 6 black, 7 neutral). */
-const NOICON_COLORS = ["#ef3f4f", "#3b7cff", "#9b5de5", "#ffc12b", "#ff8a2a", "#2fcc71", "#4b5563", "#2a3446"];
+const NOICON_COLORS = [MODERN_COLORS[1], MODERN_COLORS[2], MODERN_COLORS[3], MODERN_COLORS[4], MODERN_COLORS[5], MODERN_COLORS[6], MODERN_COLORS[7], NEUTRAL];
 
-export const PANEL = "#151d2e";
-export const PANEL_LIGHT = "#1f2a40";
-export const PANEL_EDGE = "rgba(255,255,255,0.10)";
-export const WHITE = "#f8fafc";
+/** Colours dark enough that their ink is white. */
+const LIGHT_INK = new Set<string>([MODERN_COLORS[2], MODERN_COLORS[3], MODERN_COLORS[7]]);
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -70,31 +84,184 @@ export function rgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/** Ink colour that reads on a chip of `base`. */
+export function inkOn(base: string): string {
+  return LIGHT_INK.has(base) ? INK_LIGHT : INK_SOFT;
+}
+
 export function roundRect(g: Ctx, x: number, y: number, w: number, h: number, r: number): void {
   const rr = Math.min(r, w / 2, h / 2);
   g.beginPath();
-  g.moveTo(x + rr, y);
-  g.lineTo(x + w - rr, y);
-  g.quadraticCurveTo(x + w, y, x + w, y + rr);
-  g.lineTo(x + w, y + h - rr);
-  g.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-  g.lineTo(x + rr, y + h);
-  g.quadraticCurveTo(x, y + h, x, y + h - rr);
-  g.lineTo(x, y + rr);
-  g.quadraticCurveTo(x, y, x + rr, y);
-  g.closePath();
+  g.roundRect(x, y, w, h, rr);
 }
 
-export function text(g: Ctx, s: string, x: number, y: number, size: number, color = WHITE, weight = 700, align: CanvasTextAlign = "center"): void {
-  g.font = `${weight} ${size}px ${FONT}`;
+export function text(
+  g: Ctx,
+  s: string,
+  x: number,
+  y: number,
+  size: number,
+  color = INK,
+  weight = 700,
+  align: CanvasTextAlign = "center",
+  font = FONT,
+): void {
+  g.font = `${weight} ${size}px ${font}`;
   g.textAlign = align;
   g.textBaseline = "middle";
   g.fillStyle = color;
   g.fillText(s, x, y);
 }
 
+/** Display (Fredoka) text. */
+export function display(g: Ctx, s: string, x: number, y: number, size: number, color = INK, align: CanvasTextAlign = "center"): void {
+  text(g, s, x, y, size, color, 600, align, DISPLAY);
+}
+
 // ---------------------------------------------------------------------------
-// Shapes
+// Paint chips
+// ---------------------------------------------------------------------------
+
+/** Small deterministic RNG so each colour's wobble is baked the same way every time. */
+function seeded(seed: number): () => number {
+  let s = (seed * 9301 + 49297) % 233280;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+
+/**
+ * Path of a rounded rectangle whose outline wobbles by up to `amp` so the
+ * chip looks hand-cut. Six slow waves around the perimeter, phased by seed.
+ */
+export function chipPath(g: Ctx, x: number, y: number, w: number, h: number, r: number, amp: number, seed: number): void {
+  const rr = Math.min(r, w / 2, h / 2);
+  const rnd = seeded(seed);
+  const phases = Array.from({ length: 3 }, () => rnd() * Math.PI * 2);
+  const straightW = w - 2 * rr;
+  const straightH = h - 2 * rr;
+  const arc = (Math.PI / 2) * rr;
+  const perim = 2 * straightW + 2 * straightH + 4 * arc;
+  const steps = 72;
+  g.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const d = (i / steps) * perim;
+    // point along the perimeter, clockwise from the top-left corner's end
+    let px: number;
+    let py: number;
+    let nx: number;
+    let ny: number;
+    let s = d;
+    if (s < straightW) {
+      px = x + rr + s;
+      py = y;
+      nx = 0;
+      ny = -1;
+    } else if ((s -= straightW) < arc) {
+      const a = -Math.PI / 2 + (s / arc) * (Math.PI / 2);
+      px = x + w - rr + Math.cos(a) * rr;
+      py = y + rr + Math.sin(a) * rr;
+      nx = Math.cos(a);
+      ny = Math.sin(a);
+    } else if ((s -= arc) < straightH) {
+      px = x + w;
+      py = y + rr + s;
+      nx = 1;
+      ny = 0;
+    } else if ((s -= straightH) < arc) {
+      const a = (s / arc) * (Math.PI / 2);
+      px = x + w - rr + Math.cos(a) * rr;
+      py = y + h - rr + Math.sin(a) * rr;
+      nx = Math.cos(a);
+      ny = Math.sin(a);
+    } else if ((s -= arc) < straightW) {
+      px = x + w - rr - s;
+      py = y + h;
+      nx = 0;
+      ny = 1;
+    } else if ((s -= straightW) < arc) {
+      const a = Math.PI / 2 + (s / arc) * (Math.PI / 2);
+      px = x + rr + Math.cos(a) * rr;
+      py = y + h - rr + Math.sin(a) * rr;
+      nx = Math.cos(a);
+      ny = Math.sin(a);
+    } else if ((s -= arc) < straightH) {
+      px = x;
+      py = y + h - rr - s;
+      nx = -1;
+      ny = 0;
+    } else {
+      s -= straightH;
+      const a = Math.PI + (s / arc) * (Math.PI / 2);
+      px = x + rr + Math.cos(a) * rr;
+      py = y + rr + Math.sin(a) * rr;
+      nx = Math.cos(a);
+      ny = Math.sin(a);
+    }
+    const u = (d / perim) * Math.PI * 2;
+    const wob = (Math.sin(u * 6 + phases[0]) * 0.5 + Math.sin(u * 3 + phases[1]) * 0.35 + Math.sin(u * 11 + phases[2]) * 0.15) * amp;
+    px += nx * wob;
+    py += ny * wob;
+    if (i === 0) g.moveTo(px, py);
+    else g.lineTo(px, py);
+  }
+  g.closePath();
+}
+
+export interface ChipOptions {
+  radius?: number;
+  /** Hand-cut wobble amplitude (px); 0 for a clean rounded rect. */
+  wobble?: number;
+  seed?: number;
+  /** Draw a hard offset shadow under the chip. */
+  shadow?: number;
+  /** Skip the inner highlight. */
+  flat?: boolean;
+}
+
+/** A thick flat paint chip: flat fill, darker cut edge, one inner highlight. */
+export function chip(g: Ctx, x: number, y: number, w: number, h: number, base: string, opts: ChipOptions = {}): void {
+  const r = opts.radius ?? Math.min(w, h) * 0.18;
+  const wobble = opts.wobble ?? Math.min(w, h) * 0.01;
+  const seed = opts.seed ?? 1;
+  const edge = Math.max(1, Math.min(w, h) * 0.016);
+  if (opts.shadow) {
+    chipPath(g, x, y + opts.shadow, w, h, r, wobble, seed);
+    g.fillStyle = SHADOW;
+    g.fill();
+  }
+  chipPath(g, x, y, w, h, r, wobble, seed);
+  g.fillStyle = base;
+  g.fill();
+  g.lineWidth = edge * 2;
+  g.strokeStyle = shade(base, -0.18);
+  g.save();
+  g.clip();
+  g.stroke();
+  if (!opts.flat) {
+    // single top-left inner highlight stroke
+    const inset = edge * 2.2;
+    g.lineWidth = edge * 1.6;
+    g.strokeStyle = "rgba(255,255,255,0.25)";
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(x + inset, y + h - r - inset * 0.5);
+    g.lineTo(x + inset, y + r + inset);
+    g.quadraticCurveTo(x + inset, y + inset, x + r + inset, y + inset);
+    g.lineTo(x + w - r - inset * 0.5, y + inset);
+    g.stroke();
+  }
+  g.restore();
+}
+
+/** Backwards-compatible name used by the slide builder. */
+export function tile(g: Ctx, x: number, y: number, w: number, h: number, base: string, opts: { radius?: number; flat?: boolean } = {}): void {
+  chip(g, x, y, w, h, base, { radius: opts.radius, flat: opts.flat });
+}
+
+// ---------------------------------------------------------------------------
+// Glyphs
 // ---------------------------------------------------------------------------
 
 export function polygon(g: Ctx, cx: number, cy: number, r: number, sides: number, rotation = 0): void {
@@ -122,7 +289,7 @@ const GLYPHS: Record<Color, Glyph[]> = {
   7: ["octagon", "diamond", "circle"], // black
 };
 
-function strokeGlyph(g: Ctx, glyph: Glyph, cx: number, cy: number, r: number): void {
+function glyphPath(g: Ctx, glyph: Glyph, cx: number, cy: number, r: number): void {
   switch (glyph) {
     case "octagon":
       polygon(g, cx, cy, r, 8, Math.PI / 8);
@@ -135,76 +302,65 @@ function strokeGlyph(g: Ctx, glyph: Glyph, cx: number, cy: number, r: number): v
       g.arc(cx, cy, r, 0, Math.PI * 2);
       break;
   }
-  g.stroke();
 }
 
-export function drawGlyphs(g: Ctx, color: Color, cx: number, cy: number, size: number): void {
+/** Ink glyphs: a 2.5 px stroke at cell scale; the innermost shape is filled on mixed colours. */
+export function drawGlyphs(g: Ctx, color: Color, cx: number, cy: number, size: number, ink = inkOn(MODERN_COLORS[color])): void {
   const glyphs = GLYPHS[color];
-  g.lineWidth = size * 0.045;
+  g.lineWidth = size * 0.04;
   g.lineJoin = "round";
-  g.strokeStyle = "rgba(255,255,255,0.92)";
+  g.strokeStyle = ink;
   const radii = glyphs.length === 1 ? [0.26] : glyphs.length === 2 ? [0.3, 0.17] : [0.31, 0.2, 0.1];
-  glyphs.forEach((gl, i) => strokeGlyph(g, gl, cx, cy, size * radii[i]));
+  glyphs.forEach((gl, i) => {
+    glyphPath(g, gl, cx, cy, size * radii[i]);
+    if (glyphs.length > 1 && i === glyphs.length - 1) {
+      g.save();
+      g.globalAlpha = 0.35;
+      g.fillStyle = ink;
+      g.fill();
+      g.restore();
+    }
+    g.stroke();
+  });
 }
 
-/** A rounded tile with a soft vertical gradient and top highlight. */
-export function tile(g: Ctx, x: number, y: number, w: number, h: number, base: string, opts: { radius?: number; flat?: boolean } = {}): void {
-  const r = opts.radius ?? Math.min(w, h) * 0.22;
-  roundRect(g, x, y, w, h, r);
-  if (opts.flat) {
-    g.fillStyle = base;
-    g.fill();
-    return;
-  }
-  const grad = g.createLinearGradient(0, y, 0, y + h);
-  grad.addColorStop(0, shade(base, 0.18));
-  grad.addColorStop(0.55, base);
-  grad.addColorStop(1, shade(base, -0.22));
-  g.fillStyle = grad;
-  g.fill();
-  // top highlight
-  g.save();
-  g.clip();
-  const hl = g.createLinearGradient(0, y, 0, y + h * 0.5);
-  hl.addColorStop(0, "rgba(255,255,255,0.22)");
-  hl.addColorStop(1, "rgba(255,255,255,0)");
-  g.fillStyle = hl;
-  g.fillRect(x, y, w, h * 0.5);
-  g.restore();
-  // edge
-  g.lineWidth = Math.max(1, w * 0.012);
-  g.strokeStyle = "rgba(0,0,0,0.35)";
-  roundRect(g, x + g.lineWidth / 2, y + g.lineWidth / 2, w - g.lineWidth, h - g.lineWidth, r);
-  g.stroke();
-}
+// ---------------------------------------------------------------------------
+// Buttons and icons
+// ---------------------------------------------------------------------------
 
-export function circleButton(g: Ctx, w: number, h: number, pressed: boolean, icon: (g: Ctx, cx: number, cy: number, r: number) => void): void {
+/** Round paper chip button with an ink icon; pressed chips sit down on their shadow. */
+export function chipButton(g: Ctx, w: number, h: number, pressed: boolean, icon: (g: Ctx, cx: number, cy: number, r: number) => void): void {
   const cx = w / 2;
-  const cy = h / 2;
-  const r = Math.min(w, h) * 0.44;
+  const r = Math.min(w, h) * 0.4;
+  const drop = Math.min(w, h) * 0.035;
+  const cy = h / 2 - drop / 2 + (pressed ? drop * 0.7 : 0);
+  if (!pressed) {
+    g.beginPath();
+    g.arc(cx, cy + drop, r, 0, Math.PI * 2);
+    g.fillStyle = SHADOW;
+    g.fill();
+  }
   g.beginPath();
   g.arc(cx, cy, r, 0, Math.PI * 2);
-  const grad = g.createLinearGradient(0, cy - r, 0, cy + r);
-  grad.addColorStop(0, pressed ? PANEL : PANEL_LIGHT);
-  grad.addColorStop(1, pressed ? "#0e1422" : PANEL);
-  g.fillStyle = grad;
+  g.fillStyle = pressed ? CARD_PRESSED : CARD;
   g.fill();
-  g.lineWidth = r * 0.06;
-  g.strokeStyle = pressed ? "rgba(255,255,255,0.25)" : PANEL_EDGE;
+  g.lineWidth = r * 0.04;
+  g.strokeStyle = "rgba(31,28,24,0.28)";
   g.stroke();
-  g.strokeStyle = WHITE;
-  g.fillStyle = WHITE;
-  g.lineWidth = r * 0.14;
+  g.strokeStyle = INK;
+  g.fillStyle = INK;
+  g.lineWidth = r * 0.13;
   g.lineCap = "round";
   g.lineJoin = "round";
   icon(g, cx, cy, r);
 }
 
+/** Kept for the slide builder. */
+export const circleButton = chipButton;
+
 export function rotateIcon(g: Ctx, cx: number, cy: number, r: number, clockwise: boolean): void {
   const rr = r * 0.5;
   const dir = clockwise ? 1 : -1;
-  // A 300 degree arc whose gap sits at the top; the arrow head is at the
-  // end of the arc and points along the direction of travel.
   const start = -Math.PI / 2 + dir * Math.PI * 0.25;
   const end = start + dir * Math.PI * 1.62;
   g.beginPath();
@@ -214,7 +370,6 @@ export function rotateIcon(g: Ctx, cx: number, cy: number, r: number, clockwise:
   const ay = cy + Math.sin(end) * rr;
   const travel = end + (dir * Math.PI) / 2;
   const s = r * 0.3;
-  // chevron head: two strokes meeting at the tip, open against the travel direction
   const tipX = ax + Math.cos(travel) * s * 0.45;
   const tipY = ay + Math.sin(travel) * s * 0.45;
   for (const side of [1, -1]) {
@@ -264,343 +419,6 @@ function gearIcon(g: Ctx, cx: number, cy: number, r: number): void {
   g.globalCompositeOperation = "source-over";
 }
 
-export function card(g: Ctx, x: number, y: number, w: number, h: number, r: number, alpha = 0.94): void {
-  roundRect(g, x, y, w, h, r);
-  g.fillStyle = rgba("#141c2c", alpha);
-  g.fill();
-  g.lineWidth = Math.max(1, Math.min(w, h) * 0.008);
-  g.strokeStyle = PANEL_EDGE;
-  g.stroke();
-}
-
-// ---------------------------------------------------------------------------
-// Sprite builders
-// ---------------------------------------------------------------------------
-
-const S = 256; // base size for 128px originals (2x for crisp scaling)
-
-function buildBricks(): Sprite {
-  return sprite("brick_sprite", S, S, (g, i, w, h) => {
-    const color = (i + 1) as Color;
-    const pad = w * 0.04;
-    tile(g, pad, pad, w - pad * 2, h - pad * 2, MODERN_COLORS[color]);
-    drawGlyphs(g, color, w / 2, h / 2, w);
-  });
-}
-
-function buildNoIcon(): Sprite {
-  return sprite("brick_noicon_sprite", S, S, (g, i, w, h) => {
-    const pad = w * 0.04;
-    tile(g, pad, pad, w - pad * 2, h - pad * 2, NOICON_COLORS[i]);
-  });
-}
-
-function buildBorder(): Sprite {
-  return sprite("brick_border_sprite", S, S, (g, _i, w, h) => {
-    const pad = w * 0.05;
-    g.lineWidth = w * 0.05;
-    g.strokeStyle = WHITE;
-    roundRect(g, pad, pad, w - pad * 2, h - pad * 2, w * 0.2);
-    g.stroke();
-  });
-}
-
-function buildPop(): Sprite {
-  const n = SPRITE_FRAMES.brick_pop_sprite;
-  return sprite("brick_pop_sprite", S, S, (g, i, w, h) => {
-    const t = i / (n - 1);
-    const cx = w / 2;
-    const cy = h / 2;
-    const ease = 1 - Math.pow(1 - t, 2);
-    const ring = w * (0.15 + ease * 0.42);
-    g.lineWidth = w * 0.06 * (1 - t) + 1;
-    g.strokeStyle = `rgba(255,255,255,${0.95 * (1 - t)})`;
-    g.beginPath();
-    g.arc(cx, cy, ring, 0, Math.PI * 2);
-    g.stroke();
-    // sparks
-    g.fillStyle = `rgba(255,255,255,${0.9 * (1 - t)})`;
-    for (let k = 0; k < 8; k++) {
-      const a = (k * Math.PI) / 4 + Math.PI / 8;
-      const d = w * (0.1 + ease * 0.5);
-      const rr = w * 0.035 * (1 - t * 0.7);
-      g.beginPath();
-      g.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, rr, 0, Math.PI * 2);
-      g.fill();
-    }
-    // flash
-    if (t < 0.35) {
-      g.fillStyle = `rgba(255,255,255,${0.6 * (1 - t / 0.35)})`;
-      roundRect(g, w * 0.04, h * 0.04, w * 0.92, h * 0.92, w * 0.2);
-      g.fill();
-    }
-  });
-}
-
-function buildExpand(name: SpriteName, color: Color): Sprite {
-  const n = SPRITE_FRAMES[name];
-  return sprite(name, S, S, (g, i, w, h) => {
-    const t = (i + 1) / n;
-    const pad = w * 0.04;
-    g.save();
-    roundRect(g, pad, pad, w - pad * 2, h - pad * 2, w * 0.22);
-    g.clip();
-    g.fillStyle = MODERN_COLORS[color];
-    g.beginPath();
-    g.arc(w / 2, h / 2, w * 0.75 * t, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = `rgba(255,255,255,${0.35 * (1 - t)})`;
-    g.fill();
-    g.restore();
-    if (t >= 0.99) drawGlyphs(g, color, w / 2, h / 2, w);
-  });
-}
-
-function buildSelector(): Sprite {
-  return sprite("replenish_selector_sprite", S, S, (g, i, w, h) => {
-    const color = i < 7 ? MODERN_COLORS[(i + 1) as Color] : WHITE;
-    const pad = w * 0.035;
-    g.shadowColor = color;
-    g.shadowBlur = w * 0.08;
-    g.lineWidth = w * 0.05;
-    g.strokeStyle = color;
-    roundRect(g, pad + g.lineWidth / 2, pad + g.lineWidth / 2, w - pad * 2 - g.lineWidth, h - pad * 2 - g.lineWidth, w * 0.22);
-    g.stroke();
-    g.shadowBlur = 0;
-    if (i < 7) {
-      g.fillStyle = rgba(color, 0.18);
-      g.fill();
-    }
-  });
-}
-
-function buildReplenishFrame(): Sprite {
-  return sprite("replenish_frame_sprite", S, S, (g, _i, w, h) => {
-    const pad = w * 0.06;
-    roundRect(g, pad, pad, w - pad * 2, h - pad * 2, w * 0.18);
-    g.fillStyle = "rgba(255,255,255,0.05)";
-    g.fill();
-    g.lineWidth = w * 0.015;
-    g.strokeStyle = "rgba(255,255,255,0.12)";
-    g.stroke();
-  });
-}
-
-function buildWorldBg(): Sprite {
-  const colors = ["#64748b", ...[RED, YELLOW, BLUE, ORANGE, PURPLE, GREEN, BLACK].map((c) => MODERN_COLORS[c as Color])];
-  return sprite("worldbg_sprite", 512, 512, (g, i, w, h) => {
-    g.fillStyle = "#0e1526";
-    g.fillRect(0, 0, w, h);
-    const glow = g.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, w * 0.7);
-    glow.addColorStop(0, rgba(colors[i], i === 0 ? 0.25 : 0.38));
-    glow.addColorStop(0.6, rgba(colors[i], 0.08));
-    glow.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = glow;
-    g.fillRect(0, 0, w, h);
-    const vignette = g.createRadialGradient(w / 2, h / 2, w * 0.3, w / 2, h / 2, w * 0.8);
-    vignette.addColorStop(0, "rgba(0,0,0,0)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.45)");
-    g.fillStyle = vignette;
-    g.fillRect(0, 0, w, h);
-  });
-}
-
-function buildSidebar(): Sprite {
-  return sprite("sidebar_sprite", 128, 512, (g, i, w, h) => {
-    const grad = g.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, "#182236");
-    grad.addColorStop(1, "#0f1626");
-    g.fillStyle = grad;
-    g.fillRect(0, 0, w, h);
-    // edge toward the board
-    g.fillStyle = "rgba(255,255,255,0.08)";
-    if (i === 0) g.fillRect(w - 2, 0, 2, h);
-    else g.fillRect(0, 0, 2, h);
-  });
-}
-
-function buildRotate(): Sprite {
-  return sprite("rotate_button_sprite", S, S, (g, i, w, h) => {
-    const clockwise = i >= 2;
-    const pressed = i % 2 === 1;
-    circleButton(g, w, h, pressed, (gg, cx, cy, r) => rotateIcon(gg, cx, cy, r, clockwise));
-  });
-}
-
-function buildPause(): Sprite {
-  return sprite("pause_button_sprite", S, S, (g, _i, w, h) => {
-    circleButton(g, w, h, false, (gg, cx, cy, r) => {
-      const bw = r * 0.16;
-      const bh = r * 0.6;
-      roundRect(gg, cx - bw * 1.6, cy - bh / 2, bw, bh, bw / 3);
-      gg.fill();
-      roundRect(gg, cx + bw * 0.6, cy - bh / 2, bw, bh, bw / 3);
-      gg.fill();
-    });
-  });
-}
-
-function buildSpeed(): Sprite {
-  return sprite("speedup_button_sprite", S, S, (g, i, w, h) => {
-    circleButton(g, w, h, i === 1, chevronUp);
-  });
-}
-
-function buildProgress(): Sprite {
-  return sprite("progressbar_sprite", 256, 8, (g, i, w, h) => {
-    if (i === 2) {
-      g.fillStyle = "rgba(255,255,255,0.10)";
-      g.fillRect(0, 0, w, h);
-    } else if (i === 1) {
-      g.fillStyle = "rgba(255,255,255,0.28)";
-      g.fillRect(0, 0, w, h);
-    } else {
-      const grad = g.createLinearGradient(0, 0, w, 0);
-      grad.addColorStop(0, MODERN_COLORS[BLUE]);
-      grad.addColorStop(0.5, MODERN_COLORS[PURPLE]);
-      grad.addColorStop(1, MODERN_COLORS[RED]);
-      g.fillStyle = grad;
-      g.fillRect(0, 0, w, h);
-    }
-  });
-}
-
-function buildLevelComplete(): Sprite {
-  return sprite("level_complete_sprite", 640, 160, (g, _i, w, h) => {
-    card(g, 4, 4, w - 8, h - 8, h * 0.3, 0.92);
-    g.shadowColor = "rgba(255,255,255,0.35)";
-    g.shadowBlur = 12;
-    text(g, "Level Complete!", w / 2, h / 2, h * 0.42, WHITE, 800);
-    g.shadowBlur = 0;
-  });
-}
-
-function buildLogo(): Sprite {
-  return sprite("logo_sprite", 512, 512, (g, i, w, h) => {
-    const pad = w * 0.04;
-    const r = w * 0.2;
-    // hue ring border
-    const hues = [RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE, RED].map((c) => MODERN_COLORS[c as Color]);
-    const ring = g.createConicGradient ? g.createConicGradient(-Math.PI / 2, w / 2, h / 2) : null;
-    if (ring) {
-      hues.forEach((c, k) => ring.addColorStop(k / (hues.length - 1), c));
-      roundRect(g, pad, pad, w - pad * 2, h - pad * 2, r);
-      g.fillStyle = ring;
-      g.fill();
-    }
-    const inner = pad + w * 0.03;
-    tile(g, inner, inner, w - inner * 2, h - inner * 2, i === 1 ? "#1b2538" : "#111827", { radius: r * 0.85 });
-    g.shadowColor = "rgba(255,255,255,0.25)";
-    g.shadowBlur = 18;
-    text(g, "H", w * 0.46, h * 0.5, w * 0.56, WHITE, 800);
-    g.shadowBlur = 0;
-    text(g, "UE", w * 0.76, h * 0.26, w * 0.15, WHITE, 800);
-    g.font = `800 ${w * 0.12}px ${FONT}`;
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    const label = "BR";
-    const label2 = "CKS";
-    const wBR = g.measureText(label).width;
-    const wI = g.measureText("i").width;
-    const wCKS = g.measureText(label2).width;
-    const total = wBR + wI + wCKS;
-    let x = w / 2 - total / 2;
-    g.textAlign = "left";
-    g.fillStyle = WHITE;
-    g.fillText(label, x, h * 0.82);
-    x += wBR;
-    g.fillStyle = MODERN_COLORS[RED];
-    g.fillText("i", x, h * 0.82);
-    x += wI;
-    g.fillStyle = WHITE;
-    g.fillText(label2, x, h * 0.82);
-  });
-}
-
-function buildMenuButton(): Sprite {
-  return sprite("menu_button_sprite", S, S, (g, i, w, h) => {
-    const pad = w * 0.06;
-    tile(g, pad, pad, w - pad * 2, h - pad * 2, i === 1 ? "#2a3650" : PANEL_LIGHT, { radius: w * 0.2 });
-    // home icon
-    const cx = w / 2;
-    const cy = h / 2;
-    g.fillStyle = WHITE;
-    g.beginPath();
-    g.moveTo(cx, cy - h * 0.22);
-    g.lineTo(cx + w * 0.24, cy - h * 0.02);
-    g.lineTo(cx + w * 0.17, cy - h * 0.02);
-    g.lineTo(cx + w * 0.17, cy + h * 0.2);
-    g.lineTo(cx - w * 0.17, cy + h * 0.2);
-    g.lineTo(cx - w * 0.17, cy - h * 0.02);
-    g.lineTo(cx - w * 0.24, cy - h * 0.02);
-    g.closePath();
-    g.fill();
-  });
-}
-
-function buildMenuFrame(): Sprite {
-  return sprite("menu_frame_sprite", 760, 127, (g, _i, w, h) => {
-    g.fillStyle = "rgba(11,17,32,0.85)";
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = "rgba(255,255,255,0.1)";
-    g.fillRect(0, 0, w, 2);
-  });
-}
-
-function buildModeButton(name: SpriteName, label: string, base: string, dark: boolean): Sprite {
-  return sprite(name, 512, 256, (g, i, w, h) => {
-    const pad = h * 0.08;
-    tile(g, pad, pad, w - pad * 2, h - pad * 2, i === 1 ? shade(base, -0.25) : base, { radius: h * 0.3 });
-    text(g, label, w / 2, h / 2 + 2, h * 0.36, dark ? "#111827" : WHITE, 800);
-  });
-}
-
-function buildWorldButton(world: number): Sprite {
-  const name = `world${world}_sprite` as SpriteName;
-  const colorOf = [null, RED, YELLOW, BLUE, ORANGE, PURPLE, GREEN, BLACK] as const;
-  const base = world === 0 ? "#cbd5e1" : MODERN_COLORS[colorOf[world] as Color];
-  const dark = world === 0 || world === 2;
-  return sprite(name, S, S, (g, i, w, h) => {
-    const pad = w * 0.06;
-    tile(g, pad, pad, w - pad * 2, h - pad * 2, i === 1 ? shade(base, -0.25) : base, { radius: w * 0.22 });
-    const fg = dark ? "#111827" : WHITE;
-    if (world === 0) {
-      text(g, "Tutorial", w / 2, h / 2, w * 0.2, fg, 800);
-    } else {
-      text(g, "WORLD", w / 2, h * 0.38, w * 0.15, dark ? "rgba(17,24,39,0.75)" : "rgba(255,255,255,0.8)", 700);
-      text(g, String(world), w / 2, h * 0.63, w * 0.34, fg, 800);
-    }
-  });
-}
-
-function buildBack(): Sprite {
-  return sprite("back_button_sprite", S, S, (g, i, w, h) => {
-    const right = i >= 2;
-    const pressed = i % 2 === 1;
-    circleButton(g, w, h, pressed, (gg, cx, cy, r) => {
-      const d = right ? 1 : -1;
-      const s = r * 0.42;
-      gg.beginPath();
-      gg.moveTo(cx - d * s * 0.9, cy);
-      gg.lineTo(cx + d * s * 0.9, cy);
-      gg.stroke();
-      gg.beginPath();
-      gg.moveTo(cx + d * s * 0.1, cy - s * 0.8);
-      gg.lineTo(cx + d * s * 0.9, cy);
-      gg.lineTo(cx + d * s * 0.1, cy + s * 0.8);
-      gg.stroke();
-    });
-  });
-}
-
-function buildInfo(): Sprite {
-  return sprite("info_button_sprite", S, S, (g, i, w, h) => {
-    circleButton(g, w, h, i === 1, (gg, cx, cy, r) => {
-      text(gg, "i", cx, cy + r * 0.04, r * 1.2, WHITE, 800);
-    });
-  });
-}
-
 /**
  * Speaker glyph; `muted` drops the sound waves. Uses the current fill/stroke
  * style so both themes can share it.
@@ -627,12 +445,217 @@ export function speakerIcon(g: Ctx, cx: number, cy: number, r: number, muted: bo
   }
 }
 
+/** Paper card with a hard shadow. */
+export function card(g: Ctx, x: number, y: number, w: number, h: number, r: number): void {
+  roundRect(g, x, y + Math.min(8, h * 0.03), w, h, r);
+  g.fillStyle = SHADOW;
+  g.fill();
+  roundRect(g, x, y, w, h, r);
+  g.fillStyle = CARD;
+  g.fill();
+  g.lineWidth = Math.max(1, Math.min(w, h) * 0.006);
+  g.strokeStyle = "rgba(60,40,20,0.16)";
+  g.stroke();
+}
+
+// ---------------------------------------------------------------------------
+// Paper backdrop
+// ---------------------------------------------------------------------------
+
+let noiseCanvas: HTMLCanvasElement | null = null;
+const patterns = new WeakMap<CanvasRenderingContext2D, CanvasPattern>();
+
+function paperNoise(): HTMLCanvasElement {
+  if (noiseCanvas) return noiseCanvas;
+  noiseCanvas = canvas(256, 256, (g, w, h) => {
+    const img = g.createImageData(w, h);
+    const d = img.data;
+    const rnd = seeded(7);
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.floor(rnd() * 255);
+      d[i] = v;
+      d[i + 1] = v;
+      d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+  return noiseCanvas;
+}
+
+/**
+ * Warm paper with faint grain and a soft vignette whose centre wanders a
+ * little over twenty seconds. Fills the whole logical screen.
+ */
+export function drawPaper(g: Ctx, t: number): void {
+  g.fillStyle = PAPER;
+  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  let pat = patterns.get(g);
+  if (!pat) {
+    const p = g.createPattern(paperNoise(), "repeat");
+    if (p) {
+      patterns.set(g, p);
+      pat = p;
+    }
+  }
+  if (pat) {
+    g.globalAlpha = 0.04;
+    g.fillStyle = pat;
+    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    g.globalAlpha = 1;
+  }
+  const cx = SCREEN_W / 2 + 20 * Math.sin((t / 20000) * Math.PI * 2);
+  const cy = SCREEN_H / 2 + 20 * Math.sin((t / 20000) * Math.PI * 1.6 + 1.3);
+  const vig = g.createRadialGradient(cx, cy, Math.min(SCREEN_W, SCREEN_H) * 0.3, cx, cy, Math.max(SCREEN_W, SCREEN_H) * 0.72);
+  vig.addColorStop(0, "rgba(230,223,210,0)");
+  vig.addColorStop(1, "rgba(230,223,210,1)");
+  g.fillStyle = vig;
+  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+}
+
+// ---------------------------------------------------------------------------
+// Sprite builders
+// ---------------------------------------------------------------------------
+
+const S = 256; // base size for 128px originals (2x for crisp scaling)
+const PAD = 0.04;
+
+function buildBricks(): Sprite {
+  return sprite("brick_sprite", S, S, (g, i, w, h) => {
+    const color = (i + 1) as Color;
+    const pad = w * PAD;
+    chip(g, pad, pad, w - pad * 2, h - pad * 2, MODERN_COLORS[color], { seed: 11 + i, wobble: w * 0.01 });
+    drawGlyphs(g, color, w / 2, h / 2, w);
+  });
+}
+
+function buildNoIcon(): Sprite {
+  return sprite("brick_noicon_sprite", S, S, (g, i, w, h) => {
+    const pad = w * PAD;
+    chip(g, pad, pad, w - pad * 2, h - pad * 2, NOICON_COLORS[i], { seed: 31 + i, wobble: w * 0.01 });
+  });
+}
+
+function buildBorder(): Sprite {
+  return sprite("brick_border_sprite", S, S, (g, _i, w, h) => {
+    const pad = w * 0.05;
+    g.lineWidth = w * 0.05;
+    g.strokeStyle = INK;
+    roundRect(g, pad, pad, w - pad * 2, h - pad * 2, w * 0.18);
+    g.stroke();
+  });
+}
+
+/** Unused by the new pop (particles and scale do the work); a faint ink ring keeps the sprite valid. */
+function buildPop(): Sprite {
+  const n = SPRITE_FRAMES.brick_pop_sprite;
+  return sprite("brick_pop_sprite", 64, 64, (g, i, w, h) => {
+    const t = i / (n - 1);
+    g.lineWidth = 3 * (1 - t) + 1;
+    g.strokeStyle = `rgba(31,28,24,${0.8 * (1 - t)})`;
+    g.beginPath();
+    g.arc(w / 2, h / 2, w * (0.15 + t * 0.33), 0, Math.PI * 2);
+    g.stroke();
+  });
+}
+
+/** Unused by the new combine (a real-time wipe replaces it); tiny blank frames keep the map complete. */
+function buildExpand(name: SpriteName): Sprite {
+  return sprite(name, 8, 8, () => undefined);
+}
+
+/** Ink selector ring with a little paint drip at the bottom in the brick's colour. */
+function buildSelector(): Sprite {
+  return sprite("replenish_selector_sprite", S, S, (g, i, w, h) => {
+    const colour = i < 7 ? MODERN_COLORS[(i + 1) as Color] : null;
+    const pad = w * 0.035;
+    const lw = w * 0.045;
+    roundRect(g, pad + lw / 2, pad + lw / 2, w - pad * 2 - lw, h - pad * 2 - lw, w * 0.2);
+    if (colour) {
+      g.fillStyle = rgba(colour, 0.14);
+      g.fill();
+    }
+    g.lineWidth = lw;
+    g.strokeStyle = INK;
+    g.lineJoin = "round";
+    g.stroke();
+    // drip tab
+    const cx = w / 2;
+    const by = h - pad - lw / 2;
+    g.fillStyle = colour ?? INK;
+    g.beginPath();
+    g.moveTo(cx - w * 0.06, by);
+    g.lineTo(cx + w * 0.06, by);
+    g.quadraticCurveTo(cx + w * 0.05, by + w * 0.06, cx, by + w * 0.1);
+    g.quadraticCurveTo(cx - w * 0.05, by + w * 0.06, cx - w * 0.06, by);
+    g.closePath();
+    g.fill();
+    g.lineWidth = lw * 0.5;
+    g.strokeStyle = INK;
+    g.stroke();
+  });
+}
+
+function buildReplenishFrame(): Sprite {
+  return sprite("replenish_frame_sprite", S, S, (g, _i, w, h) => {
+    const pad = w * 0.06;
+    roundRect(g, pad, pad, w - pad * 2, h - pad * 2, w * 0.18);
+    g.fillStyle = PAPER_CELL;
+    g.fill();
+    g.lineWidth = w * 0.012;
+    g.strokeStyle = "rgba(31,28,24,0.12)";
+    g.stroke();
+  });
+}
+
+/** The board backdrop is painted live (`drawPaper`); these frames are plain paper. */
+function buildWorldBg(): Sprite {
+  return sprite("worldbg_sprite", 16, 16, (g, _i, w, h) => {
+    g.fillStyle = PAPER;
+    g.fillRect(0, 0, w, h);
+  });
+}
+
+function buildSidebar(): Sprite {
+  return sprite("sidebar_sprite", 16, 16, (g, _i, w, h) => {
+    g.fillStyle = PAPER;
+    g.fillRect(0, 0, w, h);
+  });
+}
+
+function buildRotate(): Sprite {
+  return sprite("rotate_button_sprite", S, S, (g, i, w, h) => {
+    const clockwise = i >= 2;
+    const pressed = i % 2 === 1;
+    chipButton(g, w, h, pressed, (gg, cx, cy, r) => rotateIcon(gg, cx, cy, r, clockwise));
+  });
+}
+
+function buildPause(): Sprite {
+  return sprite("pause_button_sprite", S, S, (g, _i, w, h) => {
+    chipButton(g, w, h, false, (gg, cx, cy, r) => {
+      const bw = r * 0.16;
+      const bh = r * 0.6;
+      roundRect(gg, cx - bw * 1.6, cy - bh / 2, bw, bh, bw / 3);
+      gg.fill();
+      roundRect(gg, cx + bw * 0.6, cy - bh / 2, bw, bh, bw / 3);
+      gg.fill();
+    });
+  });
+}
+
+function buildSpeed(): Sprite {
+  return sprite("speedup_button_sprite", S, S, (g, i, w, h) => {
+    chipButton(g, w, h, i === 1, chevronUp);
+  });
+}
+
 function buildSound(): Sprite {
   return sprite("sound_button_sprite", S, S, (g, i, w, h) => {
     const muted = i >= 2;
-    circleButton(g, w, h, i % 2 === 1, (gg, cx, cy, r) => {
+    chipButton(g, w, h, i % 2 === 1, (gg, cx, cy, r) => {
       if (muted) {
-        gg.fillStyle = "rgba(248,250,252,0.45)";
+        gg.fillStyle = "rgba(31,28,24,0.4)";
         gg.strokeStyle = gg.fillStyle;
       }
       speakerIcon(gg, cx, cy, r, muted);
@@ -650,20 +673,174 @@ function buildSound(): Sprite {
 
 function buildSettings(): Sprite {
   return sprite("settings_button_sprite", S, S, (g, i, w, h) => {
-    circleButton(g, w, h, i === 1, gearIcon);
+    chipButton(g, w, h, i === 1, gearIcon);
+  });
+}
+
+function buildBack(): Sprite {
+  return sprite("back_button_sprite", S, S, (g, i, w, h) => {
+    const right = i >= 2;
+    const pressed = i % 2 === 1;
+    chipButton(g, w, h, pressed, (gg, cx, cy, r) => {
+      const d = right ? 1 : -1;
+      const s = r * 0.42;
+      gg.beginPath();
+      gg.moveTo(cx - d * s * 0.9, cy);
+      gg.lineTo(cx + d * s * 0.9, cy);
+      gg.stroke();
+      gg.beginPath();
+      gg.moveTo(cx + d * s * 0.1, cy - s * 0.8);
+      gg.lineTo(cx + d * s * 0.9, cy);
+      gg.lineTo(cx + d * s * 0.1, cy + s * 0.8);
+      gg.stroke();
+    });
+  });
+}
+
+function buildInfo(): Sprite {
+  return sprite("info_button_sprite", S, S, (g, i, w, h) => {
+    chipButton(g, w, h, i === 1, (gg, cx, cy, r) => {
+      display(gg, "i", cx, cy + r * 0.04, r * 1.2, INK);
+    });
+  });
+}
+
+function buildProgress(): Sprite {
+  return sprite("progressbar_sprite", 256, 8, (g, i, w, h) => {
+    if (i === 2) {
+      g.fillStyle = "rgba(31,28,24,0.10)";
+      g.fillRect(0, 0, w, h);
+    } else if (i === 1) {
+      g.fillStyle = "rgba(31,28,24,0.22)";
+      g.fillRect(0, 0, w, h);
+    } else {
+      const grad = g.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0, MODERN_COLORS[YELLOW]);
+      grad.addColorStop(0.5, MODERN_COLORS[ORANGE]);
+      grad.addColorStop(1, MODERN_COLORS[RED]);
+      g.fillStyle = grad;
+      g.fillRect(0, 0, w, h);
+    }
+  });
+}
+
+function buildLevelComplete(): Sprite {
+  return sprite("level_complete_sprite", 640, 160, (g, _i, w, h) => {
+    card(g, 4, 4, w - 8, h - 14, h * 0.2);
+    display(g, "Level complete", w / 2, h / 2 - 4, h * 0.4, INK);
+  });
+}
+
+/** "HueBricks" wordmark on a paper chip; the "Hue" letters are each a primary. */
+function buildLogo(): Sprite {
+  return sprite("logo_sprite", 768, 400, (g, i, w, h) => {
+    const pad = 24;
+    chip(g, pad, pad, w - pad * 2, h - pad * 2 - 12, i === 1 ? CARD_PRESSED : CARD, { radius: 56, wobble: 3, seed: 99, shadow: i === 1 ? 0 : 12, flat: true });
+    const size = h * 0.42;
+    g.font = `600 ${size}px ${DISPLAY}`;
+    g.textBaseline = "middle";
+    g.textAlign = "left";
+    const parts: Array<[string, string]> = [
+      ["H", MODERN_COLORS[RED]],
+      ["u", MODERN_COLORS[BLUE]],
+      ["e", MODERN_COLORS[YELLOW]],
+      ["Bricks", INK],
+    ];
+    const widths = parts.map(([s]) => g.measureText(s).width);
+    const total = widths.reduce((a, b) => a + b, 0) - size * 0.02;
+    let x = w / 2 - total / 2;
+    const y = h / 2 - 4;
+    parts.forEach(([s, c], k) => {
+      g.fillStyle = c;
+      g.fillText(s, x, y);
+      x += widths[k];
+    });
+    // three little chips under the word
+    const cw = 22;
+    [RED, BLUE, YELLOW].forEach((c, k) => {
+      chip(g, w / 2 - cw * 2 + k * cw * 1.6, h * 0.73, cw, cw, MODERN_COLORS[c as Color], { radius: 6, wobble: 1, seed: 50 + k, flat: true });
+    });
+  });
+}
+
+function buildMenuButton(): Sprite {
+  return sprite("menu_button_sprite", S, S, (g, i, w, h) => {
+    const pad = w * 0.08;
+    chip(g, pad, pad, w - pad * 2, h - pad * 2 - 8, i === 1 ? CARD_PRESSED : CARD, { radius: w * 0.2, shadow: i === 1 ? 0 : 8, flat: true });
+    const cx = w / 2;
+    const cy = h / 2 - 4;
+    g.fillStyle = INK;
+    g.beginPath();
+    g.moveTo(cx, cy - h * 0.22);
+    g.lineTo(cx + w * 0.24, cy - h * 0.02);
+    g.lineTo(cx + w * 0.17, cy - h * 0.02);
+    g.lineTo(cx + w * 0.17, cy + h * 0.2);
+    g.lineTo(cx - w * 0.17, cy + h * 0.2);
+    g.lineTo(cx - w * 0.17, cy - h * 0.02);
+    g.lineTo(cx - w * 0.24, cy - h * 0.02);
+    g.closePath();
+    g.fill();
+  });
+}
+
+/** Title bottom bar: a paper ledge. */
+function buildMenuFrame(): Sprite {
+  return sprite("menu_frame_sprite", 760, 127, (g, _i, w, h) => {
+    g.fillStyle = "rgba(60,40,20,0.08)";
+    g.fillRect(0, 0, w, 3);
+    g.fillStyle = PAPER_CELL;
+    g.fillRect(0, 2, w, h - 2);
+  });
+}
+
+function modeGlyph(g: Ctx, glyph: Glyph, cx: number, cy: number, r: number, ink: string): void {
+  g.lineWidth = r * 0.18;
+  g.lineJoin = "round";
+  g.strokeStyle = ink;
+  glyphPath(g, glyph, cx, cy, r);
+  g.stroke();
+}
+
+function buildModeButton(name: SpriteName, label: string, base: string, glyph: Glyph): Sprite {
+  return sprite(name, 512, 256, (g, i, w, h) => {
+    const pad = h * 0.1;
+    const pressed = i === 1;
+    chip(g, pad, pad + (pressed ? 6 : 0), w - pad * 2, h - pad * 2 - 10, pressed ? shade(base, -0.12) : base, { radius: h * 0.22, wobble: 2.5, seed: 70 + label.length, shadow: pressed ? 0 : 10 });
+    const ink = inkOn(base);
+    modeGlyph(g, glyph, w * 0.2, h / 2 - 4 + (pressed ? 6 : 0), h * 0.15, ink);
+    display(g, label, w * 0.61, h / 2 - 2 + (pressed ? 6 : 0), h * 0.29, ink);
+  });
+}
+
+function buildWorldButton(world: number): Sprite {
+  const name = `world${world}_sprite` as SpriteName;
+  const colorOf = [null, RED, YELLOW, BLUE, ORANGE, PURPLE, GREEN, BLACK] as const;
+  const base = world === 0 ? NEUTRAL : MODERN_COLORS[colorOf[world] as Color];
+  return sprite(name, S, S, (g, i, w, h) => {
+    const pad = w * 0.07;
+    const pressed = i === 1;
+    chip(g, pad, pad + (pressed ? 5 : 0), w - pad * 2, h - pad * 2 - 8, pressed ? shade(base, -0.12) : base, { radius: w * 0.2, wobble: 2, seed: 120 + world, shadow: pressed ? 0 : 8 });
+    const ink = inkOn(base);
+    const dy = pressed ? 5 : 0;
+    if (world === 0) {
+      display(g, "Tutorial", w / 2, h / 2 - 4 + dy, w * 0.19, ink);
+    } else {
+      text(g, "WORLD", w / 2, h * 0.36 + dy, w * 0.13, ink === INK_LIGHT ? "rgba(255,255,255,0.75)" : "rgba(20,16,12,0.6)", 700);
+      display(g, String(world), w / 2, h * 0.62 + dy, w * 0.38, ink);
+    }
   });
 }
 
 function buildLevelSelect(): Sprite {
   return sprite("level_select_sprite", 512, 256, (g, _i, w, h) => {
-    card(g, 3, 3, w - 6, h - 6, h * 0.12, 0.92);
+    card(g, 3, 3, w - 6, h - 12, h * 0.12);
   });
 }
 
 function buildCredits(): Sprite {
   return sprite("credits_sprite", 1024, 512, (g, _i, w, h) => {
-    card(g, 4, 4, w - 8, h - 8, h * 0.1, 0.96);
-    text(g, "CREDITS", w / 2, h * 0.14, h * 0.12, WHITE, 800);
+    card(g, 4, 4, w - 8, h - 14, h * 0.1);
+    display(g, "Credits", w / 2, h * 0.14, h * 0.12, INK);
     const rows: [string, string][] = [
       ["Game Design", "Tim Frank, Ben Cochrane"],
       ["Game Concept", "Tim Frank"],
@@ -676,14 +853,14 @@ function buildCredits(): Sprite {
     const size = h * 0.055;
     rows.forEach(([k, v], i) => {
       const y = h * 0.28 + i * size * 1.35;
-      text(g, `${k}:`, w * 0.47, y, size, "#94a3b8", 600, "right");
-      text(g, v, w * 0.49, y, size, WHITE, 700, "left");
+      text(g, `${k}:`, w * 0.47, y, size, INK_MUTED, 500, "right");
+      text(g, v, w * 0.49, y, size, INK, 700, "left");
     });
     const y = h * 0.28 + rows.length * size * 1.35 + size * 0.6;
-    text(g, "Special Thanks:", w * 0.47, y, size, "#94a3b8", 600, "right");
-    text(g, "Connor McCarthy, Ajani Thomas,", w * 0.49, y, size, WHITE, 700, "left");
-    text(g, "Chris Dodson, Pat Frank, Kris Klink", w * 0.49, y + size * 1.3, size, WHITE, 700, "left");
-    text(g, "Browser remake in TypeScript", w / 2, h * 0.93, size * 0.85, "#64748b", 500);
+    text(g, "Special Thanks:", w * 0.47, y, size, INK_MUTED, 500, "right");
+    text(g, "Connor McCarthy, Ajani Thomas,", w * 0.49, y, size, INK, 700, "left");
+    text(g, "Chris Dodson, Pat Frank, Kris Klink", w * 0.49, y + size * 1.3, size, INK, 700, "left");
+    text(g, "Browser remake in TypeScript", w / 2, h * 0.92, size * 0.85, INK_MUTED, 500);
   });
 }
 
@@ -694,13 +871,13 @@ export function buildModernSprites(classic: SpriteMap): SpriteMap {
     brick_noicon_sprite: buildNoIcon(),
     brick_border_sprite: buildBorder(),
     brick_pop_sprite: buildPop(),
-    red_expand_sprite: buildExpand("red_expand_sprite", RED),
-    blue_expand_sprite: buildExpand("blue_expand_sprite", BLUE),
-    yellow_expand_sprite: buildExpand("yellow_expand_sprite", YELLOW),
-    purple_expand_sprite: buildExpand("purple_expand_sprite", PURPLE),
-    orange_expand_sprite: buildExpand("orange_expand_sprite", ORANGE),
-    green_expand_sprite: buildExpand("green_expand_sprite", GREEN),
-    black_expand_sprite: buildExpand("black_expand_sprite", BLACK),
+    red_expand_sprite: buildExpand("red_expand_sprite"),
+    blue_expand_sprite: buildExpand("blue_expand_sprite"),
+    yellow_expand_sprite: buildExpand("yellow_expand_sprite"),
+    purple_expand_sprite: buildExpand("purple_expand_sprite"),
+    orange_expand_sprite: buildExpand("orange_expand_sprite"),
+    green_expand_sprite: buildExpand("green_expand_sprite"),
+    black_expand_sprite: buildExpand("black_expand_sprite"),
     replenish_selector_sprite: buildSelector(),
     replenish_frame_sprite: buildReplenishFrame(),
     worldbg_sprite: buildWorldBg(),
@@ -714,9 +891,9 @@ export function buildModernSprites(classic: SpriteMap): SpriteMap {
     logo_sprite: buildLogo(),
     menu_button_sprite: buildMenuButton(),
     menu_frame_sprite: buildMenuFrame(),
-    normal_button_sprite: buildModeButton("normal_button_sprite", "Normal", MODERN_COLORS[YELLOW], true),
-    puzzle_button_sprite: buildModeButton("puzzle_button_sprite", "Puzzle", MODERN_COLORS[RED], false),
-    zen_button_sprite: buildModeButton("zen_button_sprite", "Zen", MODERN_COLORS[BLUE], false),
+    normal_button_sprite: buildModeButton("normal_button_sprite", "Normal", MODERN_COLORS[YELLOW], "diamond"),
+    puzzle_button_sprite: buildModeButton("puzzle_button_sprite", "Puzzle", MODERN_COLORS[RED], "octagon"),
+    zen_button_sprite: buildModeButton("zen_button_sprite", "Zen", MODERN_COLORS[BLUE], "circle"),
     back_button_sprite: buildBack(),
     info_button_sprite: buildInfo(),
     settings_button_sprite: buildSettings(),

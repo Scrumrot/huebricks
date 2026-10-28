@@ -16,6 +16,8 @@ export class Input {
   keysPressed = new Set<string>();
   /** Keys currently held. */
   keysDown = new Set<string>();
+  /** Minimum hit-test size in logical units (raised on small screens so targets stay >= 44 CSS px). */
+  minHit = 0;
 
   /** Queued events; each entry knows whether it is a button press or release. */
   private queue: Array<{ kind: "move" | "press" | "release" | "key"; apply: () => void }> = [];
@@ -147,6 +149,8 @@ export class Input {
 
   /** Hit test against a rectangle given by its centre. */
   inCentered(cx: number, cy: number, w: number, h: number): boolean {
-    return this.inRect(cx - w / 2, cy - h / 2, w, h);
+    const hw = Math.max(w, this.minHit);
+    const hh = Math.max(h, this.minHit);
+    return this.inRect(cx - hw / 2, cy - hh / 2, hw, hh);
   }
 }

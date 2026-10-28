@@ -24,6 +24,9 @@ export class Brick {
   y = 0;
   spriteX = 0;
   spriteY = 0;
+  /** Drawn position at the previous sim step, for render interpolation. */
+  prevX = 0;
+  prevY = 0;
 
   /** Bricks of the same colour connected to this one (including itself). */
   group: Brick[] = [this];
@@ -50,9 +53,10 @@ export class Brick {
   inactiveTimer = 0;
   inactiveDuration = 0;
 
-  /** Number of frames in the colour "expand" sprites. */
-  static readonly TWEEN_FRAMES = 5;
-  static readonly NOADD_DURATION = 25;
+  /** Sim steps the combine state lasts (the colour wipe itself runs in real time). */
+  static readonly TWEEN_FRAMES = 6;
+  /** Sim steps the invalid-move shake lasts. */
+  static readonly NOADD_DURATION = 8;
 
   constructor(color: Color, x = 0, y = 0) {
     this.color = color;
@@ -61,12 +65,22 @@ export class Brick {
     this.y = y;
     this.spriteX = x;
     this.spriteY = y;
+    this.prevX = x;
+    this.prevY = y;
+  }
+
+  /** Remember where this brick was drawn before the next sim step moves it. */
+  snapshot(): void {
+    this.prevX = this.spriteX;
+    this.prevY = this.spriteY;
   }
 
   /** Snap the drawn position/colour to the logical state. */
   settle(): void {
     this.spriteX = this.x;
     this.spriteY = this.y;
+    this.prevX = this.x;
+    this.prevY = this.y;
     this.spriteColor = this.color;
     this.colorTween = Brick.TWEEN_FRAMES;
     this.grav = 0;

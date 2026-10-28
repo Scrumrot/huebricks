@@ -1,6 +1,7 @@
 import type { GameType } from "../core/constants";
 import type { SpriteMap } from "../engine/assets";
 import type { AudioSystem } from "../engine/audio";
+import type { Clock } from "../engine/clock";
 import type { Input } from "../engine/input";
 import type { SaveData } from "../engine/save";
 import type { Palette, ThemeName } from "../engine/theme";
@@ -22,6 +23,10 @@ export interface GameContext {
   palette: Palette;
   audio: AudioSystem;
   input: Input;
+  /** Frame clock: wall time, game time (pauses in hit-stop) and sim interpolation. */
+  clock: Clock;
+  /** CSS pixels per logical pixel for the current window size. */
+  view: { scale: number };
   save: SaveData;
   session: Session;
   setScene(scene: Scene): void;
@@ -35,4 +40,6 @@ export interface Scene {
   render(ctx: CanvasRenderingContext2D): void;
   /** Called once when the scene becomes active. */
   enter?(): void;
+  /** CSS cursor to show over the canvas this frame. */
+  cursor?(): string;
 }

@@ -46,7 +46,8 @@ export class AudioSystem {
     return p;
   }
 
-  play(name: SoundName, volume = 1): void {
+  /** Play a one-shot; `rate` shifts pitch (1.0595 per semitone). */
+  play(name: SoundName, volume = 1, rate = 1): void {
     if (this.muted || !this.ctx) return;
     const buf = this.buffers.get(name);
     if (!buf) {
@@ -55,6 +56,7 @@ export class AudioSystem {
     }
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
+    src.playbackRate.value = rate;
     const gain = this.ctx.createGain();
     gain.gain.value = volume * this.sfxVolume;
     src.connect(gain).connect(this.ctx.destination);

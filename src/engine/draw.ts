@@ -1,4 +1,5 @@
 import type { Sprite } from "./assets";
+import type { UiPalette } from "./theme";
 
 /** `draw_sprite_stretched` */
 export function drawSprite(
@@ -59,9 +60,39 @@ export function drawBlock(
 ): void {
   const xd = (xs - 1) / 2;
   const yd = (ys - 1) / 2;
-  const cw = Math.floor(cellW);
-  const ch = Math.floor(cellH);
-  drawSprite(ctx, sprite, frame, Math.floor(sx) - cw * xd + xo, Math.floor(sy) - ch * yd + yo, cw * xs, ch * ys, alpha);
+  drawSprite(ctx, sprite, frame, sx - cellW * xd + xo, sy - cellH * yd + yo, cellW * xs, cellH * ys, alpha);
+}
+
+/**
+ * Draw a cell-sized sprite with a full transform: scaled about its centre,
+ * rotated by `rot` radians, offset by (xo, yo).
+ */
+export function drawBlockTransformed(
+  ctx: CanvasRenderingContext2D,
+  sprite: Sprite,
+  frame: number,
+  sx: number,
+  sy: number,
+  cellW: number,
+  cellH: number,
+  xs: number,
+  ys: number,
+  rot: number,
+  xo = 0,
+  yo = 0,
+  alpha = 1,
+): void {
+  if (rot === 0) {
+    drawBlock(ctx, sprite, frame, sx, sy, cellW, cellH, xs, ys, xo, yo, alpha);
+    return;
+  }
+  const cx = sx + cellW / 2 + xo;
+  const cy = sy + cellH / 2 + yo;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  drawSprite(ctx, sprite, frame, (-cellW * xs) / 2, (-cellH * ys) / 2, cellW * xs, cellH * ys, alpha);
+  ctx.restore();
 }
 
 export interface TextStyle {
@@ -70,8 +101,12 @@ export interface TextStyle {
   align?: CanvasTextAlign;
   baseline?: CanvasTextBaseline;
   bold?: boolean;
+  /** CSS font weight; overrides `bold` when set. */
+  weight?: number;
   shadow?: string;
   font?: string;
+  /** Lay digits out on a fixed advance (tabular numerals). */
+  tabular?: boolean;
 }
 
 let defaultFont = "Arial, Helvetica, sans-serif";
@@ -81,9 +116,15 @@ export function setDefaultFont(font: string): void {
   defaultFont = font;
 }
 
+function fontString(style: TextStyle): string {
+  const { size = 16, bold = true, weight, font = defaultFont } = style;
+  const w = weight !== undefined ? String(weight) : bold ? "bold" : "normal";
+  return `${w} ${size}px ${font}`;
+}
+
 export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, style: TextStyle = {}): void {
-  const { size = 16, color = "#000", align = "center", baseline = "middle", bold = true, shadow, font = defaultFont } = style;
-  ctx.font = `${bold ? "bold " : ""}${size}px ${font}`;
+  const { size = 16, color = "#000", align = "center", baseline = "middle", shadow, tabular } = style;
+  ctx.font = fontString(style);
   ctx.textAlign = align;
   ctx.textBaseline = baseline;
   const lines = text.split("\n");
@@ -91,6 +132,10 @@ export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number,
   const startY = baseline === "middle" ? y - ((lines.length - 1) * lineH) / 2 : y;
   lines.forEach((line, i) => {
     const ly = startY + i * lineH;
+    if (tabular) {
+      drawTabularLine(ctx, line, x, ly, align, color, shadow);
+      return;
+    }
     if (shadow) {
       ctx.fillStyle = shadow;
       ctx.fillText(line, x + 1, ly + 1);
@@ -98,6 +143,40 @@ export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number,
     ctx.fillStyle = color;
     ctx.fillText(line, x, ly);
   });
+}
+
+/**
+ * Lay a line out character by character, giving every digit the advance of
+ * "0" so numbers never jitter while they count up. Canvas has no font
+ * feature settings, so this is done by hand.
+ */
+function drawTabularLine(ctx: CanvasRenderingContext2D, line: string, x: number, y: number, align: CanvasTextAlign, color: string, shadow?: string): void {
+  const digitW = ctx.measureText("0").width;
+  const chars = Array.from(line);
+  const widths = chars.map((c) => (c >= "0" && c <= "9" ? digitW : ctx.measureText(c).width));
+  const total = widths.reduce((a, b) => a + b, 0);
+  let cx = align === "center" ? x - total / 2 : align === "right" || align === "end" ? x - total : x;
+  ctx.textAlign = "center";
+  chars.forEach((c, i) => {
+    const w = widths[i];
+    if (shadow) {
+      ctx.fillStyle = shadow;
+      ctx.fillText(c, cx + w / 2 + 1, y + 1);
+    }
+    ctx.fillStyle = color;
+    ctx.fillText(c, cx + w / 2, y);
+    cx += w;
+  });
+}
+
+/** Width of `text` in the given style (for layout). */
+export function measureText(ctx: CanvasRenderingContext2D, text: string, style: TextStyle = {}): number {
+  ctx.font = fontString(style);
+  if (style.tabular) {
+    const digitW = ctx.measureText("0").width;
+    return Array.from(text).reduce((a, c) => a + (c >= "0" && c <= "9" ? digitW : ctx.measureText(c).width), 0);
+  }
+  return ctx.measureText(text).width;
 }
 
 export function fillRoundRect(
@@ -122,14 +201,10 @@ export function fillRoundRect(
   }
 }
 
-/** A translucent dark panel used by the modern theme's overlays. */
-export function drawCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r = 18): void {
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.5)";
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 8;
-  fillRoundRect(ctx, x, y, w, h, r, "rgba(17,24,39,0.96)", "rgba(255,255,255,0.10)", 1);
-  ctx.restore();
+/** Overlay card in the theme's colours with a hard offset shadow. */
+export function drawCard(ctx: CanvasRenderingContext2D, ui: UiPalette, x: number, y: number, w: number, h: number, r = 18): void {
+  fillRoundRect(ctx, x, y + 6, w, h, r, ui.cardShadow);
+  fillRoundRect(ctx, x, y, w, h, r, ui.card, ui.cardEdge, 1);
 }
 
 export interface PillButton {
@@ -140,20 +215,23 @@ export interface PillButton {
   w: number;
   h: number;
   primary?: boolean;
+  /** Visual scale driven by the feel layer (press / hover tweens). */
+  scale?: number;
 }
 
-/** Modern pill button with hover and pressed states. */
-export function drawPillButton(ctx: CanvasRenderingContext2D, b: PillButton, hover: boolean, pressed: boolean, font?: string): void {
-  const scale = pressed ? 0.97 : 1;
+/** Pill button in the theme's colours with hover and pressed states. */
+export function drawPillButton(ctx: CanvasRenderingContext2D, ui: UiPalette, b: PillButton, hover: boolean, pressed: boolean, font?: string): void {
+  const scale = b.scale ?? (pressed ? 0.96 : hover ? 1.03 : 1);
   const w = b.w * scale;
   const h = b.h * scale;
   const x = b.cx - w / 2;
   const y = b.cy - h / 2;
-  let fill: string;
-  if (b.primary) fill = pressed ? "#2f63d8" : hover ? "#5a92ff" : "#3b7cff";
-  else fill = pressed ? "rgba(255,255,255,0.08)" : hover ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.12)";
-  fillRoundRect(ctx, x, y, w, h, h / 2, fill, b.primary ? undefined : "rgba(255,255,255,0.14)", 1);
-  drawText(ctx, b.label, b.cx, b.cy + 1, { size: h * 0.42, color: "#f8fafc", bold: true, font });
+  if (b.primary) {
+    fillRoundRect(ctx, x, y, w, h, h / 2, hover ? ui.primaryHover : ui.primary);
+  } else {
+    fillRoundRect(ctx, x, y, w, h, h / 2, hover ? ui.secondaryHover : ui.secondary, ui.secondaryEdge, 1.5);
+  }
+  drawText(ctx, b.label, b.cx, b.cy + 1, { size: h * 0.4, color: b.primary ? ui.primaryText : ui.secondaryText, weight: 700, font });
 }
 
 export function drawLine(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, width: number, color: string): void {

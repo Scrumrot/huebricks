@@ -56,11 +56,22 @@ title, `M` mute, `T` switch theme.
 
 - **Classic** uses the original sprite PNGs and sounds from the GameMaker
   project (`public/assets`).
-- **Modern** rebuilds every sprite on offscreen canvases at start-up
-  (`src/engine/modernSkin.ts`): flat rounded tiles, the same shape language for
-  colour glyphs, dark UI and vector buttons. The ten tutorial slides are
-  redrawn too (`src/engine/modernSlides.ts`), with the same lesson order as the
-  originals.
+- **Modern** ("Pigment") rebuilds every sprite on offscreen canvases at
+  start-up (`src/engine/modernSkin.ts`): thick paint chips with hand-cut
+  edges on warm paper, ink glyphs in the same shape language as the original
+  art, paper chip buttons and a "HueBricks" wordmark. Display text uses
+  Fredoka and HUD text uses Inter, loaded from Google Fonts with system
+  fallbacks when offline. The ten tutorial slides are redrawn too
+  (`src/engine/modernSlides.ts`), with the same lesson order as the originals.
+
+Both themes share a real-time **feel layer**: the simulation still runs at
+the original 30 Hz, but everything you see is interpolated or tweened at the
+display's refresh rate. Pops have hit-stop, particles, a shockwave, screen
+shake on big chains and rising score labels; bricks squash when they land,
+the board turns as one piece with a small overshoot, combines wipe the new
+colour in radially, invalid moves shake, buttons spring, and cards slide in.
+Hovering a board brick while holding a replenish brick previews the colour
+you would get.
 
 The theme is remembered in `localStorage` together with the high score, the
 furthest world reached and the mute setting.
@@ -79,9 +90,14 @@ src/
     assets.ts    sprite/audio manifest and loader
     audio.ts     Web Audio SFX + looping music
     input.ts     pointer/keyboard with per-frame edge detection
-    draw.ts      sprite and text helpers
-    theme.ts     palettes
-    modernSkin.ts  generated modern sprite set
+    draw.ts      sprite, text (tabular numerals), card and button helpers
+    theme.ts     palettes, including card / button colours per theme
+    easing.ts    easing vocabulary
+    tween.ts     real-time tween manager
+    particles.ts pooled particle system
+    clock.ts     frame clock with hit-stop and sim interpolation
+    buttonFeel.ts press / hover scale for buttons
+    modernSkin.ts  generated modern ("Pigment") sprite set
     save.ts      localStorage persistence
   scenes/
     TitleScene.ts  logo -> mode -> world menus, credits, theme toggle
@@ -95,6 +111,8 @@ src/
   the original brick-flip menu system.
 - Multiple groups popping in one pass are all scored (the GML only counted the
   last one).
+- Animations are retimed and rendered at display rate (see the feel layer
+  above); the simulation and rules are unchanged.
 - The high score is actually recorded, and the "Congratulations!" message in
   the tutorial stays on screen for a moment.
 - New to this version: the chain meter and multiplier, the next-brick

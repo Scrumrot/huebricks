@@ -5,6 +5,7 @@ import {
   BLACK,
   colorFrame,
   COLOR_NAMES,
+  combineColors,
   GREEN,
   ORANGE,
   PURPLE,
@@ -13,62 +14,80 @@ import {
   YELLOW,
   type Color,
 } from "../core/color";
-import {
-  BTN_H,
-  DEFAULT_CELL_NUM,
-  FPS,
-  LEVEL_COMPLETE_DELAY,
-  LEVELS_PER_WORLD,
-  MAX_WORLD,
-  SCREEN_H,
-  SCREEN_W,
-} from "../core/constants";
+import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD, SCREEN_H, SCREEN_W } from "../core/constants";
 import { cellX, cellY, replenishY, screenToGrid } from "../core/layout";
 import { levelParams } from "../core/level";
-import type { MusicName, Sprite, SpriteName } from "../engine/assets";
-import { drawBlock, drawCard, drawLine, drawPillButton, drawSprite, drawSpritePartX, drawText, fillRoundRect, type PillButton } from "../engine/draw";
+import type { MusicName, SpriteName } from "../engine/assets";
+import { ButtonFeel } from "../engine/buttonFeel";
+import { drawBlock, drawBlockTransformed, drawCard, drawLine, drawPillButton, drawSprite, drawSpritePartX, drawText, fillRoundRect, type PillButton } from "../engine/draw";
+import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
+import { drawPaper } from "../engine/modernSkin";
+import { Particles } from "../engine/particles";
 import type { ThemeName } from "../engine/theme";
+import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
 
 type State = "rest" | "animation" | "menu" | "tutorial" | "lost";
-type Animation =
-  | "none"
-  | "fall"
-  | "rotate"
-  | "pop"
-  | "combine"
-  | "noadd"
-  | "begin"
-  | "push"
-  | "fadein"
-  | "fadeout";
+type Animation = "none" | "fall" | "rotate" | "pop" | "combine" | "noadd" | "begin" | "push" | "fadeout";
 type TutorialPhase = "intro" | "add" | "outro";
 
-/** Floating label that rises and fades (chain multipliers, bonuses). */
-interface Callout {
-  text: string;
-  x: number;
-  y: number;
-  t: number;
-  color: string;
-  size: number;
-}
+// ---------------------------------------------------------------------------
+// Timing
+// ---------------------------------------------------------------------------
+
+/**
+ * Playback rate of the feel layer relative to the durations below. 1 is the
+ * tuned feel; higher is snappier.
+ */
+const ANIM_SPEED = 1;
+const STEP_MS = 1000 / FPS;
+/** Duration in ms after the playback rate. */
+const D = (ms: number): number => ms / ANIM_SPEED;
+/** Sim steps that cover `ms` of real time. */
+const frames = (ms: number): number => Math.max(1, Math.round(D(ms) / STEP_MS));
+
+/** Fall acceleration, px per sim step squared (the GML 1.7, sped up). */
+const GRAVITY = 2.7 * ANIM_SPEED;
+
+const PICK_MS = 90;
+const DIM_MS = 120;
+const WIPE_MS = 160;
+const RING_MS = 220;
+const NOADD_MS = 260;
+const POP_GROW_MS = 70;
+const POP_HOLD_MS = 30;
+const POP_SHRINK_MS = 140;
+const POP_STAGGER_MS = 20;
+const POP_TOTAL_MS = POP_GROW_MS + POP_HOLD_MS + POP_SHRINK_MS;
+const SHOCK_MS = 300;
+const SCORE_MS = 600;
+const SHAKE_MS = 180;
+const LAND_SQUASH_MS = 60;
+const LAND_SETTLE_MS = 160;
+const ROTATE_ANTICIPATE_MS = 60;
+const ROTATE_MS = 260;
+const PUSH_ANTICIPATE_MS = 110;
+const PUSH_MS = 220;
+const FADE_MS = 180;
+const CARD_MS = 420;
+const COUNT_MS = 500;
+const DESAT_MS = 400;
+const BREATHE_MS = 1400;
+
+const ROTATE_FRAMES = frames(ROTATE_ANTICIPATE_MS + ROTATE_MS);
+const PUSH_FRAMES = frames(PUSH_ANTICIPATE_MS + PUSH_MS);
+const LEVEL_CARD_FRAMES = frames(2800);
+
+// ---------------------------------------------------------------------------
+// Scoring additions
+// ---------------------------------------------------------------------------
 
 /** `selected` value meaning "the brick in the hold slot". */
 const HOLD = -1;
 /** Frames at rest before a chain cools off completely. */
 const CHAIN_DECAY_FRAMES = FPS * 2.5;
 const MAX_MULTIPLIER = 5;
-/** Frames of slowed pop animation after a big chain. */
-const SLOWMO_FRAMES = 14;
-/**
- * Playback rate for board animations (pops, mixing, rotation, falls, push,
- * level fades) relative to the original 30 Hz GML timings. 1 = as the
- * GameMaker version; higher is snappier.
- */
-const ANIM_SPEED = 1.6;
-const CALLOUT_FRAMES = 50;
 /** Bonus for popping a group that contains a refined (subtracted) brick. */
 const REFINED_BONUS = 150;
 /** One-time bonus for completing the level's subtract goal. */
@@ -76,14 +95,70 @@ const GOAL_BONUS = 500;
 /** Upcoming replenish colours shown as ghosts in the empty slots. */
 const PREVIEW_COUNT = 3;
 /** Chain multiplier colours, indexed by multiplier. */
-const MULT_COLORS = ["", "#f8fafc", "#ffc12b", "#ff8a2a", "#ef3f4f", "#9b5de5"];
+const MULT_COLORS = ["", "#1F1C18", "#F2C230", "#F28B2B", "#E04A3F", "#7D4FC2"];
+const MULT_COLORS_CLASSIC = ["", "#f8fafc", "#ffc12b", "#ff8a2a", "#ef3f4f", "#9b5de5"];
+
+// ---------------------------------------------------------------------------
+// Feel-layer records
+// ---------------------------------------------------------------------------
+
+/** Per-brick cosmetic state driven by tweens; the sim never reads it. */
+interface BrickFx {
+  /** Uniform scale (pick-up lift, punches). */
+  s: number;
+  /** Squash / stretch. */
+  sx: number;
+  sy: number;
+  rot: number;
+  /** Offset from the interpolated sim position (slides, shakes). */
+  dx: number;
+  dy: number;
+  /** 0 = resting, 1 = lifted (shadow grows, chip rises). */
+  lift: number;
+  /** Alpha multiplier (other replenish bricks dim while one is held). */
+  dim: number;
+  /** Game time the colour wipe started, or -1. */
+  wipeT0: number;
+  /** Game time the invalid-move shake started, or -1. */
+  noaddT0: number;
+  fallFrom: number;
+  wasFalling: boolean;
+}
 
 interface DieAnim {
   x: number;
   y: number;
   color: Color;
-  popAnim: number;
-  value: number;
+  /** Game time this brick starts its pop (staggered within the group). */
+  t0: number;
+  burst: boolean;
+  /** Rotation drift direction. */
+  spin: number;
+}
+
+interface Ring {
+  x: number;
+  y: number;
+  t0: number;
+  dur: number;
+  r0: number;
+  r1: number;
+  color: string;
+  width: number;
+}
+
+/** Floating label that pops in, rises and fades (scores, chain, bonuses). */
+interface Callout {
+  text: string;
+  x: number;
+  y: number;
+  t0: number;
+  dur: number;
+  color: string;
+  size: number;
+  tilt: number;
+  rise: number;
+  display: boolean;
 }
 
 interface SideButton {
@@ -98,16 +173,6 @@ interface SideButton {
   pressed: boolean;
 }
 
-const EXPAND_SPRITES: Record<Color, SpriteName> = {
-  1: "red_expand_sprite",
-  2: "blue_expand_sprite",
-  3: "purple_expand_sprite",
-  4: "yellow_expand_sprite",
-  5: "orange_expand_sprite",
-  6: "green_expand_sprite",
-  7: "black_expand_sprite",
-};
-
 /** Replenish / board colours for the six tutorial exercises (`board_populate_tutorial.gml`). */
 const TUTORIAL_LEVELS: Array<{ board: Color; target: Color; replenish: Color; canAdd: boolean; canSubtract: boolean }> = [
   { board: GREEN, target: YELLOW, replenish: BLUE, canAdd: true, canSubtract: false },
@@ -118,17 +183,25 @@ const TUTORIAL_LEVELS: Array<{ board: Color; target: Color; replenish: Color; ca
   { board: RED, target: BLUE, replenish: PURPLE, canAdd: false, canSubtract: true },
 ];
 
+const DEG = Math.PI / 180;
+const ROTATE_EASE = backOut(0.95);
+const PUSH_EASE = backOut(0.6);
+const CARD_EASE = backOut(1.2);
+
 /**
  * The playing scene: board, replenish line, side buttons, pause menu and the
  * tutorial. A port of the `Board`, `Brick`, `BrickDieAnim`, `ReplenishSelector`,
- * `RotateUI`, `SpeedUI`, `PauseUI` and `TutorialText` objects.
+ * `RotateUI`, `SpeedUI`, `PauseUI` and `TutorialText` objects, with a
+ * real-time feel layer (tweens, particles, hit-stop, shake) on top.
  */
 export class GameScene implements Scene {
   private readonly ctx: GameContext;
   private readonly board: Board;
 
   private state: State = "animation";
-  private animation: Animation = "fadein";
+  private animation: Animation = "begin";
+  /** Sim steps spent in the current fixed-length animation. */
+  private animFrame = 0;
 
   // --- replenish line ---
   private replenishTimer = 180;
@@ -142,6 +215,7 @@ export class GameScene implements Scene {
   // --- selector (ReplenishSelector) ---
   private selected: number;
   private selectedBrick: Brick | null = null;
+  private lastSelected: Brick | null = null;
   private selX = 0;
   private cx = 0;
   private cy = 0;
@@ -161,8 +235,6 @@ export class GameScene implements Scene {
   private chain = 0;
   /** 1 right after a pop, cooling to 0 at rest. */
   private heat = 0;
-  private slowmo = 0;
-  private callouts: Callout[] = [];
 
   // --- hold slot and preview ---
   private held: Brick | null = null;
@@ -174,9 +246,7 @@ export class GameScene implements Scene {
   private subtractDone = 0;
   private goalAwarded = false;
 
-  private dieAnims: DieAnim[] = [];
-  private levelCompleteDelay = LEVEL_COMPLETE_DELAY;
-  private fadeRadius = SCREEN_W * Math.SQRT2;
+  private levelCompleteDelay = LEVEL_CARD_FRAMES;
   private levelCompleteSounded = false;
   private lostTimer = 0;
 
@@ -186,12 +256,40 @@ export class GameScene implements Scene {
   private tutorialText = "";
   private tutorialTimer = 0;
 
+  // --- feel layer ---
+  private readonly tweens = new Tweens();
+  private readonly particles = new Particles(400);
+  private readonly feel: ButtonFeel;
+  private readonly fx = new Map<number, BrickFx>();
+  private dieAnims: DieAnim[] = [];
+  private rings: Ring[] = [];
+  private callouts: Callout[] = [];
+  private fadeT0 = 0;
+  private rotateT0 = -1;
+  private rotateDir = 1;
+  private pushT0 = -1;
+  private cardT0 = -1;
+  private shakeT0 = -1e9;
+  private shakeAmp = 0;
+  private flashUntil = -1;
+  private barFlashT0 = -1e9;
+  private selFlashT0 = -1e9;
+  /** HUD score counts toward the real score. */
+  private readonly scoreFx = { v: 0 };
+  private scoreTarget = 0;
+  private readonly badgeFx = { s: 1 };
+  private lastMult = 1;
+  private readonly lostFx = { desat: 0 };
+
   constructor(ctx: GameContext) {
     this.ctx = ctx;
     this.board = new Board(DEFAULT_CELL_NUM);
     this.selected = this.board.cellNum;
     this.selX = cellX(this.board.layout, this.selected);
     for (let i = 0; i < PREVIEW_COUNT; i++) this.nextColors.push(randomSpawnColor());
+    this.feel = new ButtonFeel(this.tweens);
+    this.scoreFx.v = ctx.session.score;
+    this.scoreTarget = ctx.session.score;
     this.layoutButtons();
   }
 
@@ -199,6 +297,35 @@ export class GameScene implements Scene {
     const { world, gameType } = this.ctx.session;
     const music: MusicName = world === 0 ? "tutorial_bgm" : `${gameType}${world}_bgm`;
     this.ctx.audio.playMusic(music);
+    this.fadeT0 = this.ctx.clock.t;
+    if (world !== 0) {
+      this.populate();
+    } else {
+      this.state = "tutorial";
+      this.tutorialPhase = "intro";
+      this.tutorialState = 0;
+      this.board.resize(4);
+      this.selected = this.board.cellNum;
+      this.selX = cellX(this.board.layout, this.selected);
+      this.layoutButtons();
+    }
+  }
+
+  cursor(): string {
+    const inp = this.ctx.input;
+    if (this.state === "lost" || this.state === "menu") {
+      return this.overlayButtons().some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ? "pointer" : "default";
+    }
+    if (this.state === "tutorial" && this.tutorialPhase !== "add") return "pointer";
+    if (this.boardDown && this.selectedBrick) return "grabbing";
+    if (this.selectedBrick) return "grab";
+    if (this.buttons.some((b) => b.hilite) || this.holdHover) return "pointer";
+    const l = this.board.layout;
+    const { gx, gy } = screenToGrid(l, inp.x, inp.y);
+    const n = this.board.cellNum;
+    if (gx >= 0 && gx < n && inp.y > SCREEN_H - l.cellH - l.cellSep * 3 && gx < this.board.replenishList.length) return "pointer";
+    if (gx >= 0 && gx < n && gy >= 0 && gy < n && this.board.get(gx, gy)) return "pointer";
+    return "default";
   }
 
   // ---------------------------------------------------------------------------
@@ -211,7 +338,6 @@ export class GameScene implements Scene {
     const cx = l.boardX + l.boardW + (SCREEN_W - l.boardW) / 4;
 
     if (this.buttonsTheme === "modern") {
-      // Four equal buttons spread evenly down the right rail, rotate pair grouped.
       const railW = (SCREEN_W - l.boardW) / 2;
       const d = Math.min(railW * 0.66, SCREEN_H / 5.2);
       const margin = 16;
@@ -233,14 +359,13 @@ export class GameScene implements Scene {
         mk("ccw", "rotate_button_sprite", 0, ys[1]),
         mk("cw", "rotate_button_sprite", 2, ys[2]),
         mk("speed", "speedup_button_sprite", 0, ys[3]),
-        // Sound toggle sits alone in the middle of the left rail, between the HUD blocks.
         { ...mk("sound", "sound_button_sprite", 0, this.rail().soundY), cx: l.boardX / 2, w: d * 0.6, h: d * 0.6 },
       ];
       return;
     }
 
     let wid = ((SCREEN_W - l.boardW) / 2) * 0.8;
-    let hit = wid; // the button sprites are square
+    let hit = wid;
     if (hit > SCREEN_H / 4) {
       hit = SCREEN_H / 4;
       wid = hit;
@@ -265,10 +390,7 @@ export class GameScene implements Scene {
     ];
   }
 
-  /**
-   * Vertical layout of the left rail (HUD column). Everything is a multiple
-   * of the cell height so it scales with the board size.
-   */
+  /** Vertical layout of the left rail (HUD column), in multiples of the cell height. */
   private rail(): {
     cx: number;
     chainY: number;
@@ -293,20 +415,31 @@ export class GameScene implements Scene {
     return Math.max(1, Math.min(MAX_MULTIPLIER, this.chain));
   }
 
-  /** `board_populate.gml` */
+  private fxOf(b: Brick): BrickFx {
+    let f = this.fx.get(b.id);
+    if (!f) {
+      f = { s: 1, sx: 1, sy: 1, rot: 0, dx: 0, dy: 0, lift: 0, dim: 1, wipeT0: -1, noaddT0: -1, fallFrom: 0, wasFalling: false };
+      this.fx.set(b.id, f);
+    }
+    return f;
+  }
+
+  /** `board_populate.gml`; rows drop in from the top, bottom row first. */
   private populate(): void {
     const { world, level } = this.ctx.session;
     const params = levelParams(world, level);
     const l = this.board.layout;
-    let entrance = 0;
-    for (let i = 0; i < params.brickCount && i < this.board.cellNum ** 2; i++) {
+    const n = this.board.cellNum;
+    for (let i = 0; i < params.brickCount && i < n ** 2; i++) {
       const brick = new Brick(randomSpawnColor());
       const { gx, gy } = this.board.placeByIndex(i, brick);
       brick.x = cellX(l, gx);
       brick.y = cellY(l, gy);
       brick.spriteX = brick.x;
       brick.spriteY = brick.y - l.boardH;
-      brick.enterDelay = ++entrance;
+      brick.prevX = brick.spriteX;
+      brick.prevY = brick.spriteY;
+      brick.enterDelay = ((n - 1 - gy) * D(25)) / STEP_MS;
       brick.enter = true;
     }
     this.replenishTimer = params.replenishTimer;
@@ -345,6 +478,7 @@ export class GameScene implements Scene {
     this.nextColors.push(randomSpawnColor());
     const b = new Brick(color, cellX(l, idx), replenishY(l));
     this.board.replenishList.push(b);
+    if (this.selectedBrick) this.fxOf(b).dim = 0.7;
     return b;
   }
 
@@ -354,6 +488,9 @@ export class GameScene implements Scene {
 
   update(): void {
     const inp = this.ctx.input;
+    for (const b of this.board.allBricks()) b.snapshot();
+    this.held?.snapshot();
+
     if (inp.keysPressed.has("Escape") || inp.keysPressed.has("Backspace")) {
       this.quitToTitle();
       return;
@@ -364,13 +501,9 @@ export class GameScene implements Scene {
     if (this.state === "lost") {
       this.lostTimer++;
       if (this.lostTimer <= 20) return;
-      if (this.ctx.palette.name === "modern") {
-        const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
-        if (hit?.id === "retry" || inp.keysPressed.has("Enter")) this.retry();
-        else if (hit?.id === "menu") this.quitToTitle();
-      } else if (inp.pressed || inp.keysPressed.has("Enter") || inp.keysPressed.has(" ")) {
-        this.quitToTitle();
-      }
+      const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
+      if (hit?.id === "retry" || inp.keysPressed.has("Enter")) this.retry();
+      else if (hit?.id === "menu") this.quitToTitle();
       return;
     }
 
@@ -393,8 +526,6 @@ export class GameScene implements Scene {
     for (const b of this.board.allBricks()) this.stepBrick(b);
     if (this.held) this.stepBrick(this.held);
     this.stepDieAnims();
-    this.stepCallouts();
-    if (this.slowmo > 0) this.slowmo--;
   }
 
   /** `Board` step event, STATE_REST block. */
@@ -461,7 +592,8 @@ export class GameScene implements Scene {
     if (this.state === "animation" && this.animation === "fadeout") return;
     this.state = "animation";
     this.animation = "fadeout";
-    this.levelCompleteDelay = LEVEL_COMPLETE_DELAY;
+    this.levelCompleteDelay = LEVEL_CARD_FRAMES;
+    this.cardT0 = this.ctx.clock.t;
     if (!this.levelCompleteSounded) {
       this.levelCompleteSounded = true;
       this.ctx.audio.play("achievment_snd");
@@ -471,42 +603,32 @@ export class GameScene implements Scene {
   /** `board_push.gml` plus the normal-mode loss check. */
   private doPush(): void {
     const result = this.board.push();
+    for (const b of this.board.bricks()) b.settle();
     this.replenishNum = 0;
     this.replenishLine = 0;
     this.selectedBrick = null;
     this.selected = this.board.cellNum;
     this.state = "animation";
     this.animation = "push";
+    this.animFrame = 0;
+    this.pushT0 = this.ctx.clock.t;
+    this.barFlashT0 = this.ctx.clock.t;
     this.ctx.audio.play("BlocksRepMoveUp_snd");
     if (result.overflow && this.ctx.session.gameType === "normal") {
       this.lose();
     }
   }
 
-  /** Pause-menu geometry shared by update and render. */
-  private menuButtonRect(): { x: number; y: number; size: number } {
-    const size = SCREEN_H / 4;
-    return { x: SCREEN_W / 2 - size / 2, y: SCREEN_H / 2, size };
-  }
-
   private updateMenu(): void {
     const inp = this.ctx.input;
-    if (this.ctx.palette.name === "modern") {
-      const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
-      if (!hit) return;
-      this.ctx.audio.play("menuselect_snd");
-      if (hit.id === "resume") this.state = "rest";
-      else if (hit.id === "menu") this.quitToTitle();
-      return;
-    }
-    const r = this.menuButtonRect();
-    if (inp.released && inp.inRect(r.x, r.y, r.size, r.size)) {
-      this.ctx.audio.play("menuselect_snd");
-      this.quitToTitle();
-    }
+    const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
+    if (!hit) return;
+    this.ctx.audio.play("menuselect_snd");
+    if (hit.id === "resume") this.state = "rest";
+    else if (hit.id === "menu") this.quitToTitle();
   }
 
-  /** Buttons on the modern pause and game-over cards. */
+  /** Buttons on the pause and game-over cards. */
   private overlayButtons(): PillButton[] {
     const cx = SCREEN_W / 2;
     const y = SCREEN_H / 2 + 72;
@@ -514,13 +636,13 @@ export class GameScene implements Scene {
     const h = 44;
     if (this.state === "lost") {
       return [
-        { id: "retry", label: "Try again", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
-        { id: "menu", label: "Main menu", cx: cx + w / 2 + 8, cy: y, w, h },
+        { id: "retry", label: "Retry", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
+        { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
       ];
     }
     return [
       { id: "resume", label: "Resume", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
-      { id: "menu", label: "Main menu", cx: cx + w / 2 + 8, cy: y, w, h },
+      { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
     ];
   }
 
@@ -533,6 +655,8 @@ export class GameScene implements Scene {
   private lose(): void {
     this.state = "lost";
     this.lostTimer = 0;
+    this.cardT0 = this.ctx.clock.t + D(250);
+    this.tweens.to(this.lostFx, { desat: 1 }, D(DESAT_MS));
     this.ctx.audio.play("tryagain_snd");
     this.recordHighScore();
   }
@@ -543,31 +667,18 @@ export class GameScene implements Scene {
     const bricks = [...this.board.allBricks()];
     const count = (pred: (b: Brick) => boolean) => bricks.filter(pred).length;
     const { world } = this.ctx.session;
+    this.animFrame++;
 
     switch (this.animation) {
       case "fadeout":
-        this.levelCompleteDelay -= ANIM_SPEED;
+        this.levelCompleteDelay--;
         if (this.levelCompleteDelay < 0) this.nextLevel();
-        return;
-      case "fadein":
-        this.fadeRadius *= 0.96 ** ANIM_SPEED;
-        if (this.fadeRadius <= BTN_H / 2) {
-          if (world !== 0) {
-            this.populate();
-          } else {
-            this.state = "tutorial";
-            this.tutorialPhase = "intro";
-            this.tutorialState = 0;
-            this.board.resize(4);
-            this.selected = this.board.cellNum;
-            this.selX = cellX(this.board.layout, this.selected);
-            this.layoutButtons();
-          }
-        }
         return;
       case "push":
         this.maxPercentage -= 1 / (this.board.cellNum * 5);
-        if (count((b) => b.pushing) === 0) {
+        if (this.animFrame >= PUSH_FRAMES) {
+          for (const b of bricks) b.pushing = false;
+          this.pushT0 = -1;
           this.state = "rest";
           this.maxPercentage = 0;
         }
@@ -582,7 +693,9 @@ export class GameScene implements Scene {
         }
         break;
       case "rotate":
-        if (count((b) => b.rotate) === 0) {
+        if (this.animFrame >= ROTATE_FRAMES) {
+          for (const b of bricks) b.rotate = false;
+          this.rotateT0 = -1;
           this.animation = "fall";
           this.board.resetBlockPositions();
           if (this.board.resettle()) this.ctx.audio.play("block_fall_snd");
@@ -630,6 +743,9 @@ export class GameScene implements Scene {
    */
   private applyPop(res: PopResult): void {
     if (res.groups.length === 0) return;
+    const t = this.ctx.clock.t;
+    const l = this.board.layout;
+    const pal = this.ctx.palette;
     const scoring = res.score !== 0;
     let mult = 1;
     if (scoring) {
@@ -637,11 +753,34 @@ export class GameScene implements Scene {
       this.heat = 1;
       mult = this.chainMultiplier();
     }
-    for (const g of res.groups) {
+
+    res.groups.forEach((g, gi) => {
+      // Centroid, then pop outward from it in a spiral-ish distance order.
+      let cxg = 0;
+      let cyg = 0;
       for (const b of g) {
-        this.dieAnims.push({ x: b.x, y: b.y, color: b.color, popAnim: 0, value: res.brickValue * mult });
+        cxg += b.x + l.cellW / 2;
+        cyg += b.y + l.cellH / 2;
       }
-    }
+      cxg /= g.length;
+      cyg /= g.length;
+      const ordered = [...g].sort((a, b) => Math.hypot(a.x - cxg, a.y - cyg) - Math.hypot(b.x - cxg, b.y - cyg));
+      ordered.forEach((b, k) => {
+        this.fx.delete(b.id);
+        this.dieAnims.push({ x: b.x, y: b.y, color: b.color, t0: t + D(gi * 40 + k * POP_STAGGER_MS), burst: false, spin: k % 2 === 0 ? 1 : -1 });
+      });
+      this.rings.push({ x: cxg, y: cyg, t0: t + D(gi * 40 + 60), dur: D(SHOCK_MS), r0: l.cellW * 0.5, r1: l.cellW * 2.5, color: pal.callout, width: 4 });
+      if (g[0].color !== BLACK) {
+        const value = res.brickValue * mult * g.length;
+        this.addCallout(`+${value}`, cxg, cyg, {
+          delay: gi * 40 + 100,
+          size: Math.max(14, l.cellH * 0.34) * (1 + 0.12 * (mult - 1)),
+          color: pal.callout,
+          display: true,
+        });
+      }
+    });
+
     this.maxPercentage = Math.min(1, this.maxPercentage + 1 / this.board.cellNum);
     this.state = "animation";
     this.animation = "pop";
@@ -649,33 +788,45 @@ export class GameScene implements Scene {
     let gained = res.score * mult;
     if (scoring) {
       this.comboRemaining -= 1;
-      this.ctx.audio.play("BlocksPopping_snd");
+      const semitones = Math.min(7, this.chain - 1);
+      this.ctx.audio.play("BlocksPopping_snd", 1, 1.0595 ** semitones);
+      this.ctx.clock.freeze(mult >= 3 ? 80 : 50);
+      if (mult >= 2) this.flashUntil = t + 30;
+      if (this.chain >= 3) {
+        this.shakeT0 = t;
+        this.shakeAmp = 3;
+      }
+      if (mult !== this.lastMult) {
+        this.lastMult = mult;
+        this.tweens.set(this.badgeFx, { s: 1.5 });
+        this.tweens.to(this.badgeFx, { s: 1 }, D(650), easeOutElastic);
+      }
 
       const refined = res.groups.filter((g) => g[0].color !== BLACK && g.some((b) => b.refined));
       for (const g of refined) {
         const bonus = REFINED_BONUS * mult;
         gained += bonus;
         this.subtractDone += 1;
-        this.addCallout(`SUBTRACT +${bonus}`, g, 0.45, "#7dd3fc", 15);
+        const c = this.groupCentre(g);
+        this.addCallout(`SUBTRACT +${bonus}`, c.x, c.y + l.cellH * 1.05, { delay: 220, size: 15, color: "#2E6FD8", dur: 900, rise: 34 });
       }
       if (this.chain >= 2) {
-        this.addCallout(`CHAIN x${mult}`, res.groups[0], -0.45, MULT_COLORS[mult], 18 + mult * 2);
+        const c = this.groupCentre(res.groups[0]);
+        const colors = pal.name === "modern" ? MULT_COLORS : MULT_COLORS_CLASSIC;
+        this.addCallout(`CHAIN x${mult}`, c.x, c.y - l.cellH * 1.1, { delay: 180, size: 18 + mult * 2, color: colors[mult], dur: 900, rise: 40, display: true });
       }
-      if (this.chain >= 3) this.slowmo = SLOWMO_FRAMES;
 
       if (this.subtractGoal > 0 && !this.goalAwarded && this.subtractDone >= this.subtractGoal) {
         this.goalAwarded = true;
         gained += GOAL_BONUS;
         this.ctx.audio.play("achievment_snd");
-        const l = this.board.layout;
-        this.callouts.push({ text: `SUBTRACT GOAL +${GOAL_BONUS}`, x: l.boardX + l.boardW / 2, y: l.boardH * 0.4, t: 0, color: "#7dd3fc", size: 24 });
+        this.addCallout(`SUBTRACT GOAL +${GOAL_BONUS}`, l.boardX + l.boardW / 2, l.boardH * 0.4, { delay: 300, size: 24, color: "#2E6FD8", dur: 1400, rise: 30, display: true });
       }
     }
     this.ctx.session.score += gained;
   }
 
-  /** Add a rising label above (`dy < 0`) or below the centre of a popped group. */
-  private addCallout(text: string, group: Brick[], dy: number, color: string, size: number): void {
+  private groupCentre(group: Brick[]): { x: number; y: number } {
     const l = this.board.layout;
     let x = 0;
     let y = 0;
@@ -685,17 +836,28 @@ export class GameScene implements Scene {
     }
     x /= group.length;
     y /= group.length;
-    // Keep the label inside the board horizontally.
     x = Math.max(l.boardX + 70, Math.min(l.boardX + l.boardW - 70, x));
-    this.callouts.push({ text, x, y: y + dy * l.cellH, t: 0, color, size });
+    return { x, y };
   }
 
-  private stepCallouts(): void {
-    for (const c of this.callouts) {
-      c.t += 1;
-      c.y -= c.t < 10 ? 1.2 : 0.35;
-    }
-    this.callouts = this.callouts.filter((c) => c.t < CALLOUT_FRAMES);
+  private addCallout(
+    text: string,
+    x: number,
+    y: number,
+    o: { delay?: number; dur?: number; size?: number; color?: string; rise?: number; display?: boolean } = {},
+  ): void {
+    this.callouts.push({
+      text,
+      x,
+      y,
+      t0: this.ctx.clock.t + D(o.delay ?? 0),
+      dur: D(o.dur ?? SCORE_MS),
+      color: o.color ?? this.ctx.palette.callout,
+      size: o.size ?? 16,
+      tilt: (Math.random() * 2 - 1) * 4 * DEG,
+      rise: o.rise ?? 28,
+      display: o.display ?? false,
+    });
   }
 
   private nextLevel(): void {
@@ -709,8 +871,7 @@ export class GameScene implements Scene {
       this.ctx.save.worldProgress = s.world;
     }
     this.recordHighScore();
-    const next = new GameScene(this.ctx);
-    this.ctx.setScene(next);
+    this.ctx.setScene(new GameScene(this.ctx));
   }
 
   private recordHighScore(): void {
@@ -742,7 +903,6 @@ export class GameScene implements Scene {
       }
     }
 
-    // Keyboard equivalents.
     if (interactive) {
       if (inp.keysPressed.has("q") || inp.keysPressed.has("ArrowLeft")) this.activateButton("ccw");
       if (inp.keysPressed.has("e") || inp.keysPressed.has("ArrowRight")) this.activateButton("cw");
@@ -764,14 +924,19 @@ export class GameScene implements Scene {
       case "cw":
         if (this.state === "rest") {
           this.board.rotate(kind === "cw");
+          for (const b of this.board.bricks()) b.settle();
           this.state = "animation";
           this.animation = "rotate";
+          this.animFrame = 0;
+          this.rotateT0 = this.ctx.clock.t;
+          this.rotateDir = kind === "cw" ? 1 : -1;
           this.ctx.audio.play("BoardRotation_snd");
         }
         break;
       case "pause":
         if (this.state === "rest") {
           this.state = "menu";
+          this.cardT0 = this.ctx.clock.t;
         } else if (this.state === "menu") {
           this.state = "rest";
         }
@@ -853,6 +1018,20 @@ export class GameScene implements Scene {
     this.by -= (this.by - cellY(l, this.cy)) / 1.2;
 
     this.selectedBrick = this.selected === HOLD ? this.held : (this.board.replenishList[this.selected] ?? null);
+    this.syncSelectionFx();
+  }
+
+  /** Lift the newly selected brick, drop the old one, dim the rest of the line. */
+  private syncSelectionFx(): void {
+    const sel = this.selectedBrick;
+    if (sel === this.lastSelected) return;
+    if (this.lastSelected) this.tweens.to(this.fxOf(this.lastSelected), { s: 1, lift: 0 }, D(160), easeOutBack);
+    if (sel) this.tweens.to(this.fxOf(sel), { s: 1.12, lift: 1 }, D(PICK_MS), easeOutBack);
+    for (const b of this.board.replenishList) {
+      if (b !== sel) this.tweens.to(this.fxOf(b), { dim: sel ? 0.7 : 1 }, D(DIM_MS));
+    }
+    if (this.held && this.held !== sel) this.tweens.to(this.fxOf(this.held), { dim: 1 }, D(DIM_MS));
+    this.lastSelected = sel;
   }
 
   /**
@@ -877,7 +1056,6 @@ export class GameScene implements Scene {
       sel.inactiveDuration = 0;
       this.placeHeld();
       this.board.resetBlockPositions();
-      for (const b of list) b.settle();
       this.replenishNum = list.length;
       if (this.replenishNum < this.board.cellNum) this.readyToPush = false;
       this.deselect();
@@ -888,7 +1066,7 @@ export class GameScene implements Scene {
     }
   }
 
-  /** Park the held brick on the hold slot (as a full-size cell; it is drawn scaled). */
+  /** Park the held brick on the hold slot (it slides there via the feel layer). */
   private placeHeld(): void {
     if (!this.held) return;
     const l = this.board.layout;
@@ -897,7 +1075,6 @@ export class GameScene implements Scene {
     this.held.y = r.holdY - l.cellH / 2;
     this.held.gridX = -1;
     this.held.gridY = -1;
-    this.held.settle();
   }
 
   private deselect(): void {
@@ -905,23 +1082,39 @@ export class GameScene implements Scene {
     this.selX = cellX(this.board.layout, this.selected);
   }
 
+  /** Colour the selected brick would produce on the board brick at (gx, gy), or null. */
+  private previewResult(gx: number, gy: number): Color | null {
+    const sel = this.selectedBrick;
+    const dest = this.board.get(gx, gy);
+    if (!sel || !dest) return null;
+    const { world, level } = this.ctx.session;
+    if (world === 0) {
+      if (this.state !== "tutorial" || this.tutorialPhase !== "add") return null;
+      const spec = TUTORIAL_LEVELS[level];
+      if (level === 5 && dest.color !== BLUE) return null;
+      return combineColors(sel.color, dest.color, spec.canAdd, spec.canSubtract);
+    }
+    if (this.state !== "rest") return null;
+    return combineColors(sel.color, dest.color);
+  }
+
   private onBoardRelease(): void {
     const { world, level } = this.ctx.session;
+    const dest = this.board.get(this.cx, this.cy);
     if (this.state === "rest") {
       const fromHold = this.selectedBrick !== null && this.selectedBrick === this.held;
       const result = this.board.combine(this.selectedBrick, this.cx, this.cy);
-      this.handleCombine(result);
+      this.handleCombine(result, dest);
       if (result === "combined" && fromHold) this.held = null;
       this.deselect();
     } else if (this.state === "tutorial" && this.tutorialPhase === "add") {
       const spec = TUTORIAL_LEVELS[level];
       // The final exercise only accepts the blue brick as a target.
       if (level === 5) {
-        const dest = this.board.get(this.cx, this.cy);
         if (dest && dest.color !== BLUE) return;
       }
       const result = this.board.combine(this.selectedBrick, this.cx, this.cy, spec.canAdd, spec.canSubtract);
-      this.handleCombine(result);
+      this.handleCombine(result, dest);
       this.deselect();
       if (result === "combined" && world === 0) {
         if (this.tutorialState < 4) this.tutorialState = 4;
@@ -930,21 +1123,50 @@ export class GameScene implements Scene {
     }
   }
 
-  private handleCombine(result: "combined" | "noadd" | "none"): void {
+  private handleCombine(result: "combined" | "noadd" | "none", dest: Brick | null): void {
+    const t = this.ctx.clock.t;
+    const l = this.board.layout;
     switch (result) {
-      case "noadd":
+      case "noadd": {
         this.state = "animation";
         this.animation = "noadd";
+        this.animFrame = 0;
         this.ctx.audio.play("BlocksIncorrect_snd");
+        this.selFlashT0 = t;
+        for (const b of this.board.allBricks()) {
+          if (b.noadd) this.fxOf(b).noaddT0 = t;
+        }
+        if (this.held?.noadd) this.fxOf(this.held).noaddT0 = t;
         break;
-      case "combined":
+      }
+      case "combined": {
         this.selectedBrick = null;
         this.replenishNum = this.board.replenishList.length;
         this.readyToPush = false;
         this.state = "animation";
         this.animation = "combine";
+        this.animFrame = 0;
         this.ctx.audio.play("BlocksCombine_snd");
+        if (dest) {
+          const f = this.fxOf(dest);
+          f.wipeT0 = t;
+          this.tweens.set(f, { s: 1 });
+          this.tweens.to(f, { s: 1.1 }, D(80), easeOutBack, {
+            onDone: () => this.tweens.to(f, { s: 1 }, D(100), easeOutBack),
+          });
+          this.rings.push({
+            x: dest.x + l.cellW / 2,
+            y: dest.y + l.cellH / 2,
+            t0: t,
+            dur: D(RING_MS),
+            r0: l.cellW * 0.5,
+            r1: l.cellW * 0.8,
+            color: this.ctx.palette.name === "modern" ? "#FFFFFF" : "#ffffff",
+            width: 3,
+          });
+        }
         break;
+      }
       case "none":
         break;
     }
@@ -954,54 +1176,67 @@ export class GameScene implements Scene {
   // Bricks and pop animations
   // ---------------------------------------------------------------------------
 
-  /** `Brick` step event. */
+  /** `Brick` step event: sim-side motion (gravity) plus the hooks that start feel-layer tweens. */
   private stepBrick(b: Brick): void {
+    const f = this.fxOf(b);
+    const stable = !b.fall && !b.enter && !b.pushing && !b.rotate;
+    const animating = this.state === "animation";
+    const positional = animating && (this.animation === "fall" || this.animation === "begin" || this.animation === "push" || this.animation === "rotate");
+
+    // Logical position jumped while the brick is not in a sim-driven motion
+    // (the replenish line shifted, a brick went to the hold slot): slide there.
+    if (stable && !positional && (b.spriteX !== b.x || b.spriteY !== b.y)) {
+      f.dx += b.spriteX - b.x;
+      f.dy += b.spriteY - b.y;
+      b.spriteX = b.x;
+      b.spriteY = b.y;
+      b.prevX = b.x;
+      b.prevY = b.y;
+      this.tweens.to(f, { dx: 0, dy: 0 }, D(200), easeOutQuart);
+    }
+
     switch (this.state) {
       case "rest":
       case "tutorial":
         b.settle();
         break;
       case "animation":
-        if (this.animation !== "fall" && this.animation !== "begin" && this.animation !== "push") b.grav = 0;
+        if (this.animation !== "fall" && this.animation !== "begin") b.grav = 0;
         switch (this.animation) {
           case "push":
-            if (b.pushDelay > 0) {
-              b.pushDelay -= ANIM_SPEED;
-            } else if (b.spriteY > b.y) {
-              b.grav -= ANIM_SPEED;
-              b.spriteY += b.grav;
-              if (b.spriteY < b.y) {
-                b.spriteY = b.y;
-                b.pushing = false;
-              }
-            } else {
-              b.pushing = false;
-            }
+            // Positions are already final; the slide is drawn by the feel layer.
             break;
           case "begin":
             if (b.enterDelay <= 0) {
               if (b.spriteY < b.y) {
-                b.grav += 1.7 * ANIM_SPEED;
+                if (!f.wasFalling) {
+                  f.wasFalling = true;
+                  f.fallFrom = b.spriteY;
+                }
+                b.grav += GRAVITY;
                 b.spriteY += b.grav;
-              } else {
-                b.enter = false;
+              }
+              if (b.spriteY >= b.y && b.enter) {
                 b.spriteY = b.y;
+                b.enter = false;
+                this.onLand(b, f);
               }
             } else {
-              b.enterDelay -= ANIM_SPEED;
+              b.enterDelay--;
             }
             break;
           case "combine":
-            b.colorTween -= 0.4 * ANIM_SPEED;
-            if (b.colorTween < 0) b.spriteColor = b.color;
+            b.colorTween -= 1;
+            if (b.colorTween <= 0) b.spriteColor = b.color;
             b.spriteX = b.x;
             b.spriteY = b.y;
             break;
           case "noadd":
-            b.noaddTimer += ANIM_SPEED;
+            b.noaddTimer += 1;
             if (b.noaddTimer > Brick.NOADD_DURATION) {
               b.noaddTimer = 0;
               b.noadd = false;
+              f.noaddT0 = -1;
             }
             b.colorTween = Brick.TWEEN_FRAMES;
             b.spriteX = b.x;
@@ -1013,23 +1248,26 @@ export class GameScene implements Scene {
             b.spriteY = b.y;
             break;
           case "rotate":
+            // The whole board turns as one transform; sprites sit at their new slots.
             b.colorTween = Brick.TWEEN_FRAMES;
-            b.spriteX -= (b.spriteX - b.x) / (5 / ANIM_SPEED);
-            b.spriteY -= (b.spriteY - b.y) / (5 / ANIM_SPEED);
-            if (Math.abs(b.spriteX - b.x) < 1) b.spriteX = b.x;
-            if (Math.abs(b.spriteY - b.y) < 1) b.spriteY = b.y;
-            if (b.spriteX === b.x && b.spriteY === b.y) b.rotate = false;
             break;
           case "fall":
             b.colorTween = Brick.TWEEN_FRAMES;
             b.spriteX = b.x;
+            if (b.fall && !f.wasFalling) {
+              f.wasFalling = true;
+              f.fallFrom = b.spriteY;
+            }
             if (b.spriteY < b.y) {
-              b.grav += 1.7 * ANIM_SPEED;
+              b.grav += GRAVITY;
               b.spriteY += b.grav;
             }
             if (b.spriteY >= b.y) {
               b.spriteY = b.y;
-              b.fall = false;
+              if (b.fall) {
+                b.fall = false;
+                this.onLand(b, f);
+              }
             }
             break;
           default:
@@ -1050,12 +1288,32 @@ export class GameScene implements Scene {
     }
   }
 
-  /** `BrickDieAnim` step event. */
+  /** Landing squash, plus a dust puff for anything that dropped more than a cell. */
+  private onLand(b: Brick, f: BrickFx): void {
+    const l = this.board.layout;
+    const fell = b.y - f.fallFrom;
+    f.wasFalling = false;
+    this.tweens.set(f, { sx: 1.15, sy: 0.85 });
+    this.tweens.to(f, { sx: 1, sy: 1 }, D(LAND_SETTLE_MS), easeOutBack, { delay: D(LAND_SQUASH_MS) });
+    if (fell > l.cellH * 1.5) {
+      const dust = this.ctx.palette.name === "modern" ? ["rgba(60,40,20,0.35)", "rgba(60,40,20,0.2)"] : ["rgba(255,255,255,0.5)", "rgba(255,255,255,0.3)"];
+      this.particles.spawn(b.x + l.cellW / 2, b.y + l.cellH, 3, dust, {
+        speed: [30, 80],
+        size: [3, 5],
+        life: [200, 350],
+        gravity: 250,
+        dir: -Math.PI / 2,
+        spread: 1.3,
+        shape: 1,
+      });
+    }
+  }
+
+  /** `BrickDieAnim` step event: a pop is over once its last brick has shrunk away. */
   private stepDieAnims(): void {
-    const frames = this.ctx.sprites.brick_pop_sprite.frames.length;
-    const step = (this.slowmo > 0 ? 0.16 : 0.4) * ANIM_SPEED;
-    for (const d of this.dieAnims) d.popAnim += step;
-    this.dieAnims = this.dieAnims.filter((d) => d.popAnim <= frames + 5);
+    if (this.dieAnims.length === 0) return;
+    const t = this.ctx.clock.t;
+    this.dieAnims = this.dieAnims.filter((d) => t - d.t0 < D(POP_TOTAL_MS));
   }
 
   // ---------------------------------------------------------------------------
@@ -1140,17 +1398,64 @@ export class GameScene implements Scene {
   // Render
   // ---------------------------------------------------------------------------
 
-  render(g: CanvasRenderingContext2D): void {
-    const sp = this.ctx.sprites;
-    const { world } = this.ctx.session;
+  /** Advance the real-time feel layer; called once per rendered frame. */
+  private stepFx(): void {
+    const clock = this.ctx.clock;
+    this.tweens.update(clock.t);
+    this.particles.update(clock.dt);
+    const t = clock.t;
+    if (this.ctx.session.score !== this.scoreTarget) {
+      this.scoreTarget = this.ctx.session.score;
+      this.tweens.to(this.scoreFx, { v: this.scoreTarget }, D(COUNT_MS));
+    }
+    for (const d of this.dieAnims) {
+      const e = t - d.t0;
+      if (!d.burst && e >= D(POP_GROW_MS + POP_HOLD_MS)) {
+        d.burst = true;
+        this.burst(d);
+      }
+    }
+    this.rings = this.rings.filter((r) => t - r.t0 < r.dur);
+    this.callouts = this.callouts.filter((c) => t - c.t0 < c.dur);
+  }
 
+  /** Paint flecks flying out of a popped brick. */
+  private burst(d: DieAnim): void {
+    const l = this.board.layout;
     const pal = this.ctx.palette;
+    const base = pal.brickColors[d.color];
+    const colors = [base, lighten(base, 0.3)];
+    const count = 10 + Math.floor(Math.random() * 5);
+    this.particles.spawn(d.x + l.cellW / 2, d.y + l.cellH / 2, count, colors, {
+      speed: [180, 320],
+      size: [l.cellW * 0.09, l.cellW * 0.16],
+      life: [350, 500],
+      gravity: 900,
+      drag: 0.25,
+      jitter: 0.3,
+    });
+  }
+
+  render(g: CanvasRenderingContext2D): void {
+    this.stepFx();
+    const { world } = this.ctx.session;
+    const pal = this.ctx.palette;
+    const t = this.ctx.clock.t;
+
     g.fillStyle = pal.background;
     g.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
     if (this.state === "tutorial" && this.tutorialPhase !== "add") {
       this.renderTutorialSlides(g);
+      this.renderFade(g);
       return;
+    }
+
+    g.save();
+    const shake = t - this.shakeT0;
+    if (shake < D(SHAKE_MS)) {
+      const amp = this.shakeAmp * (1 - shake / D(SHAKE_MS));
+      g.translate((Math.random() * 2 - 1) * amp, (Math.random() * 2 - 1) * amp);
     }
 
     this.renderBackground(g);
@@ -1159,35 +1464,47 @@ export class GameScene implements Scene {
       this.renderPreview(g);
     }
 
-    // Bricks (selected brick last so it sits on top).
-    for (const d of this.dieAnims) this.renderDieAnim(g, d);
-    for (const b of this.board.allBricks()) {
-      if (b !== this.selectedBrick) this.renderBrick(g, b);
-    }
-    if (world !== 0) this.renderHoldSlot(g);
-    if (this.selectedBrick && this.selectedBrick !== this.held) this.renderBrick(g, this.selectedBrick);
+    const l = this.board.layout;
+    const boardBricks = [...this.board.bricks()];
+    const lineBricks = this.board.replenishList.filter((b) => b !== this.selectedBrick);
+    const desat = this.lostFx.desat;
 
-    if (this.slowmo > 0) {
-      const l = this.board.layout;
-      g.fillStyle = `rgba(255,255,255,${(0.12 * this.slowmo) / SLOWMO_FRAMES})`;
+    // Board bricks, as one transform while rotating.
+    g.save();
+    this.applyBoardTransform(g);
+    if (desat > 0) g.filter = `saturate(${Math.round((1 - desat * 0.9) * 100)}%)`;
+    if (pal.brickShadow) for (const b of boardBricks) this.renderShadow(g, b);
+    for (const b of boardBricks) this.renderBrick(g, b);
+    for (const d of this.dieAnims) this.renderDieAnim(g, d);
+    g.filter = "none";
+    g.restore();
+
+    // Replenish line.
+    if (pal.brickShadow) for (const b of lineBricks) this.renderShadow(g, b);
+    for (const b of lineBricks) this.renderBrick(g, b);
+    this.renderGhostResult(g);
+    this.particles.render(g);
+    this.renderRings(g);
+
+    if (world !== 0) this.renderHoldSlot(g);
+    if (this.selectedBrick && this.selectedBrick !== this.held) {
+      if (pal.brickShadow) this.renderShadow(g, this.selectedBrick);
+      this.renderBrick(g, this.selectedBrick);
+    }
+
+    if (t < this.flashUntil) {
+      g.fillStyle = pal.flash;
+      g.globalAlpha = 0.18;
       g.fillRect(l.boardX, l.boardY, l.boardW, l.boardH);
+      g.globalAlpha = 1;
     }
 
     this.renderSelector(g);
     this.renderCallouts(g);
-
     if (world > 0 && this.state !== "tutorial") this.renderHud(g);
+    g.restore();
 
-    if (this.state === "animation" && this.animation === "fadeout") {
-      const s = sp.level_complete_sprite;
-      const w = SCREEN_W / 2.5;
-      const h = w * (s.height / s.width);
-      g.fillStyle = "rgba(0,0,0,0.55)";
-      g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-      drawSprite(g, s, 0, SCREEN_W / 2 - w / 2, SCREEN_H / 2 - h / 2, w, h);
-    }
-
-    if (this.state === "animation" && this.animation === "fadein") this.renderFadeIn(g);
+    if (this.state === "animation" && this.animation === "fadeout") this.renderLevelComplete(g);
     if (this.state === "menu") this.renderMenu(g);
     if (this.state === "lost") this.renderLost(g);
 
@@ -1195,83 +1512,144 @@ export class GameScene implements Scene {
       if (pal.name === "modern") {
         const lines = this.tutorialText.split("\n").length;
         const h = 24 * lines + 28;
-        fillRoundRect(g, SCREEN_W / 2 - 230, SCREEN_H / 4 - h / 2, 460, h, 16, "rgba(17,24,39,0.9)", "rgba(255,255,255,0.12)");
-        drawText(g, this.tutorialText, SCREEN_W / 2, SCREEN_H / 4, { size: 20, color: pal.tutorialText });
+        drawCard(g, pal.ui, SCREEN_W / 2 - 230, SCREEN_H / 4 - h / 2, 460, h, 16);
+        drawText(g, this.tutorialText, SCREEN_W / 2, SCREEN_H / 4, { size: 20, color: pal.tutorialText, weight: 600, font: pal.display });
       } else {
         drawText(g, this.tutorialText, SCREEN_W / 2, SCREEN_H / 4, { size: 22, color: pal.tutorialText, shadow: pal.tutorialShadow });
       }
     }
+    this.renderFade(g);
   }
 
-  /** The static backdrop drawn once per frame by `RotateUI` in the original. */
-  private renderBackground(g: CanvasRenderingContext2D): void {
-    const sp = this.ctx.sprites;
+  /** Fade from the background colour when the scene starts. */
+  private renderFade(g: CanvasRenderingContext2D): void {
+    const e = this.ctx.clock.t - this.fadeT0;
+    if (e >= D(FADE_MS)) return;
+    g.globalAlpha = 1 - clamp01(e / D(FADE_MS));
+    g.fillStyle = this.ctx.palette.background;
+    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    g.globalAlpha = 1;
+  }
+
+  /** Anticipation squeeze, then the quarter turn with a small overshoot. */
+  private applyBoardTransform(g: CanvasRenderingContext2D): void {
+    if (this.rotateT0 < 0) return;
     const l = this.board.layout;
     const n = l.cellNum;
-    const { world } = this.ctx.session;
-
-    for (let i = 0; i < n; i++) {
-      drawSprite(
-        g,
-        sp.replenish_frame_sprite,
-        0,
-        l.boardX + (l.cellW + l.cellSep) * i,
-        l.boardH - l.cellH - l.cellSep * 2 - 1,
-        l.cellW + l.cellSep,
-        l.cellH + 2 * l.cellSep,
-      );
+    const e = this.ctx.clock.t - this.rotateT0;
+    const cx = l.boardX + (n * (l.cellW + l.cellSep) - l.cellSep) / 2;
+    const cy = l.boardY + (n * (l.cellH + l.cellSep) - l.cellSep) / 2;
+    let scale: number;
+    let angle: number;
+    const a0 = D(ROTATE_ANTICIPATE_MS);
+    if (e < a0) {
+      scale = 1 - 0.03 * easeOutCubic(e / a0);
+      angle = -this.rotateDir * Math.PI * 0.5;
+    } else {
+      const q = clamp01((e - a0) / D(ROTATE_MS));
+      scale = 0.97 + 0.03 * easeOutCubic(q);
+      angle = -this.rotateDir * Math.PI * 0.5 * (1 - ROTATE_EASE(q));
     }
-    drawSprite(
-      g,
-      sp.worldbg_sprite,
-      world,
-      Math.floor(l.boardX) - 1,
-      Math.floor(l.boardY),
-      Math.floor(l.boardW) + 2,
-      Math.floor(l.boardH - l.cellH - l.cellSep * 2),
-    );
-
-    g.save();
-    g.globalAlpha = this.ctx.palette.gridAlpha;
-    const gridBottom = l.boardY + l.boardH - l.cellH - l.cellSep;
-    for (let i = 1; i < n; i++) {
-      const x = Math.floor(l.boardX) + Math.floor(i * (l.cellW + l.cellSep)) - l.cellSep;
-      drawLine(g, x, l.boardY, x, gridBottom, l.cellSep, this.ctx.palette.gridLine);
-    }
-    for (let i = 1; i < n; i++) {
-      const y = l.boardY + i * (l.cellH + l.cellSep) - l.cellSep;
-      drawLine(g, l.boardX, y, l.boardX + l.boardW, y, l.cellSep, this.ctx.palette.gridLine);
-    }
-    g.restore();
-
-    drawSprite(g, sp.sidebar_sprite, 0, 0, 0, l.boardX, SCREEN_H);
-    drawSprite(g, sp.sidebar_sprite, 1, Math.floor(l.boardX) + l.boardW, 0, l.boardX, SCREEN_H);
+    g.translate(cx, cy);
+    g.rotate(angle);
+    g.scale(scale, scale);
+    g.translate(-cx, -cy);
   }
 
-  private renderButtons(g: CanvasRenderingContext2D): void {
-    const sp = this.ctx.sprites;
-    for (const btn of this.buttons) {
-      if (btn.kind === "sound") btn.baseFrame = this.ctx.audio.muted ? 2 : 0;
-      const sprite = sp[btn.sprite];
-      const maxFrame = sprite.frames.length - 1;
-      if (btn.hilite && !btn.pressed) {
-        drawSprite(g, sprite, btn.baseFrame, btn.cx - (btn.w * 1.05) / 2, btn.cy - (btn.h * 1.05) / 2, btn.w * 1.05, btn.h * 1.05);
-      } else if (btn.pressed) {
-        const f = Math.min(maxFrame, btn.baseFrame + 1);
-        drawSprite(g, sprite, f, btn.cx - (btn.w * 0.95) / 2, btn.cy - (btn.h * 0.95) / 2, btn.w * 0.95, btn.h * 0.95);
+  /** Where a brick is drawn this frame: interpolated sim position plus feel-layer offsets. */
+  private drawPos(b: Brick, f: BrickFx): { x: number; y: number } {
+    const alpha = this.ctx.clock.alpha;
+    let x = lerp(b.prevX, b.spriteX, alpha) + f.dx;
+    let y = lerp(b.prevY, b.spriteY, alpha) + f.dy - 4 * f.lift;
+    if (this.pushT0 >= 0 && b.gridX >= 0) {
+      const l = this.board.layout;
+      const pitch = l.cellH + l.cellSep;
+      const e = this.ctx.clock.t - this.pushT0;
+      const a0 = D(PUSH_ANTICIPATE_MS);
+      if (e < a0) {
+        y += pitch + (b.gridY === l.cellNum - 1 ? 2 * Math.sin((e / a0) * Math.PI * 4) : 0);
       } else {
-        drawSprite(g, sprite, btn.baseFrame, btn.cx - btn.w / 2, btn.cy - btn.h / 2, btn.w, btn.h);
+        y += pitch * (1 - PUSH_EASE(clamp01((e - a0) / D(PUSH_MS))));
       }
     }
+    return { x, y };
+  }
+
+  private brickScale(b: Brick, f: BrickFx): number {
+    const grow = b.inactiveDuration ? easeOutCubic(1 - b.inactiveTimer / b.inactiveDuration) : 1;
+    let s = grow * f.s;
+    if (b === this.selectedBrick) s *= 1 + 0.015 * (1 - Math.cos((this.ctx.clock.t / D(BREATHE_MS)) * Math.PI * 2));
+    return s;
+  }
+
+  private noaddOffset(f: BrickFx): number {
+    if (f.noaddT0 < 0) return 0;
+    const e = this.ctx.clock.t - f.noaddT0;
+    const p = clamp01(e / D(NOADD_MS));
+    if (p >= 1) return 0;
+    return 6 * Math.sin((e / 1000) * Math.PI * 2 * 18) * (1 - p);
+  }
+
+  /** Hard offset shadow under a chip; grows when the brick is lifted. */
+  private renderShadow(g: CanvasRenderingContext2D, b: Brick): void {
+    const l = this.board.layout;
+    const f = this.fxOf(b);
+    const p = this.drawPos(b, f);
+    const s = this.brickScale(b, f);
+    if (s <= 0.02) return;
+    const pad = l.cellW * 0.04;
+    const w = (l.cellW - pad * 2) * s * f.sx;
+    const h = (l.cellH - pad * 2) * s * f.sy;
+    const cx = p.x + l.cellW / 2 + this.noaddOffset(f);
+    const cy = p.y + l.cellH / 2 + 4 * f.lift;
+    g.globalAlpha = f.dim;
+    fillRoundRect(g, cx - w / 2, cy - h / 2 + 4 + 6 * f.lift, w, h, w * 0.18, this.ctx.palette.brickShadow!);
+    g.globalAlpha = 1;
   }
 
   /** `Brick` draw event, plus the refined marker. */
   private renderBrick(g: CanvasRenderingContext2D, b: Brick): void {
-    this.renderBrickBody(g, b);
-    if (b.refined && !(this.state === "animation" && this.animation === "combine" && b.spriteColor !== b.color)) {
-      const l = this.board.layout;
-      const scale = b.inactiveDuration ? 1 - b.inactiveTimer / b.inactiveDuration : 1;
-      this.drawSpark(g, b.spriteX + l.cellW * 0.78, b.spriteY + l.cellH * 0.22, l.cellW * 0.085 * scale);
+    const l = this.board.layout;
+    const f = this.fxOf(b);
+    const p = this.drawPos(b, f);
+    const s = this.brickScale(b, f);
+    if (s <= 0.02) return;
+    const sp = this.ctx.sprites;
+    const brick = sp.brick_sprite;
+    const xo = this.noaddOffset(f);
+    const xs = s * f.sx;
+    const ys = s * f.sy;
+    const alpha = f.dim;
+    const t = this.ctx.clock.t;
+
+    const wiping = b.spriteColor !== b.color && f.wipeT0 >= 0;
+    if (wiping) {
+      // Radial wipe: the new colour grows out of the centre over the old one.
+      const q = easeOutCubic(clamp01((t - f.wipeT0) / D(WIPE_MS)));
+      drawBlockTransformed(g, brick, colorFrame(b.spriteColor), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
+      g.save();
+      g.beginPath();
+      g.arc(p.x + l.cellW / 2 + xo, p.y + l.cellH / 2, l.cellW * 0.78 * q * xs, 0, Math.PI * 2);
+      g.clip();
+      drawBlockTransformed(g, brick, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
+      g.restore();
+    } else {
+      drawBlockTransformed(g, brick, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
+    }
+
+    if (f.noaddT0 >= 0) {
+      const e = t - f.noaddT0;
+      const tint = e < D(100) ? 0.2 * (1 - e / D(100)) : 0;
+      if (tint > 0) {
+        const pad = l.cellW * 0.04;
+        g.globalAlpha = tint;
+        fillRoundRect(g, p.x + pad + xo, p.y + pad, (l.cellW - pad * 2) * xs, (l.cellH - pad * 2) * ys, l.cellW * 0.18, "#E04A3F");
+        g.globalAlpha = 1;
+      }
+    }
+
+    if (b.refined && !wiping) {
+      this.drawSpark(g, p.x + l.cellW * 0.78 + xo, p.y + l.cellH * 0.22, l.cellW * 0.085 * s);
     }
   }
 
@@ -1294,6 +1672,28 @@ export class GameScene implements Scene {
     g.lineWidth = 1;
     g.fill();
     g.stroke();
+  }
+
+  /** Ghost of the colour the selected brick would make on the hovered board brick. */
+  private renderGhostResult(g: CanvasRenderingContext2D): void {
+    if (!this.selectedBrick) return;
+    const l = this.board.layout;
+    let gx: number;
+    let gy: number;
+    if (this.boardDown) {
+      gx = this.cx;
+      gy = this.cy;
+    } else {
+      const p = screenToGrid(l, this.ctx.input.x, this.ctx.input.y);
+      gx = p.gx;
+      gy = p.gy;
+    }
+    const n = this.board.cellNum;
+    if (gx < 0 || gy < 0 || gx >= n || gy >= n) return;
+    const result = this.previewResult(gx, gy);
+    const dest = this.board.get(gx, gy);
+    if (result === null || !dest) return;
+    drawBlock(g, this.ctx.sprites.brick_sprite, colorFrame(result), dest.x, dest.y, l.cellW, l.cellH, 1, 1, 0, 0, 0.55);
   }
 
   /** Ghosts of the next replenish colours in the empty slots of the line. */
@@ -1321,110 +1721,111 @@ export class GameScene implements Scene {
     const y = r.holdY - r.slot / 2;
     const active = this.holdHover && (this.selectedBrick !== null || this.held !== null);
     if (pal.name === "modern") {
-      fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)", active ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.16)");
-      drawText(g, "HOLD", r.cx, r.holdLabelY, { size: Math.max(10, l.boardX * 0.08), color: pal.hudMuted, bold: true });
+      fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? "rgba(31,28,24,0.10)" : "#E9E3D7", active ? "rgba(31,28,24,0.45)" : "rgba(31,28,24,0.14)", 1.5);
+      drawText(g, "HOLD", r.cx, r.holdLabelY, { size: Math.max(10, l.boardX * 0.08), color: pal.hudMuted, weight: 700 });
     } else {
       drawSprite(g, this.ctx.sprites.replenish_frame_sprite, 0, x - 2, y - 2, r.slot + 4, r.slot + 4);
       if (active) fillRoundRect(g, x, y, r.slot, r.slot, 4, "rgba(255,255,255,0.18)");
       drawText(g, "Hold", r.cx, r.holdLabelY, { size: 12, color: pal.hudMuted, bold: false });
     }
     if (!this.held) {
-      drawText(g, "H", r.cx, r.holdY, { size: r.slot * 0.4, color: pal.name === "modern" ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.18)", bold: true });
+      drawText(g, "H", r.cx, r.holdY, { size: r.slot * 0.4, color: pal.name === "modern" ? "rgba(31,28,24,0.18)" : "rgba(0,0,0,0.18)", bold: true });
       return;
     }
     const b = this.held;
-    const s = r.slot / l.cellW;
+    const f = this.fxOf(b);
+    const p = this.drawPos(b, f);
+    const s = (r.slot / l.cellW) * this.brickScale(b, f);
     const sel = this.selectedBrick === b;
-    if (sel) drawBlock(g, this.ctx.sprites.replenish_selector_sprite, 7, b.x, b.y, l.cellW, l.cellH, s * 1.1, s * 1.1);
-    drawBlock(g, this.ctx.sprites.brick_sprite, colorFrame(b.color), b.x, b.y, l.cellW, l.cellH, s, s);
-    if (sel) drawBlock(g, this.ctx.sprites.replenish_selector_sprite, colorFrame(b.color), b.x, b.y, l.cellW, l.cellH, s * 1.1, s * 1.1);
-    if (b.refined) this.drawSpark(g, r.cx + r.slot * 0.28, r.holdY - r.slot * 0.28, r.slot * 0.085);
+    const xo = this.noaddOffset(f);
+    if (pal.brickShadow) {
+      const pad = l.cellW * 0.04;
+      const w = (l.cellW - pad * 2) * s;
+      fillRoundRect(g, p.x + l.cellW / 2 - w / 2 + xo, p.y + l.cellH / 2 - w / 2 + 4 + 6 * f.lift, w, w, w * 0.18, pal.brickShadow);
+    }
+    if (sel) drawBlock(g, this.ctx.sprites.replenish_selector_sprite, 7, p.x, p.y, l.cellW, l.cellH, s * 1.1, s * 1.1, xo);
+    drawBlock(g, this.ctx.sprites.brick_sprite, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, s, s, xo);
+    if (sel) drawBlock(g, this.ctx.sprites.replenish_selector_sprite, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, s * 1.1, s * 1.1, xo);
+    if (b.refined) this.drawSpark(g, p.x + l.cellW / 2 + r.slot * 0.28 + xo, p.y + l.cellH / 2 - r.slot * 0.28, r.slot * 0.085);
   }
 
-  private renderCallouts(g: CanvasRenderingContext2D): void {
-    if (this.callouts.length === 0) return;
+  private renderRings(g: CanvasRenderingContext2D): void {
+    if (this.rings.length === 0) return;
+    const t = this.ctx.clock.t;
     g.save();
-    for (const c of this.callouts) {
-      const fade = c.t > CALLOUT_FRAMES - 15 ? (CALLOUT_FRAMES - c.t) / 15 : 1;
-      const pop = c.t < 6 ? 1 + (6 - c.t) * 0.06 : 1;
-      g.globalAlpha = fade;
-      drawText(g, c.text, c.x, c.y, { size: c.size * pop, color: c.color, shadow: "rgba(0,0,0,0.85)" });
+    for (const r of this.rings) {
+      const p = (t - r.t0) / r.dur;
+      if (p < 0) continue;
+      const q = easeOutCubic(clamp01(p));
+      g.globalAlpha = 0.9 * (1 - q);
+      g.lineWidth = r.width * (1 - q * 0.6);
+      g.strokeStyle = r.color;
+      g.beginPath();
+      g.arc(r.x, r.y, lerp(r.r0, r.r1, q), 0, Math.PI * 2);
+      g.stroke();
     }
     g.restore();
   }
 
-  /** `Brick` draw event body (colour, scale and per-animation effects). */
-  private renderBrickBody(g: CanvasRenderingContext2D, b: Brick): void {
-    const sp = this.ctx.sprites;
-    const l = this.board.layout;
-    const brick = sp.brick_sprite;
-    const scale = b.inactiveDuration ? 1 - b.inactiveTimer / b.inactiveDuration : 1;
-    const draw = (sprite: Sprite, frame: number, xs = 1, ys = 1, xo = 0, yo = 0) =>
-      drawBlock(g, sprite, frame, b.spriteX, b.spriteY, l.cellW, l.cellH, xs, ys, xo, yo);
-
-    if (this.state !== "animation") {
-      draw(brick, colorFrame(b.color), scale, scale);
-      return;
+  private renderCallouts(g: CanvasRenderingContext2D): void {
+    if (this.callouts.length === 0) return;
+    const t = this.ctx.clock.t;
+    const pal = this.ctx.palette;
+    g.save();
+    for (const c of this.callouts) {
+      const e = t - c.t0;
+      if (e < 0) continue;
+      const p = clamp01(e / c.dur);
+      const scale = 0.6 + 0.4 * easeOutBack(clamp01(e / D(120)));
+      const fadeLen = D(200) / c.dur;
+      const alpha = p > 1 - fadeLen ? (1 - p) / fadeLen : 1;
+      const y = c.y - c.rise * easeOutCubic(p);
+      g.save();
+      g.translate(c.x, y);
+      g.rotate(c.tilt);
+      g.scale(scale, scale);
+      g.globalAlpha = alpha;
+      drawText(g, c.text, 0, 0, {
+        size: c.size,
+        color: c.color,
+        shadow: pal.calloutShadow,
+        weight: c.display ? 600 : 800,
+        font: c.display ? pal.display : pal.font,
+        tabular: true,
+      });
+      g.restore();
     }
-
-    switch (this.animation) {
-      case "combine":
-        if (b.spriteColor !== b.color) {
-          const ind = Math.min(Brick.TWEEN_FRAMES - b.colorTween, Brick.TWEEN_FRAMES - 1);
-          draw(brick, colorFrame(b.spriteColor));
-          draw(sp[EXPAND_SPRITES[b.color]], ind);
-        } else {
-          draw(brick, colorFrame(b.color), scale, scale);
-        }
-        break;
-      case "noadd":
-        if (b.noadd) {
-          const rx = Math.random() * l.cellSep * 2 - l.cellSep;
-          const ry = Math.random() * l.cellSep * 2 - l.cellSep;
-          draw(brick, colorFrame(b.color), 0.9, 0.9, rx, ry);
-        } else {
-          draw(brick, colorFrame(b.color), scale, scale);
-        }
-        break;
-      case "rotate": {
-        let d = Math.hypot(b.x - b.spriteX, b.y - b.spriteY);
-        const mid = Math.floor(this.board.cellNum / 2);
-        if (this.board.cellNum % 2 === 1 && b.gridX === mid && b.gridY === mid) {
-          const nb = this.board.get(mid, mid + 1) ?? this.board.get(mid + 1, mid) ?? this.board.get(mid - 1, mid);
-          if (nb) d = Math.hypot(nb.x - nb.spriteX, nb.y - nb.spriteY);
-        }
-        if (d === 0) {
-          draw(brick, colorFrame(b.color), scale, scale);
-        } else {
-          const s = 0.65 + 0.35 / Math.max(1, d);
-          draw(brick, colorFrame(b.color), s, s);
-        }
-        break;
-      }
-      default:
-        draw(brick, colorFrame(b.color), scale, scale);
-        break;
-    }
+    g.restore();
   }
 
-  /** `BrickDieAnim` draw event. */
+  /** Pop: grow, hold, shrink away with a little spin. The particles burst as the shrink starts. */
   private renderDieAnim(g: CanvasRenderingContext2D, d: DieAnim): void {
-    const sp = this.ctx.sprites;
     const l = this.board.layout;
-    const pop = sp.brick_pop_sprite;
-    const frames = pop.frames.length;
-    if (d.popAnim < frames / 2) {
-      drawSprite(g, sp.brick_sprite, colorFrame(d.color), d.x, d.y, l.cellW, l.cellH);
+    const sp = this.ctx.sprites;
+    const e = this.ctx.clock.t - d.t0;
+    let s = 1;
+    let rot = 0;
+    const grow = D(POP_GROW_MS);
+    const hold = D(POP_HOLD_MS);
+    const shrink = D(POP_SHRINK_MS);
+    if (e <= 0) {
+      s = 1;
+    } else if (e < grow) {
+      s = 1 + 0.18 * easeOutCubic(e / grow);
+    } else if (e < grow + hold) {
+      s = 1.18;
+    } else {
+      const q = clamp01((e - grow - hold) / shrink);
+      s = 1.18 * (1 - easeInBack(q));
+      rot = d.spin * 8 * DEG * q;
     }
-    if (d.popAnim < frames - 0.5) {
-      drawSprite(g, pop, Math.floor(d.popAnim), d.x, d.y, l.cellW, l.cellH);
-    } else if (d.color !== BLACK) {
-      drawText(g, `+${d.value}`, d.x + l.cellW / 2, d.y + l.cellH / 2, {
-        size: Math.max(12, l.cellH * 0.3),
-        color: "#fff",
-        shadow: "#000",
-      });
+    if (s <= 0.02) return;
+    if (this.ctx.palette.brickShadow) {
+      const pad = l.cellW * 0.04;
+      const w = (l.cellW - pad * 2) * s;
+      fillRoundRect(g, d.x + l.cellW / 2 - w / 2, d.y + l.cellH / 2 - w / 2 + 4, w, w, w * 0.18, this.ctx.palette.brickShadow);
     }
+    drawBlockTransformed(g, sp.brick_sprite, colorFrame(d.color), d.x, d.y, l.cellW, l.cellH, s, s, rot);
   }
 
   /** `ReplenishSelector` draw event. */
@@ -1434,10 +1835,17 @@ export class GameScene implements Scene {
     const sel = sp.replenish_selector_sprite;
     const frame = this.selectedBrick ? colorFrame(this.selectedBrick.color) : 6;
     const ry = replenishY(l);
+    const t = this.ctx.clock.t;
 
     if (this.selected !== this.board.cellNum && this.selected !== HOLD) {
       drawBlock(g, sel, 7, this.selX, ry, l.cellW, l.cellH, 1.1, 1.1);
       drawBlock(g, sel, frame, this.selX, ry, l.cellW, l.cellH, 1.1, 1.1);
+      const flash = t - this.selFlashT0;
+      if (flash < D(200)) {
+        g.globalAlpha = 1 - flash / D(200);
+        fillRoundRect(g, this.selX - l.cellW * 0.05, ry - l.cellH * 0.05, l.cellW * 1.1, l.cellH * 1.1, l.cellW * 0.2, "rgba(0,0,0,0)", "#E04A3F", 4);
+        g.globalAlpha = 1;
+      }
     }
 
     const showGhost = this.state === "rest" || (this.state === "animation" && this.animation === "combine");
@@ -1456,7 +1864,89 @@ export class GameScene implements Scene {
     }
   }
 
-  /** `Board` draw event: score, goal counter and progress bar. */
+  /** The backdrop: paper, empty cells and the replenish ledge (modern) or the original sprites (classic). */
+  private renderBackground(g: CanvasRenderingContext2D): void {
+    const sp = this.ctx.sprites;
+    const l = this.board.layout;
+    const n = l.cellNum;
+    const pal = this.ctx.palette;
+    const { world } = this.ctx.session;
+
+    if (pal.name === "modern") {
+      drawPaper(g, this.ctx.clock.t);
+      const pad = l.cellW * 0.04;
+      if (pal.emptyCell) {
+        g.fillStyle = pal.emptyCell;
+        for (let x = 0; x < n; x++) {
+          for (let y = 0; y < n; y++) {
+            g.beginPath();
+            g.roundRect(cellX(l, x) + pad, cellY(l, y) + pad, l.cellW - pad * 2, l.cellH - pad * 2, l.cellW * 0.18);
+            g.fill();
+          }
+        }
+      }
+      if (pal.ledge) {
+        const ry = replenishY(l) + l.cellH + 1;
+        g.fillStyle = "rgba(60,40,20,0.12)";
+        g.fillRect(l.boardX - 6, ry + 2, l.boardW + 12, 10);
+        fillRoundRect(g, l.boardX - 6, ry, l.boardW + 12, 10, 3, pal.ledge);
+      }
+      return;
+    }
+
+    for (let i = 0; i < n; i++) {
+      drawSprite(
+        g,
+        sp.replenish_frame_sprite,
+        0,
+        l.boardX + (l.cellW + l.cellSep) * i,
+        l.boardH - l.cellH - l.cellSep * 2 - 1,
+        l.cellW + l.cellSep,
+        l.cellH + 2 * l.cellSep,
+      );
+    }
+    drawSprite(
+      g,
+      sp.worldbg_sprite,
+      world,
+      Math.floor(l.boardX) - 1,
+      Math.floor(l.boardY),
+      Math.floor(l.boardW) + 2,
+      Math.floor(l.boardH - l.cellH - l.cellSep * 2),
+    );
+
+    if (pal.gridAlpha > 0) {
+      g.save();
+      g.globalAlpha = pal.gridAlpha;
+      const gridBottom = l.boardY + l.boardH - l.cellH - l.cellSep;
+      for (let i = 1; i < n; i++) {
+        const x = Math.floor(l.boardX) + Math.floor(i * (l.cellW + l.cellSep)) - l.cellSep;
+        drawLine(g, x, l.boardY, x, gridBottom, l.cellSep, pal.gridLine);
+      }
+      for (let i = 1; i < n; i++) {
+        const y = l.boardY + i * (l.cellH + l.cellSep) - l.cellSep;
+        drawLine(g, l.boardX, y, l.boardX + l.boardW, y, l.cellSep, pal.gridLine);
+      }
+      g.restore();
+    }
+
+    drawSprite(g, sp.sidebar_sprite, 0, 0, 0, l.boardX, SCREEN_H);
+    drawSprite(g, sp.sidebar_sprite, 1, Math.floor(l.boardX) + l.boardW, 0, l.boardX, SCREEN_H);
+  }
+
+  private renderButtons(g: CanvasRenderingContext2D): void {
+    const sp = this.ctx.sprites;
+    for (const btn of this.buttons) {
+      if (btn.kind === "sound") btn.baseFrame = this.ctx.audio.muted ? 2 : 0;
+      const sprite = sp[btn.sprite];
+      const maxFrame = sprite.frames.length - 1;
+      const scale = this.feel.scale(btn.kind, btn.hilite, btn.pressed);
+      const frame = btn.pressed ? Math.min(maxFrame, btn.baseFrame + 1) : btn.baseFrame;
+      drawSprite(g, sprite, frame, btn.cx - (btn.w * scale) / 2, btn.cy - (btn.h * scale) / 2, btn.w * scale, btn.h * scale);
+    }
+  }
+
+  /** `Board` draw event: score, chain meter, level, goal counter and progress bar. */
   private renderHud(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
     const l = this.board.layout;
@@ -1464,47 +1954,48 @@ export class GameScene implements Scene {
     const s = this.ctx.session;
     const textSize = Math.max(12, l.boardX * 0.13);
     const pal = this.ctx.palette;
+    const t = this.ctx.clock.t;
+    const shown = String(Math.round(this.scoreFx.v));
 
     const goal = s.gameType === "puzzle" ? this.board.countBricks() : this.comboRemaining;
     const label = s.gameType === "puzzle" ? "Bricks left" : "Pops left";
     const cx = l.boardX / 2;
+    const r = this.rail();
+    const mult = this.chainMultiplier();
 
     if (pal.name === "modern") {
-      // Small uppercase captions over large numbers, in a side column.
-      const caption = (t: string, y: number) =>
-        drawText(g, t.toUpperCase(), cx, y, { size: textSize * 0.62, color: pal.hudMuted, bold: true });
-      const big = (t: string, y: number) => drawText(g, t, cx, y, { size: textSize * 1.9, color: pal.hudText, bold: true });
+      const caption = (txt: string, y: number) => drawText(g, txt.toUpperCase(), cx, y, { size: textSize * 0.62, color: pal.hudMuted, weight: 700 });
+      const big = (txt: string, y: number) => drawText(g, txt, cx, y, { size: textSize * 1.9, color: pal.hudText, weight: 700, tabular: true });
       caption("Score", l.cellH * 0.55);
-      big(String(s.score), l.cellH * 1.25);
+      big(shown, l.cellH * 1.25);
 
       // Chain meter: a track that drains while the chain cools off.
-      const r = this.rail();
-      const mult = this.chainMultiplier();
       const meterW = l.boardX * 0.7;
       const meterH = 5;
       const meterX = cx - meterW / 2;
       const meterY = r.chainY;
-      fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, "rgba(255,255,255,0.12)");
+      fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, "rgba(31,28,24,0.10)");
       if (this.heat > 0) {
         fillRoundRect(g, meterX, meterY - meterH / 2, Math.max(meterH, meterW * this.heat), meterH, meterH / 2, MULT_COLORS[mult]);
       }
-      drawText(g, this.chain > 0 ? `CHAIN  x${mult}` : "CHAIN", cx, meterY + 12, {
+      g.save();
+      g.translate(cx, meterY + 12);
+      g.scale(this.badgeFx.s, this.badgeFx.s);
+      drawText(g, this.chain > 0 ? `CHAIN  x${mult}` : "CHAIN", 0, 0, {
         size: textSize * 0.55,
         color: this.chain > 0 ? MULT_COLORS[mult] : pal.hudMuted,
-        bold: true,
+        weight: 700,
       });
+      g.restore();
 
       const pillW = l.boardX * 0.7;
       const pillH = textSize * 1.5;
       const pillY = r.levelY;
-      g.fillStyle = "rgba(255,255,255,0.08)";
-      g.beginPath();
-      g.roundRect(cx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2);
-      g.fill();
+      fillRoundRect(g, cx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2, "rgba(31,28,24,0.06)", "rgba(31,28,24,0.14)");
       drawText(g, `${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}`, cx, pillY, {
         size: textSize * 0.75,
         color: pal.hudText,
-        bold: true,
+        weight: 700,
       });
 
       if (this.subtractGoal > 0) {
@@ -1512,26 +2003,29 @@ export class GameScene implements Scene {
         const done = this.goalAwarded;
         drawText(g, done ? `${this.subtractGoal} / ${this.subtractGoal}  ✓` : `${this.subtractDone} / ${this.subtractGoal}`, cx, r.goalY, {
           size: textSize * 1.1,
-          color: done ? "#7dd3fc" : pal.hudText,
-          bold: true,
+          color: done ? "#2E6FD8" : pal.hudText,
+          weight: 700,
+          tabular: true,
         });
       }
 
       caption(label, SCREEN_H - l.cellH * 1.1);
       big(String(goal), SCREEN_H - l.cellH * 0.45);
     } else {
-      const r = this.rail();
-      const mult = this.chainMultiplier();
-      drawText(g, `Score:\n${s.score}`, cx, l.cellH, { size: textSize, color: pal.hudText });
+      drawText(g, `Score:\n${shown}`, cx, l.cellH, { size: textSize, color: pal.hudText, tabular: true });
       const meterW = l.boardX * 0.6;
       g.fillStyle = "rgba(0,0,0,0.15)";
       g.fillRect(cx - meterW / 2, r.chainY - 2, meterW, 4);
       if (this.heat > 0) {
-        g.fillStyle = MULT_COLORS[mult];
+        g.fillStyle = MULT_COLORS_CLASSIC[mult];
         g.fillRect(cx - meterW / 2, r.chainY - 2, meterW * this.heat, 4);
       }
       if (this.chain > 0) {
-        drawText(g, `Chain x${mult}`, cx, r.chainY - 10, { size: textSize * 0.65, color: pal.hudText });
+        g.save();
+        g.translate(cx, r.chainY - 10);
+        g.scale(this.badgeFx.s, this.badgeFx.s);
+        drawText(g, `Chain x${mult}`, 0, 0, { size: textSize * 0.65, color: pal.hudText });
+        g.restore();
       }
       drawText(g, `Level ${s.world}-${s.level + 1}`, cx, r.levelY, { size: textSize * 0.8, color: pal.hudMuted, bold: false });
       if (this.subtractGoal > 0) {
@@ -1539,18 +2033,19 @@ export class GameScene implements Scene {
         drawText(g, this.goalAwarded ? `${this.subtractGoal}/${this.subtractGoal} done` : `${this.subtractDone}/${this.subtractGoal}`, cx, r.goalY, {
           size: textSize * 0.85,
           color: pal.hudText,
+          tabular: true,
         });
       }
-      drawText(g, `${label}\n${goal}`, cx, SCREEN_H - l.cellH / 2, { size: textSize, color: pal.hudText });
+      drawText(g, `${label}\n${goal}`, cx, SCREEN_H - l.cellH / 2, { size: textSize, color: pal.hudText, tabular: true });
     }
 
     const bar = sp.progressbar_sprite;
     const barX = Math.floor(l.boardX);
     const current = Math.max(0, this.readyToPush ? 1 - this.replenishLine / this.replenishTimer : this.currentPercentage);
     const maxP = Math.max(0, this.maxPercentage);
+    const barFlash = t - this.barFlashT0;
 
     if (pal.name === "modern") {
-      // Rounded track sitting on the seam between the grid and the replenish row.
       const barH = 6;
       const barY = Math.floor(l.boardY + n * (l.cellH + l.cellSep) - l.cellSep) - 1;
       const barW = l.boardW;
@@ -1558,11 +2053,16 @@ export class GameScene implements Scene {
       g.beginPath();
       g.roundRect(barX, barY, barW, barH, barH / 2);
       g.clip();
-      g.fillStyle = "rgba(255,255,255,0.16)";
+      g.fillStyle = "rgba(31,28,24,0.10)";
       g.fillRect(barX, barY, barW, barH);
-      g.fillStyle = "rgba(255,255,255,0.34)";
+      g.fillStyle = "rgba(31,28,24,0.22)";
       g.fillRect(barX, barY, barW * Math.min(1, maxP), barH);
       drawSprite(g, bar, 0, barX, barY, barW * Math.min(1, current), barH);
+      if (barFlash < D(260)) {
+        g.globalAlpha = 0.8 * (1 - barFlash / D(260));
+        g.fillStyle = "#1F1C18";
+        g.fillRect(barX, barY, barW, barH);
+      }
       g.restore();
       return;
     }
@@ -1572,122 +2072,107 @@ export class GameScene implements Scene {
     drawSprite(g, bar, 2, barX, barY, l.boardW, barH);
     drawSpritePartX(g, bar, 1, maxP, barX, barY, l.boardW, barH);
     drawSpritePartX(g, bar, 0, current, barX, barY, l.boardW, barH);
+    if (barFlash < D(260)) {
+      g.globalAlpha = 0.8 * (1 - barFlash / D(260));
+      g.fillStyle = "#ffffff";
+      g.fillRect(barX, barY, l.boardW, barH);
+      g.globalAlpha = 1;
+    }
   }
 
-  private renderFadeIn(g: CanvasRenderingContext2D): void {
-    const sp = this.ctx.sprites;
-    const r = this.fadeRadius;
-    if (r <= 0) return;
+  // ---------------------------------------------------------------------------
+  // Cards
+  // ---------------------------------------------------------------------------
+
+  /** Where the card sits this frame: it slides up from below with an overshoot. */
+  private cardOffset(): number {
+    const e = this.ctx.clock.t - this.cardT0;
+    if (e < 0) return SCREEN_H;
+    return (1 - CARD_EASE(clamp01(e / D(CARD_MS)))) * SCREEN_H * 0.6;
+  }
+
+  /** Centred card with a title, body lines and the overlay buttons. */
+  private renderOverlayCard(g: CanvasRenderingContext2D, title: string, lines: string[], accent?: string, footer?: string, buttons = true): void {
+    const inp = this.ctx.input;
+    const pal = this.ctx.palette;
+    const e = this.ctx.clock.t - this.cardT0;
+    g.fillStyle = pal.ui.dim;
+    g.globalAlpha = clamp01(e / D(200));
+    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    g.globalAlpha = 1;
+
+    const off = this.cardOffset();
+    const w = 440;
+    const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0) - (buttons ? 0 : 50);
+    const x = SCREEN_W / 2 - w / 2;
+    const y = SCREEN_H / 2 - 110 + off;
     g.save();
-    g.beginPath();
-    g.arc(SCREEN_W / 2, SCREEN_H / 2, r, 0, Math.PI * 2);
-    g.clip();
-    const tile = sp.brick_noicon_sprite.frames[7];
-    const size = BTN_H / 2;
-    const pattern = g.createPattern(tile, "repeat");
-    if (pattern) {
-      const scale = size / sp.brick_noicon_sprite.width;
-      g.scale(scale, scale);
-      g.fillStyle = pattern;
-      g.fillRect(0, 0, SCREEN_W / scale, SCREEN_H / scale);
-    } else {
-      g.fillStyle = "#222";
-      g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    g.translate(0, 0);
+    drawCard(g, pal.ui, x, y, w, h, 20);
+    if (footer) drawText(g, footer, SCREEN_W / 2, y + h - 22, { size: 12, color: pal.hudMuted, weight: 500 });
+    drawText(g, title, SCREEN_W / 2, y + 46, { size: 30, color: pal.overlayText, weight: 600, font: pal.display });
+    lines.forEach((line, i) => {
+      drawText(g, line, SCREEN_W / 2, y + 90 + i * 24, { size: 16, color: pal.hudMuted, weight: 500, tabular: true });
+    });
+    if (accent) drawText(g, accent, SCREEN_W / 2, y + 90 + lines.length * 24, { size: 16, color: pal.overlayAccent, weight: 700 });
+    if (buttons && (this.state !== "lost" || this.lostTimer > 20)) {
+      for (const b of this.overlayButtons()) {
+        const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
+        const pressed = hover && inp.down;
+        b.cy += off;
+        b.scale = this.feel.scale(`overlay:${b.id}`, hover, pressed);
+        drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
+      }
     }
     g.restore();
   }
 
-  /** Pause menu (`STATE_MENU`). */
-  private renderMenu(g: CanvasRenderingContext2D): void {
-    const sp = this.ctx.sprites;
-    const l = this.board.layout;
+  private renderLevelComplete(g: CanvasRenderingContext2D): void {
     const s = this.ctx.session;
-    const inp = this.ctx.input;
-
-    const pal = this.ctx.palette;
-    if (pal.name === "modern") {
-      this.renderOverlayCard(
-        g,
-        "Paused",
-        [`${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}   ·   Score ${s.score}`],
-        undefined,
-        "Q / E rotate  ·  H hold a brick  ·  Space speed up  ·  P pause  ·  Esc quit",
-      );
-      return;
-    }
-    g.fillStyle = "rgba(0,0,0,0.1)";
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    g.fillStyle = "#000";
-    g.fillRect(l.boardX, l.boardY, l.boardW, l.boardH);
-    drawSprite(g, sp.logo_sprite, 0, (SCREEN_W * 7) / 16, 0, SCREEN_W / 8, SCREEN_W / 8);
-    drawText(g, `Level ${s.world}-${s.level + 1}`, SCREEN_W / 2, SCREEN_H / 4, { size: 22, color: pal.overlayText });
-    drawText(g, `Score: ${s.score}`, SCREEN_W / 2, (SCREEN_H * 3) / 8, { size: 22, color: pal.overlayText });
-
-    const btn = sp.menu_button_sprite;
-    const { x, y, size: width } = this.menuButtonRect();
-    const fill = inp.down && inp.inRect(x, y, width, width);
-    drawText(g, "Main Menu", x + width / 2, y - 14, { size: 18, color: pal.overlayText });
-    drawSprite(g, btn, fill ? 1 : 0, x, y, width, width);
-    drawText(g, "Paused - press the pause button or P to resume", SCREEN_W / 2, SCREEN_H - 24, {
-      size: 14,
-      color: "#aaaaaa",
-      bold: false,
-    });
+    const shown = Math.round(this.scoreFx.v);
+    this.renderOverlayCard(g, "Level complete", [`${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}`, `Score ${shown}`], undefined, undefined, false);
   }
 
-  /** Centered modern card with a title, body lines and the overlay buttons. */
-  private renderOverlayCard(g: CanvasRenderingContext2D, title: string, lines: string[], accent?: string, footer?: string): void {
-    const inp = this.ctx.input;
-    const pal = this.ctx.palette;
-    g.fillStyle = "rgba(4,8,16,0.6)";
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    const w = 440;
-    const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0);
-    const x = SCREEN_W / 2 - w / 2;
-    const y = SCREEN_H / 2 - 110;
-    drawCard(g, x, y, w, h, 20);
-    if (footer) drawText(g, footer, SCREEN_W / 2, y + h - 22, { size: 12, color: pal.hudMuted, bold: false });
-    drawText(g, title.toUpperCase(), SCREEN_W / 2, y + 44, { size: 26, color: pal.overlayText, bold: true });
-    lines.forEach((line, i) => {
-      drawText(g, line, SCREEN_W / 2, y + 86 + i * 24, { size: 16, color: pal.hudMuted, bold: false });
-    });
-    if (accent) drawText(g, accent, SCREEN_W / 2, y + 86 + lines.length * 24, { size: 16, color: pal.overlayAccent, bold: true });
-    if (this.state !== "lost" || this.lostTimer > 20) {
-      for (const b of this.overlayButtons()) {
-        const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
-        drawPillButton(g, b, hover, hover && inp.down, pal.font);
-      }
-    }
+  /** Pause menu (`STATE_MENU`). */
+  private renderMenu(g: CanvasRenderingContext2D): void {
+    const s = this.ctx.session;
+    this.renderOverlayCard(
+      g,
+      "Paused",
+      [`${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}   ·   Score ${s.score}`],
+      undefined,
+      "Q / E rotate  ·  H hold a brick  ·  Space speed up  ·  P pause  ·  Esc quit",
+    );
   }
 
   private renderLost(g: CanvasRenderingContext2D): void {
     const s = this.ctx.session;
-    const pal = this.ctx.palette;
-    if (pal.name === "modern") {
-      const best = s.score >= this.ctx.save.hiscore && s.score > 0;
-      this.renderOverlayCard(g, "Out of room", [`A brick was pushed off the top.`, `Score ${s.score}`], best ? "New high score!" : undefined);
-      return;
-    }
-    g.fillStyle = "rgba(0,0,0,0.75)";
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    drawText(g, "Sorry, but you have lost!", SCREEN_W / 2, SCREEN_H / 2 - 40, { size: 32, color: pal.overlayText, shadow: "#000" });
-    drawText(g, `Score: ${s.score}`, SCREEN_W / 2, SCREEN_H / 2 + 10, { size: 22, color: pal.overlayText });
-    if (s.score >= this.ctx.save.hiscore && s.score > 0) {
-      drawText(g, "New high score!", SCREEN_W / 2, SCREEN_H / 2 + 40, { size: 18, color: pal.overlayAccent });
-    }
-    if (this.lostTimer > 20) {
-      drawText(g, "Click to return to the menu", SCREEN_W / 2, SCREEN_H * 0.8, { size: 16, color: "#aaa", bold: false });
-    }
+    const best = s.score >= this.ctx.save.hiscore && s.score > 0;
+    this.renderOverlayCard(g, "Out of room", [`Score ${s.score}`, `Best ${this.ctx.save.hiscore}`], best ? "New high score!" : undefined);
   }
 
   private renderTutorialSlides(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
     const slides = this.tutorialPhase === "intro" ? sp.tutorial_intro_sprite : sp.tutorial_outro_sprite;
     const h = SCREEN_H;
+    const inp = this.ctx.input;
     drawSprite(g, slides, this.tutorialState, 0, 0, SCREEN_W, SCREEN_H);
+    const size = h * 0.2;
     if (this.tutorialState > 0) {
-      drawSprite(g, sp.back_button_sprite, 0, 0, h * 0.8, h * 0.2, h * 0.2);
+      const hover = inp.inRect(0, h * 0.8, size, size);
+      const sc = this.feel.scale("slide:back", hover, hover && inp.down);
+      drawSprite(g, sp.back_button_sprite, 0, size / 2 - (size * sc) / 2, h * 0.9 - (size * sc) / 2, size * sc, size * sc);
     }
-    drawSprite(g, sp.back_button_sprite, 2, SCREEN_W - h * 0.2, h * 0.8, h * 0.2, h * 0.2);
+    const hover = inp.inRect(SCREEN_W - size, h * 0.8, size, size);
+    const sc = this.feel.scale("slide:next", hover, hover && inp.down);
+    drawSprite(g, sp.back_button_sprite, 2, SCREEN_W - size / 2 - (size * sc) / 2, h * 0.9 - (size * sc) / 2, size * sc, size * sc);
   }
+}
+
+/** Mix a hex colour toward white. */
+function lighten(hex: string, t: number): string {
+  if (!hex.startsWith("#") || hex.length !== 7) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  const m = (c: number) => Math.round(c + (255 - c) * t);
+  return `rgb(${m((n >> 16) & 255)},${m((n >> 8) & 255)},${m(n & 255)})`;
 }
