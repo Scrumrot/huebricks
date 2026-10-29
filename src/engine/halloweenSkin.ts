@@ -6,6 +6,7 @@ import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
 import { fillScreen, screenRect } from "./view";
+import type { TitleFx } from "./backdrops";
 
 /**
  * "Halloween": wrapped candies on a moonlit night. Glossy candy tiles with a
@@ -245,8 +246,15 @@ export function drawHalloweenTray(g: Ctx, x: number, y: number, w: number, h: nu
  * a band of fog; with a layout a dark slab under the grid, candy-dark wells
  * and the cauldron.
  */
-export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
+export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();
+  // bats keep clear of the cursor and scatter from a tap for a second
+  const scares: Array<[number, number, number, number]> = [];
+  if (fx?.pointer) scares.push([fx.pointer.x, fx.pointer.y, 140, 60]);
+  for (const tap of fx?.taps ?? []) {
+    const age = t - tap.t;
+    if (age < 1200) scares.push([tap.x, tap.y, 320, (1 - age / 1200) * 150]);
+  }
   const sky = g.createLinearGradient(0, 0, 0, sr.h);
   sky.addColorStop(0, BG);
   sky.addColorStop(1, NIGHT);
@@ -287,9 +295,21 @@ export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout, flare = 0):
   g.fillStyle = INK;
   for (let i = 0; i < 5; i++) {
     const ph = (t / (14000 + i * 2300) + i * 0.37) % 1;
-    const x = sr.w * (ph * 1.3 - 0.15);
-    const y = sr.h * (0.12 + 0.25 * Math.sin(ph * Math.PI * 2 + i)) + Math.sin(t / 300 + i) * 4;
-    bat(g, x, y, 10 + i * 2, 0.5 + 0.5 * Math.sin(t / (120 - flare * 70) + i));
+    let x = sr.w * (ph * 1.3 - 0.15);
+    let y = sr.h * (0.12 + 0.25 * Math.sin(ph * Math.PI * 2 + i)) + Math.sin(t / 300 + i) * 4;
+    let flap = 0.5 + 0.5 * Math.sin(t / (120 - flare * 70) + i);
+    for (const [sx, sy, reach, force] of scares) {
+      const dx = x - sx;
+      const dy = y - sy;
+      const d = Math.hypot(dx, dy);
+      if (d < reach && d > 0.01) {
+        const push = ((reach - d) / reach) * force;
+        x += (dx / d) * push;
+        y += (dy / d) * push;
+        flap = 0.5 + 0.5 * Math.sin(t / 60 + i);
+      }
+    }
+    bat(g, x, y, 10 + i * 2, flap);
   }
   // hills and fog
   g.fillStyle = "#0B0612";

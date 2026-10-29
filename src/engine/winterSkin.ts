@@ -6,6 +6,7 @@ import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
 import { fillScreen, screenRect } from "./view";
+import type { TitleFx } from "./backdrops";
 
 /**
  * "Winter": coloured ice cubes with a cap of snow, on a bright snowy day.
@@ -38,16 +39,39 @@ export const WINTER_COLORS: Record<Color, string> = {
 };
 
 /** Falling snow: dots drift down and sway; seeded so the field is stable between frames. */
-export function drawSnow(g: Ctx, t: number, w: number, h: number, count = 70, seed = 3): void {
+/** Points that shove snow aside: the cursor, and a tap for a moment after it lands. */
+function snowPushers(t: number, fx: TitleFx | null): Array<[number, number, number]> {
+  const out: Array<[number, number, number]> = [];
+  if (fx?.pointer) out.push([fx.pointer.x, fx.pointer.y, 90]);
+  for (const tap of fx?.taps ?? []) {
+    const age = t - tap.t;
+    if (age < 700) out.push([tap.x, tap.y, 60 + (age / 700) * 160]);
+  }
+  return out;
+}
+
+export function drawSnow(g: Ctx, t: number, w: number, h: number, count = 70, seed = 3, fx: TitleFx | null = null): void {
   const rnd = seeded(seed);
+  const pushers = snowPushers(t, fx);
   for (let i = 0; i < count; i++) {
     const sx = rnd() * w;
     const speed = 18 + rnd() * 30;
     const size = 1 + rnd() * 2.2;
     const ph = rnd();
     const sway = rnd() * 20;
-    const y = ((ph * h + (t / 1000) * speed) % (h + 20)) - 10;
-    const x = sx + Math.sin(t / 1500 + ph * 7) * sway;
+    let y = ((ph * h + (t / 1000) * speed) % (h + 20)) - 10;
+    let x = sx + Math.sin(t / 1500 + ph * 7) * sway;
+    for (const [cx, cy, reach] of pushers) {
+      // flakes swirl away from the cursor and burst out from a tap
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.hypot(dx, dy);
+      if (d < reach && d > 0.01) {
+        const push = ((reach - d) / reach) * 36;
+        x += (dx / d) * push;
+        y += (dy / d) * push;
+      }
+    }
     g.fillStyle = `rgba(255,255,255,${0.5 + size * 0.2})`;
     g.beginPath();
     g.arc(x, y, size, 0, Math.PI * 2);
@@ -273,7 +297,7 @@ export function drawWinterTray(g: Ctx, x: number, y: number, w: number, h: numbe
 }
 
 /** Winter sky, snowy hills, a few pines, falling snow; with a layout the frosted slab, wells and shelf. */
-export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
+export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();
   const sky = g.createLinearGradient(0, 0, 0, sr.h);
   sky.addColorStop(0, SKY);
@@ -317,7 +341,7 @@ export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): vo
       g.fill();
     }
   }
-  drawSnow(g, t, sr.w, sr.h);
+  drawSnow(g, t, sr.w, sr.h, 70, 3, fx);
   if (flare > 0) {
     // a flurry kicked up by the level clear
     g.globalAlpha = flare;

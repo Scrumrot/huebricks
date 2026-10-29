@@ -5,7 +5,11 @@ import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, type Pil
 import { fillScreen, screenRect } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
-import { BACKDROPS } from "../engine/backdrops";
+import { BACKDROPS, type Pointer, type Tap } from "../engine/backdrops";
+import { debrisFor } from "../engine/debris";
+import { drawStain } from "../engine/modernSkin";
+import { Particles } from "../engine/particles";
+import type { Color } from "../core/color";
 import { nextTheme, THEME_LABELS } from "../engine/theme";
 import { Tweens } from "../engine/tween";
 import { GameScene } from "./GameScene";
@@ -34,6 +38,8 @@ interface WallBrick {
   flip: number;
   /** Blocky wall: 0 = resting, 1 = at the top of a hop. */
   hop: number;
+  /** Sim step when a tap ripple reaches this brick, or -1. */
+  rippleAt: number;
 }
 
 /** A gel brick drifting up the dark field behind the Spectra title. */
@@ -47,6 +53,10 @@ interface Bubble {
   /** Fade phase 0..1 over the climb. */
   phase: number;
   wobble: number;
+  /** Colour flip from a tap ripple: start time (or -1) and the colour to show. */
+  flipT0: number;
+  nextFrame: number;
+  rippleAt: number;
 }
 
 /** A paint chip lying on the paper behind the modern title. */
@@ -58,6 +68,12 @@ interface ScatterChip {
   frame: number;
   /** Settle animation: 0 = just dropped, 1 = resting. */
   p: number;
+  /** How close the cursor is (0..1), smoothed; lifts and tilts the chip. */
+  hover: number;
+  /** Colour flip from a tap ripple: start time (or -1) and the colour to show. */
+  flipT0: number;
+  nextFrame: number;
+  rippleAt: number;
 }
 
 const WALL_COLS = 12;
@@ -65,6 +81,10 @@ const WALL_SIZE = BTN_H / 2;
 /** Rows of the original 760 x 507 wall; the classic world-select card is sized from it. */
 const WALL_ROWS = Math.ceil((WALL_COLS * 2) / 3);
 const FLIP_FRAMES = 16;
+/** Ripple: ms of delay per logical unit from the tap, and the flip length. */
+const RIPPLE_MS_PER_UNIT = 1.1;
+const RIPPLE_FRAMES_PER_UNIT = 1 / 18;
+const CHIP_FLIP_MS = 360;
 const FADE_MS = 180;
 const SCATTER_EASE = backOut(1.4);
 
@@ -90,6 +110,14 @@ export class TitleScene implements Scene {
   private enterT0 = 0;
   /** Which slider the pointer is dragging on the sound card. */
   private dragging: "music" | "sfx" | null = null;
+  /** Debris from tapping the backdrop. */
+  private readonly particles = new Particles(240);
+  /** Smoothed cursor offset from the centre (-0.5..0.5), for parallax. */
+  private readonly parallax = { x: 0, y: 0 };
+  /** Recent taps on the backdrop, for the ripple rings and the themed reactions. */
+  private readonly taps: Tap[] = [];
+  /** Paint stains left by taps on the Pigment paper. */
+  private stains: Array<{ x: number; y: number; r: number; t: number; seed: number; color: string }> = [];
   /** Viewport size the menus were last laid out for. */
   private sizeKey = "";
 
@@ -150,6 +178,9 @@ export class TitleScene implements Scene {
       frame: Math.floor(Math.random() * 6),
       phase,
       wobble: Math.random() * Math.PI * 2,
+      flipT0: -1,
+      nextFrame: 0,
+      rippleAt: -1,
     };
   }
 
@@ -158,6 +189,8 @@ export class TitleScene implements Scene {
     const dt = this.ctx.clock.dt / 1000;
     const t = this.ctx.clock.t;
     const travel = this.H - BTN_H + 60;
+    const ptr = this.pointer();
+    const par = this.parallax;
     for (let i = 0; i < this.bubbles.length; i++) {
       let b = this.bubbles[i];
       b.phase += (b.speed * dt) / travel;
@@ -165,15 +198,44 @@ export class TitleScene implements Scene {
         b = this.newBubble(0);
         this.bubbles[i] = b;
       }
-      const y = this.H - BTN_H + 30 - b.phase * travel;
-      const x = b.x + Math.sin(t / 1400 + b.wobble) * b.drift;
+      const y = this.bubbleY(b);
+      let x = b.x + Math.sin(t / 1400 + b.wobble) * b.drift;
+      // the cursor nudges bubbles aside as they pass
+      if (ptr) {
+        const dx = x - ptr.x;
+        const dy = y - ptr.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 70 && d > 0.01) b.x += (dx / d) * (70 - d) * 0.06;
+      }
+      x += -par.x * b.size * 0.3;
+      let frame = b.frame;
+      let sx = 1;
+      if (b.flipT0 >= 0) {
+        const q = (t - b.flipT0) / CHIP_FLIP_MS;
+        if (q >= 1) {
+          b.frame = b.nextFrame;
+          b.flipT0 = -1;
+          frame = b.frame;
+        } else {
+          sx = Math.max(0.04, Math.abs(Math.cos(q * Math.PI)));
+          frame = q < 0.5 ? b.frame : b.nextFrame;
+        }
+      }
       const a = Math.sin(b.phase * Math.PI) * 0.55;
       g.globalAlpha = a;
       const gw = b.size * 1.5;
-      drawSprite(g, sp.brick_glow_sprite, b.frame, x - gw / 2, y - gw / 2, gw, gw);
-      drawSprite(g, sp.brick_noicon_sprite, b.frame, x - b.size / 2, y - b.size / 2, b.size, b.size);
+      drawSprite(g, sp.brick_glow_sprite, frame, x - gw / 2, y - gw / 2, gw, gw);
+      g.save();
+      g.translate(x, y);
+      g.scale(sx, 1);
+      drawSprite(g, sp.brick_noicon_sprite, frame, -b.size / 2, -b.size / 2, b.size, b.size);
+      g.restore();
     }
     g.globalAlpha = 1;
+    if (ptr) {
+      par.x += (ptr.x / this.W - 0.5 - par.x) * 0.08;
+      par.y += (ptr.y / this.H - 0.5 - par.y) * 0.08;
+    }
   }
 
   /** The brick wall behind the classic and blocky titles (blocky starts with a few coloured bricks). */
@@ -191,6 +253,7 @@ export class TitleScene implements Scene {
           nextFrame: 7,
           flip: 0,
           hop: 0,
+          rippleAt: -1,
         });
       }
     }
@@ -234,7 +297,7 @@ export class TitleScene implements Scene {
       // keep a clear patch behind the logo
       if (Math.abs(x - this.W / 2) < 230 && Math.abs(y - this.logoY()) < 130) continue;
       if (chips.some((c) => Math.hypot(c.x - x, c.y - y) < (c.size + size) * 0.75)) continue;
-      chips.push({ x, y, size, tilt: (Math.random() * 12 - 6) * (Math.PI / 180), frame: Math.floor(Math.random() * 6), p: 1 });
+      chips.push({ x, y, size, tilt: (Math.random() * 12 - 6) * (Math.PI / 180), frame: Math.floor(Math.random() * 6), p: 1, hover: 0, flipT0: -1, nextFrame: 0, rippleAt: -1 });
     }
     this.chips = chips;
   }
@@ -376,7 +439,11 @@ export class TitleScene implements Scene {
 
     if (inp.pressed) {
       this.held = this.buttons.find((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ?? null;
+      const tt = this.themeToggle;
+      const onPill = this.menu === "main" && (inp.inCentered(tt.cx, tt.cy, tt.w, tt.h) || inp.inCentered(fs.cx, fs.cy, fs.w, fs.h));
+      if (!this.held && !onPill) this.ripple(inp.x, inp.y);
     }
+    this.stepRipples();
     if (inp.released) {
       const target = this.held;
       this.held = null;
@@ -393,6 +460,17 @@ export class TitleScene implements Scene {
     const theme = this.ctx.palette.name;
     if (this.ctx.palette.kind === "generated" && this.ctx.palette.titleDeco !== "wall") return;
     if (theme === "blocky") {
+      for (const b of this.wall) {
+        if (b.rippleAt < 0 || this.time < b.rippleAt || b.hop !== 0) continue;
+        b.rippleAt = -1;
+        const next = b.nextFrame;
+        this.tweens.to(b, { hop: 1 }, 150, easeOutCubic, {
+          onDone: () => {
+            b.frame = next;
+            this.tweens.to(b, { hop: 0 }, 340, easeOutBack);
+          },
+        });
+      }
       if (this.time % 40 === 0) {
         for (let i = 0; i < 2; i++) {
           const b = this.wall[Math.floor(Math.random() * this.wall.length)];
@@ -406,6 +484,11 @@ export class TitleScene implements Scene {
         }
       }
       return;
+    }
+    for (const b of this.wall) {
+      if (b.rippleAt < 0 || this.time < b.rippleAt) continue;
+      b.rippleAt = -1;
+      if (b.flip === 0) b.flip = 1;
     }
     if (this.time % 45 === 0) {
       for (let i = 0; i < 2; i++) {
@@ -590,18 +673,140 @@ export class TitleScene implements Scene {
 
   private renderScatter(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites.brick_noicon_sprite;
+    const inp = this.ctx.input;
+    const t = this.ctx.clock.t;
+    const ptr = this.pointer();
+    const par = this.parallax;
     for (const c of this.chips) {
       const p = clamp01(c.p);
-      const lift = (1 - p) * 30;
-      const tilt = c.tilt * (2 - p);
+      // cursor nearby: the chip lifts and wobbles
+      const d = ptr ? Math.hypot(ptr.x - c.x, ptr.y - c.y) : 1e9;
+      const target = clamp01(1 - d / (c.size * 0.9));
+      c.hover += (target - c.hover) * 0.18;
+      const lift = (1 - p) * 30 + c.hover * 8;
+      const tilt = c.tilt * (2 - p) + Math.sin(t / 110) * 0.07 * c.hover;
+      // ripple flip: squash on x and swap colour at the halfway point
+      let frame = c.frame;
+      let sx = 1;
+      if (c.flipT0 >= 0) {
+        const q = (t - c.flipT0) / CHIP_FLIP_MS;
+        if (q >= 1) {
+          c.frame = c.nextFrame;
+          c.flipT0 = -1;
+          frame = c.frame;
+        } else {
+          sx = Math.max(0.04, Math.abs(Math.cos(q * Math.PI)));
+          frame = q < 0.5 ? c.frame : c.nextFrame;
+        }
+      }
+      // bigger chips sit closer, so they shift more with the cursor
+      const ox = -par.x * c.size * 0.14;
+      const oy = -par.y * c.size * 0.14;
       g.save();
       g.globalAlpha = easeOutCubic(Math.min(1, p * 1.5));
-      g.translate(c.x, c.y - lift);
+      g.translate(c.x + ox, c.y - lift + oy);
       g.rotate(tilt);
       const s = c.size;
-      fillRoundRect(g, -s / 2, -s / 2 + 4 + lift * 0.3, s, s, s * 0.18, this.ctx.palette.brickShadow ?? "rgba(0,0,0,0.35)");
-      drawSprite(g, sp, c.frame, -s / 2, -s / 2, s, s);
+      fillRoundRect(g, (-s / 2) * sx, -s / 2 + 4 + lift * 0.3, s * sx, s, s * 0.18, this.ctx.palette.brickShadow ?? "rgba(0,0,0,0.35)");
+      g.scale(sx, 1);
+      drawSprite(g, sp, frame, -s / 2, -s / 2, s, s);
       g.restore();
+    }
+    if (ptr && inp.x >= 0) {
+      par.x += (inp.x / this.W - 0.5 - par.x) * 0.08;
+      par.y += (inp.y / this.H - 0.5 - par.y) * 0.08;
+    }
+  }
+
+  /** Cursor position on the canvas, or null when it is off it. */
+  private pointer(): Pointer {
+    const inp = this.ctx.input;
+    return inp.x >= 0 && inp.x <= this.W && inp.y >= 0 && inp.y <= this.H ? { x: inp.x, y: inp.y } : null;
+  }
+
+  /** Screen y of a bubble this frame. */
+  private bubbleY(b: Bubble): number {
+    const travel = this.H - BTN_H + 60;
+    return this.H - BTN_H + 30 - b.phase * travel;
+  }
+
+  /**
+   * Tap on the backdrop: a wave spreads from the point and every decoration
+   * flips to one new colour as it arrives, the way the original's menu wall
+   * rippled. A pinch of the theme's debris marks the tap itself.
+   */
+  private ripple(x: number, y: number): void {
+    const t = this.ctx.clock.t;
+    const frame = Math.floor(Math.random() * 6);
+    for (const c of this.chips) {
+      c.nextFrame = frame;
+      c.rippleAt = t + Math.hypot(c.x - x, c.y - y) * RIPPLE_MS_PER_UNIT;
+    }
+    for (const b of this.bubbles) {
+      b.nextFrame = frame;
+      b.rippleAt = t + Math.hypot(b.x - x, this.bubbleY(b) - y) * RIPPLE_MS_PER_UNIT;
+    }
+    for (const w of this.wall) {
+      w.nextFrame = frame;
+      w.rippleAt = this.time + Math.hypot(w.cx - x, w.cy - y) * RIPPLE_FRAMES_PER_UNIT;
+    }
+    this.ctx.audio.play("BlocksSelection_snd");
+    const pal = this.ctx.palette;
+    const { colors, o } = debrisFor(pal, (frame + 1) as Color, 44);
+    this.particles.spawn(x, y, 7, colors, { ...o, speed: [o.speed[0] * 0.6, o.speed[1] * 0.7] });
+    this.taps.push({ x, y, t });
+    while (this.taps.length > 6) this.taps.shift();
+    // Pigment: the tap leaves a paint stain on the paper in the ripple's colour.
+    if (pal.stains) this.stains.push({ x, y, r: 26 + Math.random() * 14, t, seed: Math.floor(Math.random() * 1000), color: pal.brickColors[(frame + 1) as Color] });
+  }
+
+  /** Fading paint stains from taps (Pigment only). */
+  private renderStains(g: CanvasRenderingContext2D): void {
+    const t = this.ctx.clock.t;
+    this.stains = this.stains.filter((s) => t - s.t < 2600);
+    for (const s of this.stains) {
+      const p = (t - s.t) / 2600;
+      const a = p < 0.08 ? p / 0.08 : 1 - easeOutCubic((p - 0.08) / 0.92);
+      drawStain(g, s.x, s.y, s.r, s.color, 0.22 * a, s.seed);
+    }
+  }
+
+  /** Expanding rings from recent taps, in the theme's accent; glow themes add light. */
+  private renderTapRings(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    if (pal.stains || pal.titleDeco === "wall") return;
+    const t = this.ctx.clock.t;
+    g.save();
+    if (pal.particlesAdditive) g.globalCompositeOperation = "lighter";
+    for (const tap of this.taps) {
+      const age = t - tap.t;
+      if (age > 900) continue;
+      const q = age / 900;
+      const r = 12 + easeOutCubic(q) * 260;
+      g.globalAlpha = (1 - q) * 0.45;
+      g.lineWidth = 3 * (1 - q) + 1;
+      g.strokeStyle = pal.overlayAccent;
+      g.beginPath();
+      g.arc(tap.x, tap.y, r, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /** Start the flips whose ripple has arrived. */
+  private stepRipples(): void {
+    const t = this.ctx.clock.t;
+    for (const c of this.chips) {
+      if (c.rippleAt >= 0 && t >= c.rippleAt) {
+        c.rippleAt = -1;
+        c.flipT0 = t;
+      }
+    }
+    for (const b of this.bubbles) {
+      if (b.rippleAt >= 0 && t >= b.rippleAt) {
+        b.rippleAt = -1;
+        b.flipT0 = t;
+      }
     }
   }
 
@@ -616,7 +821,8 @@ export class TitleScene implements Scene {
     fillScreen(g, pal.background);
 
     if (pal.kind === "generated" && pal.titleDeco !== "wall") {
-      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t);
+      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t, undefined, 0, { pointer: this.pointer(), taps: this.taps });
+      this.renderStains(g);
       if (pal.titleDeco === "chips") this.renderScatter(g);
       else this.renderBubbles(g);
       // Push the decoration back so the menu reads as the foreground.
@@ -647,6 +853,17 @@ export class TitleScene implements Scene {
         drawSprite(g, wallSprite, b.frame, b.cx - w / 2, b.cy - WALL_SIZE / 2, w, WALL_SIZE);
       }
     }
+
+    this.particles.update(this.ctx.clock.dt);
+    if (pal.particlesAdditive) {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      this.particles.render(g);
+      g.restore();
+    } else {
+      this.particles.render(g);
+    }
+    this.renderTapRings(g);
 
     if (this.menu === "main") {
       if (modern) {

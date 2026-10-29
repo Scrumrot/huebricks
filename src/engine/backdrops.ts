@@ -13,8 +13,22 @@ import { drawWinterBackdrop, drawWinterTray, drawWinterWell } from "./winterSkin
  * Paints the whole screen behind the board; with a layout, also the board
  * furniture. `flare` runs 1 -> 0 after a level clear for backdrops that
  * want to react (lights flaring, snow bursting, the moon brightening).
+ * `fx` is the title screen's cursor and recent taps, for decorations that
+ * play along (snow swirling, bats scattering, a wave along the bulbs).
  */
-export type Backdrop = (g: Ctx, t: number, l?: Layout, flare?: number) => void;
+export type Pointer = { x: number; y: number } | null;
+/** A recent tap on the title backdrop. */
+export interface Tap {
+  x: number;
+  y: number;
+  t: number;
+}
+/** Title-screen input the backdrop can play with: the cursor and the last few taps. */
+export interface TitleFx {
+  pointer: Pointer;
+  taps: readonly Tap[];
+}
+export type Backdrop = (g: Ctx, t: number, l?: Layout, flare?: number, fx?: TitleFx | null) => void;
 
 /** Replenish-line furniture for themes whose timer fills the tray's next well. */
 export interface Furniture {

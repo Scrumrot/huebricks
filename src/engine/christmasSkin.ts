@@ -7,6 +7,7 @@ import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
 import { fillScreen, screenRect } from "./view";
 import { drawSnow } from "./winterSkin";
+import type { TitleFx } from "./backdrops";
 
 /**
  * "Christmas": wrapped presents under a string of lights. Gift-box tiles
@@ -276,8 +277,11 @@ export function drawChristmasTray(g: Ctx, x: number, y: number, w: number, h: nu
 }
 
 /** Deep green night, a sagging string of glowing bulbs, pines and snow; with a layout the felt slab, wells and sleigh tray. */
-export function drawChristmasBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
+export function drawChristmasBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();
+  const pointer = fx?.pointer ?? null;
+  // a tap sends a wave of brightness running along the string of lights
+  const waves = (fx?.taps ?? []).filter((tap) => t - tap.t < 1600);
   const sky = g.createLinearGradient(0, 0, 0, sr.h);
   sky.addColorStop(0, NIGHT);
   sky.addColorStop(1, BG);
@@ -320,20 +324,26 @@ export function drawChristmasBackdrop(g: Ctx, t: number, l?: Layout, flare = 0):
       const bx = xa + (xb - xa) * u;
       const by = (1 - u) * (1 - u) * ya + 2 * (1 - u) * u * (ya + sag * 2) + u * u * ya;
       const c = bulbColors[(s * 5 + b) % bulbColors.length];
-      const tw = (0.6 + 0.4 * Math.sin(t / 500 + s * 1.7 + b * 2.1)) * (1 + flare * 2.5);
+      let near = pointer ? Math.max(0, 1 - Math.hypot(bx - pointer.x, by - pointer.y) / 90) : 0;
+      for (const tap of waves) {
+        const ring = (t - tap.t) * 0.6;
+        const off = Math.abs(Math.hypot(bx - tap.x, by - tap.y) - ring);
+        near = Math.max(near, (1 - Math.min(1, off / 60)) * (1 - (t - tap.t) / 1600) * 1.4);
+      }
+      const tw = (0.6 + 0.4 * Math.sin(t / 500 + s * 1.7 + b * 2.1)) * (1 + flare * 2.5 + near * 1.5);
       g.save();
       g.shadowColor = c;
       g.shadowBlur = 12 * tw;
       g.fillStyle = c;
       g.beginPath();
-      g.ellipse(bx, by + 7, 3.5 + flare * 2, 5 + flare * 2.5, 0, 0, Math.PI * 2);
+      g.ellipse(bx, by + 7, 3.5 + flare * 2 + near * 1.5, 5 + flare * 2.5 + near * 1.5, 0, 0, Math.PI * 2);
       g.fill();
       g.restore();
       g.fillStyle = "#333";
       g.fillRect(bx - 1.5, by, 3, 3);
     }
   }
-  drawSnow(g, t, sr.w, sr.h, 50, 7);
+  drawSnow(g, t, sr.w, sr.h, 50, 7, fx);
   if (!l) return;
   const n = l.cellNum;
   const gridBottom = cellY(l, n) - l.cellSep;

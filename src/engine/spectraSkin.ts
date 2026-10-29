@@ -5,6 +5,7 @@ import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./a
 import { chevronUp, gearIcon, polygon, rgba, rotateIcon, roundRect, shade, speakerIcon, sprite, text, type Ctx } from "./modernSkin";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
 import { fillScreen, screenRect } from "./view";
+import type { TitleFx } from "./backdrops";
 
 /**
  * "Spectra": glowing gel tiles on a deep dark field. Light instead of gloss:
@@ -165,9 +166,18 @@ export function glassButton(g: Ctx, w: number, h: number, pressed: boolean, icon
  * coloured blobs drifting on 30 s loops, a 1 px grid at 4% white over the
  * board, and the glass tray under the replenish line.
  */
-export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
+export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   fillScreen(g, BG);
   const sr = screenRect();
+  // the glows lean toward the cursor and jump toward a tap
+  let ax = 0;
+  let ay = 0;
+  const pointer = fx?.pointer ?? null;
+  for (const tap of fx?.taps ?? []) {
+    const k = Math.max(0, 1 - (t - tap.t) / 1000);
+    ax += (tap.x - sr.w / 2) * 0.35 * k;
+    ay += (tap.y - sr.h / 2) * 0.35 * k;
+  }
   const bx = l ? l.boardX + l.boardW / 2 : sr.w / 2;
   const by = l ? (cellY(l, l.cellNum) - l.cellSep) / 2 : sr.h / 2;
   const blob = (x: number, y: number, r: number, color: string, a: number) => {
@@ -179,8 +189,12 @@ export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): v
   };
   const p1 = (t / 30000) * Math.PI * 2;
   const p2 = (t / 30000) * Math.PI * 2 + 2.1;
-  blob(bx + Math.cos(p1) * 140, by + Math.sin(p1 * 0.7) * 90, 260, "#1B2F7A", 0.1 + flare * 0.2);
-  blob(bx - Math.cos(p2 * 0.8) * 160, by + Math.sin(p2) * 80, 240, "#3B1B5E", 0.1 + flare * 0.2);
+  if (pointer) {
+    ax += (pointer.x - bx) * 0.15;
+    ay += (pointer.y - by) * 0.15;
+  }
+  blob(bx + Math.cos(p1) * 140 + ax, by + Math.sin(p1 * 0.7) * 90 + ay, 260, "#1B2F7A", 0.1 + flare * 0.2);
+  blob(bx - Math.cos(p2 * 0.8) * 160 + ax, by + Math.sin(p2) * 80 + ay, 240, "#3B1B5E", 0.1 + flare * 0.2);
   blob(bx, by, Math.max(sr.w, sr.h) * 0.42, "#FFFFFF", 0.06 + flare * 0.12);
   if (l) {
     const n = l.cellNum;

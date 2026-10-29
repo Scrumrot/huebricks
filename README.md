@@ -76,6 +76,12 @@ debris (paint splats, sprinkles, gem shards, bats, snowflakes, confetti),
 and a level clear sends a fountain of it up the board while the backdrop
 reacts (lights flare, snow flurries, the moon brightens).
 
+The title screen plays along too: tap anywhere on the backdrop and a wave
+spreads from the point, flipping every chip, gem or wall brick to a new
+colour as it arrives (the original's menu wall did this); chips lift under
+the cursor and shift with it, bubbles drift aside, snow swirls, bats veer
+away and bulbs brighten near the pointer.
+
 ## Themes
 
 Switch themes any time: the pill in the top-right of the title screen, the

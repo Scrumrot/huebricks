@@ -5,6 +5,7 @@ import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./a
 import { chevronUp, gearIcon, polygon, rgba, rotateIcon, roundRect, shade, speakerIcon, sprite, text, type Ctx } from "./modernSkin";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
 import { fillScreen, screenRect } from "./view";
+import type { TitleFx } from "./backdrops";
 
 /**
  * "Crystals": cut gemstones in a dark cave. Every brick is a faceted gem with
@@ -279,9 +280,12 @@ export function gemButton(g: Ctx, w: number, h: number, pressed: boolean, icon: 
  * from the top-left, twinkling motes, and with a layout a slate slab under
  * the grid plus the geode tray under the replenish line.
  */
-export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
+export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   fillScreen(g, BG);
   const sr = screenRect();
+  const pointer = fx?.pointer ?? null;
+  // a tap sends a ring of light out through the motes
+  const rings = (fx?.taps ?? []).filter((tap) => t - tap.t < 1400);
   const bx = l ? l.boardX + l.boardW / 2 : sr.w / 2;
   const by = l ? (cellY(l, l.cellNum) - l.cellSep) / 2 : sr.h / 2;
   const blob = (x: number, y: number, r: number, color: string, a: number) => {
@@ -315,9 +319,15 @@ export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): 
     const ph = rnd() * Math.PI * 2;
     const a = 0.25 + 0.75 * Math.max(0, Math.sin(t / 900 + ph));
     const size = 0.8 + rnd() * 1.4;
-    g.fillStyle = `rgba(220,240,255,${(0.5 + flare) * a})`;
+    // motes light up around the cursor and as a tap's ring passes
+    let near = pointer ? Math.max(0, 1 - Math.hypot(x - pointer.x, y - pointer.y) / 110) : 0;
+    for (const tap of rings) {
+      const off = Math.abs(Math.hypot(x - tap.x, y - tap.y) - (t - tap.t) * 0.55);
+      near = Math.max(near, (1 - Math.min(1, off / 70)) * (1 - (t - tap.t) / 1400) * 1.5);
+    }
+    g.fillStyle = `rgba(220,240,255,${Math.min(1, (0.5 + flare + near * 1.2) * Math.max(a, near * 0.8))})`;
     g.beginPath();
-    g.arc(x, y, size, 0, Math.PI * 2);
+    g.arc(x, y, size + near * 1.8, 0, Math.PI * 2);
     g.fill();
   }
   if (!l) return;
