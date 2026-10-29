@@ -276,7 +276,7 @@ export function drawChristmasTray(g: Ctx, x: number, y: number, w: number, h: nu
 }
 
 /** Deep green night, a sagging string of glowing bulbs, pines and snow; with a layout the felt slab, wells and sleigh tray. */
-export function drawChristmasBackdrop(g: Ctx, t: number, l?: Layout): void {
+export function drawChristmasBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
   const sr = screenRect();
   const sky = g.createLinearGradient(0, 0, 0, sr.h);
   sky.addColorStop(0, NIGHT);
@@ -320,13 +320,13 @@ export function drawChristmasBackdrop(g: Ctx, t: number, l?: Layout): void {
       const bx = xa + (xb - xa) * u;
       const by = (1 - u) * (1 - u) * ya + 2 * (1 - u) * u * (ya + sag * 2) + u * u * ya;
       const c = bulbColors[(s * 5 + b) % bulbColors.length];
-      const tw = 0.6 + 0.4 * Math.sin(t / 500 + s * 1.7 + b * 2.1);
+      const tw = (0.6 + 0.4 * Math.sin(t / 500 + s * 1.7 + b * 2.1)) * (1 + flare * 2.5);
       g.save();
       g.shadowColor = c;
       g.shadowBlur = 12 * tw;
       g.fillStyle = c;
       g.beginPath();
-      g.ellipse(bx, by + 7, 3.5, 5, 0, 0, Math.PI * 2);
+      g.ellipse(bx, by + 7, 3.5 + flare * 2, 5 + flare * 2.5, 0, 0, Math.PI * 2);
       g.fill();
       g.restore();
       g.fillStyle = "#333";

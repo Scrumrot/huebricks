@@ -53,6 +53,8 @@ export interface Palette {
   brickStyle: "flat" | "chip" | "extruded" | "gel";
   /** Fill timer: a bar under the grid, or the next tray well filling with the incoming colour. */
   timer: "bar" | "wells";
+  /** What flies out of a popped brick. */
+  popStyle: "flecks" | "dots" | "cubes" | "splat" | "sprinkles" | "shards" | "bats" | "snow" | "confetti";
   /** Title-screen decoration: scattered tiles, tiles floating up, or the flipping brick wall. */
   titleDeco: "chips" | "bubbles" | "wall";
   /** Veil over the decoration while a sub-menu is open. */
@@ -126,6 +128,7 @@ export interface Palette {
 
 export const CLASSIC: Palette = {
   name: "classic",
+  popStyle: "flecks",
   titleDeco: "wall",
   titleDim: "rgba(0,0,0,0)",
   kind: "classic",
@@ -191,6 +194,7 @@ export const CLASSIC: Palette = {
 /** "Pigment": paint chips on warm paper. */
 export const PIGMENT: Palette = {
   name: "pigment",
+  popStyle: "splat",
   titleDeco: "chips",
   titleDim: "rgba(243,238,228,0.72)",
   kind: "generated",
@@ -256,6 +260,7 @@ export const PIGMENT: Palette = {
 /** "Blocky": soft 3D toy bricks, one light from the top-left, cel shaded. */
 export const BLOCKY: Palette = {
   name: "blocky",
+  popStyle: "cubes",
   titleDeco: "wall",
   titleDim: "rgba(18,24,38,0.72)",
   kind: "generated",
@@ -321,6 +326,7 @@ export const BLOCKY: Palette = {
 /** "Spectra": glowing gel tiles on a deep dark field. */
 export const SPECTRA: Palette = {
   name: "spectra",
+  popStyle: "dots",
   titleDeco: "bubbles",
   titleDim: "rgba(7,7,12,0.7)",
   kind: "generated",
@@ -386,6 +392,7 @@ export const SPECTRA: Palette = {
 /** "Delicious": frosted tarts on a gingham bakery counter. */
 export const DELICIOUS: Palette = {
   name: "delicious",
+  popStyle: "sprinkles",
   titleDeco: "chips",
   titleDim: "rgba(255,244,234,0.72)",
   kind: "generated",
@@ -451,6 +458,7 @@ export const DELICIOUS: Palette = {
 /** "Crystals": cut gemstones in a dark cave; the tray sockets fill with light. */
 export const CRYSTALS: Palette = {
   name: "crystals",
+  popStyle: "shards",
   titleDeco: "bubbles",
   titleDim: "rgba(11,16,32,0.7)",
   kind: "generated",
@@ -516,6 +524,7 @@ export const CRYSTALS: Palette = {
 /** "Halloween: candies under a harvest moon". */
 export const HALLOWEEN: Palette = {
   name: "halloween",
+  popStyle: "bats",
   kind: "generated",
   backdrop: "halloween",
   brickStyle: "chip",
@@ -581,6 +590,7 @@ export const HALLOWEEN: Palette = {
 /** "Winter: ice cubes in the snow". */
 export const WINTER: Palette = {
   name: "winter",
+  popStyle: "snow",
   kind: "generated",
   backdrop: "winter",
   brickStyle: "chip",
@@ -646,6 +656,7 @@ export const WINTER: Palette = {
 /** "Christmas: presents under the lights". */
 export const CHRISTMAS: Palette = {
   name: "christmas",
+  popStyle: "confetti",
   kind: "generated",
   backdrop: "christmas",
   brickStyle: "chip",

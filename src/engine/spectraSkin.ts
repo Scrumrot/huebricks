@@ -165,7 +165,7 @@ export function glassButton(g: Ctx, w: number, h: number, pressed: boolean, icon
  * coloured blobs drifting on 30 s loops, a 1 px grid at 4% white over the
  * board, and the glass tray under the replenish line.
  */
-export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout): void {
+export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
   fillScreen(g, BG);
   const sr = screenRect();
   const bx = l ? l.boardX + l.boardW / 2 : sr.w / 2;
@@ -179,9 +179,9 @@ export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout): void {
   };
   const p1 = (t / 30000) * Math.PI * 2;
   const p2 = (t / 30000) * Math.PI * 2 + 2.1;
-  blob(bx + Math.cos(p1) * 140, by + Math.sin(p1 * 0.7) * 90, 260, "#1B2F7A", 0.1);
-  blob(bx - Math.cos(p2 * 0.8) * 160, by + Math.sin(p2) * 80, 240, "#3B1B5E", 0.1);
-  blob(bx, by, Math.max(sr.w, sr.h) * 0.42, "#FFFFFF", 0.06);
+  blob(bx + Math.cos(p1) * 140, by + Math.sin(p1 * 0.7) * 90, 260, "#1B2F7A", 0.1 + flare * 0.2);
+  blob(bx - Math.cos(p2 * 0.8) * 160, by + Math.sin(p2) * 80, 240, "#3B1B5E", 0.1 + flare * 0.2);
+  blob(bx, by, Math.max(sr.w, sr.h) * 0.42, "#FFFFFF", 0.06 + flare * 0.12);
   if (l) {
     const n = l.cellNum;
     const gridBottom = cellY(l, n) - l.cellSep;

@@ -279,7 +279,7 @@ export function gemButton(g: Ctx, w: number, h: number, pressed: boolean, icon: 
  * from the top-left, twinkling motes, and with a layout a slate slab under
  * the grid plus the geode tray under the replenish line.
  */
-export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout): void {
+export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
   fillScreen(g, BG);
   const sr = screenRect();
   const bx = l ? l.boardX + l.boardW / 2 : sr.w / 2;
@@ -292,8 +292,8 @@ export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout): void {
     g.fillRect(x - r, y - r, r * 2, r * 2);
   };
   const p = (t / 36000) * Math.PI * 2;
-  blob(bx + Math.cos(p) * 160, by + Math.sin(p * 0.6) * 90, 300, "#1E6F8C", 0.16);
-  blob(bx - Math.cos(p * 0.7) * 170, by - Math.sin(p) * 70, 280, "#5B2E8C", 0.16);
+  blob(bx + Math.cos(p) * 160, by + Math.sin(p * 0.6) * 90, 300, "#1E6F8C", 0.16 + flare * 0.25);
+  blob(bx - Math.cos(p * 0.7) * 170, by - Math.sin(p) * 70, 280, "#5B2E8C", 0.16 + flare * 0.25);
   // light shafts
   g.save();
   g.translate(sr.w * 0.25, 0);
@@ -315,7 +315,7 @@ export function drawCrystalsBackdrop(g: Ctx, t: number, l?: Layout): void {
     const ph = rnd() * Math.PI * 2;
     const a = 0.25 + 0.75 * Math.max(0, Math.sin(t / 900 + ph));
     const size = 0.8 + rnd() * 1.4;
-    g.fillStyle = `rgba(220,240,255,${0.5 * a})`;
+    g.fillStyle = `rgba(220,240,255,${(0.5 + flare) * a})`;
     g.beginPath();
     g.arc(x, y, size, 0, Math.PI * 2);
     g.fill();

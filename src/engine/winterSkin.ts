@@ -273,7 +273,7 @@ export function drawWinterTray(g: Ctx, x: number, y: number, w: number, h: numbe
 }
 
 /** Winter sky, snowy hills, a few pines, falling snow; with a layout the frosted slab, wells and shelf. */
-export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout): void {
+export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
   const sr = screenRect();
   const sky = g.createLinearGradient(0, 0, 0, sr.h);
   sky.addColorStop(0, SKY);
@@ -281,7 +281,7 @@ export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout): void {
   fillScreen(g, sky);
   // low sun glow
   const glow = g.createRadialGradient(sr.w * 0.2, sr.h * 0.15, 0, sr.w * 0.2, sr.h * 0.15, sr.w * 0.35);
-  glow.addColorStop(0, "rgba(255,255,255,0.5)");
+  glow.addColorStop(0, `rgba(255,255,255,${0.5 + flare * 0.45})`);
   glow.addColorStop(1, "rgba(255,255,255,0)");
   g.fillStyle = glow;
   g.fillRect(0, 0, sr.w, sr.h);
@@ -318,6 +318,12 @@ export function drawWinterBackdrop(g: Ctx, t: number, l?: Layout): void {
     }
   }
   drawSnow(g, t, sr.w, sr.h);
+  if (flare > 0) {
+    // a flurry kicked up by the level clear
+    g.globalAlpha = flare;
+    drawSnow(g, t * 4, sr.w, sr.h, 90, 5);
+    g.globalAlpha = 1;
+  }
   if (!l) return;
   const n = l.cellNum;
   const gridBottom = cellY(l, n) - l.cellSep;

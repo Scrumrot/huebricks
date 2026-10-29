@@ -9,8 +9,12 @@ import { drawSpectraBackdrop } from "./spectraSkin";
 import type { Palette } from "./theme";
 import { drawWinterBackdrop, drawWinterTray, drawWinterWell } from "./winterSkin";
 
-/** Paints the whole screen behind the board; with a layout, also the board furniture. */
-export type Backdrop = (g: Ctx, t: number, l?: Layout) => void;
+/**
+ * Paints the whole screen behind the board; with a layout, also the board
+ * furniture. `flare` runs 1 -> 0 after a level clear for backdrops that
+ * want to react (lights flaring, snow bursting, the moon brightening).
+ */
+export type Backdrop = (g: Ctx, t: number, l?: Layout, flare?: number) => void;
 
 /** Replenish-line furniture for themes whose timer fills the tray's next well. */
 export interface Furniture {

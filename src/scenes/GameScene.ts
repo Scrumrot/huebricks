@@ -24,7 +24,7 @@ import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQua
 import { drawCellWell, drawStain, drawTray, rgba } from "../engine/modernSkin";
 import { BACKDROPS, FURNITURE } from "../engine/backdrops";
 import { nextTheme, THEME_LABELS } from "../engine/theme";
-import { Particles } from "../engine/particles";
+import { Particles, type SpawnOptions } from "../engine/particles";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
@@ -75,6 +75,13 @@ const CARD_MS = 420;
 const COUNT_MS = 500;
 const DESAT_MS = 400;
 const BREATHE_MS = 1400;
+/** Idle breathing of resting bricks: cycle length and amplitude (logical px). */
+const IDLE_MS = 2600;
+const IDLE_AMP = 0.9;
+/** How long the backdrop and particles celebrate a level clear. */
+const FLARE_MS = 1800;
+/** Sim steps the level-complete card waits while the celebration plays. */
+const CARD_HOLD_FRAMES = 18;
 
 const ROTATE_FRAMES = frames(ROTATE_ANTICIPATE_MS + ROTATE_MS);
 const PUSH_FRAMES = frames(PUSH_ANTICIPATE_MS + PUSH_MS);
@@ -349,6 +356,8 @@ export class GameScene implements Scene {
   /** Paint level shown while a pop rewinds the current well. */
   private readonly levelFx = { v: 0 };
   private rewindUntil = -1;
+  /** When the last level clear started (drives the backdrop flare). */
+  private flareT0 = -1e9;
 
   constructor(ctx: GameContext) {
     this.ctx = ctx;
@@ -758,8 +767,11 @@ export class GameScene implements Scene {
     if (this.state === "animation" && this.animation === "fadeout") return;
     this.state = "animation";
     this.animation = "fadeout";
-    this.levelCompleteDelay = LEVEL_CARD_FRAMES;
-    this.cardT0 = this.ctx.clock.t;
+    // The celebration gets the stage to itself before the card slides in.
+    this.levelCompleteDelay = LEVEL_CARD_FRAMES + CARD_HOLD_FRAMES;
+    this.cardT0 = this.ctx.clock.t + D((CARD_HOLD_FRAMES * 1000) / FPS);
+    this.flareT0 = this.ctx.clock.t;
+    this.celebrate();
     if (!this.levelCompleteSounded) {
       this.levelCompleteSounded = true;
       this.ctx.audio.play("achievment_snd");
@@ -778,6 +790,8 @@ export class GameScene implements Scene {
     this.animation = "push";
     this.animFrame = 0;
     this.pushT0 = this.ctx.clock.t;
+    // The pushed line is on the board now: undo any selection dim it carried.
+    for (const b of this.board.bricks()) this.tweens.to(this.fxOf(b), { dim: 1 }, D(DIM_MS));
     this.barFlashT0 = this.ctx.clock.t;
     this.ctx.audio.play("BlocksRepMoveUp_snd");
     if (result.overflow && this.ctx.session.gameType === "normal") {
@@ -1217,8 +1231,12 @@ export class GameScene implements Scene {
       this.tweens.set(this.selFx, { s: 0.8 });
       this.tweens.to(this.selFx, { s: 1 }, D(200), easeOutBack);
     }
-    for (const b of this.board.replenishList) {
-      if (b !== sel) this.tweens.to(this.fxOf(b), { dim: sel ? 0.7 : 1 }, D(DIM_MS));
+    // Only the rest of the line dims; anything on the board (including bricks a
+    // push just moved there) always comes back to full strength.
+    for (const b of this.board.allBricks()) {
+      if (b === sel) continue;
+      const inLine = this.board.replenishList.includes(b);
+      this.tweens.to(this.fxOf(b), { dim: inLine && sel ? 0.7 : 1 }, D(DIM_MS));
     }
     if (this.held && this.held !== sel) this.tweens.to(this.fxOf(this.held), { dim: 1 }, D(DIM_MS));
     this.lastSelected = sel;
@@ -1593,27 +1611,61 @@ export class GameScene implements Scene {
     this.callouts = this.callouts.filter((c) => t - c.t0 < c.dur);
   }
 
-  /** Paint flecks flying out of a popped brick. */
+  /** Debris flying out of a popped brick, in the theme's own style. */
   private burst(d: DieAnim): void {
     const l = this.board.layout;
-    const pal = this.ctx.palette;
-    const base = pal.brickColors[d.color];
-    const colors = pal.brickStyle === "gel" ? [base, lighten(base, 0.55), "#ffffff"] : [base, lighten(base, 0.3)];
+    const { colors, o } = this.debris(d.color, l.cellW);
     const count = 10 + Math.floor(Math.random() * 5);
-    const cube = pal.brickStyle === "extruded";
-    const gelDots = pal.brickStyle === "gel";
-    const splat = pal.stains;
-    const side = pal.brickSide?.[d.color];
-    this.particles.spawn(d.x + l.cellW / 2, d.y + l.cellH / 2, count, colors, {
-      speed: [180, 320],
-      size: [l.cellW * (splat ? 0.1 : 0.09), l.cellW * (splat ? 0.2 : 0.16)],
-      life: [350, 500],
-      gravity: 900,
-      drag: 0.25,
-      jitter: 0.3,
-      shape: cube ? 2 : gelDots ? 1 : splat ? 3 : 0,
-      sides: cube && side ? [side, lighten(side, 0.2)] : undefined,
-    });
+    this.particles.spawn(d.x + l.cellW / 2, d.y + l.cellH / 2, count, colors, { ...o, jitter: 0.3 });
+  }
+
+  /** What a popped brick of `color` turns into for this theme: colours and spawn options. */
+  private debris(color: Color, cw: number): { colors: string[]; o: SpawnOptions } {
+    const pal = this.ctx.palette;
+    const base = pal.brickColors[color];
+    const light = lighten(base, 0.3);
+    const basic: SpawnOptions = { speed: [180, 320], size: [cw * 0.09, cw * 0.16], life: [350, 500], gravity: 900, drag: 0.25 };
+    switch (pal.popStyle) {
+      case "dots":
+        return { colors: [base, lighten(base, 0.55), "#ffffff"], o: { ...basic, shape: 1 } };
+      case "cubes": {
+        const side = pal.brickSide?.[color];
+        return { colors: [base, light], o: { ...basic, shape: 2, sides: side ? [side, lighten(side, 0.2)] : undefined } };
+      }
+      case "splat":
+        return { colors: [base, light], o: { ...basic, size: [cw * 0.1, cw * 0.2], shape: 3 } };
+      case "sprinkles":
+        return { colors: [base, "#FFFFFF", "#F7A9C4", "#FFE27A", "#9DE3C1"], o: { ...basic, speed: [200, 360], size: [cw * 0.12, cw * 0.2], life: [450, 700], gravity: 1000, drag: 0.3, shape: 4 } };
+      case "shards":
+        return { colors: [base, lighten(base, 0.5), "#FFFFFF"], o: { ...basic, speed: [220, 380], size: [cw * 0.1, cw * 0.2], life: [400, 600], gravity: 800, drag: 0.3, shape: 6 } };
+      case "bats":
+        return { colors: ["#1F1A24", "#2A1F33"], o: { speed: [120, 220], size: [cw * 0.22, cw * 0.34], life: [600, 900], gravity: -260, drag: 0.5, shape: 5, dir: -Math.PI / 2, spread: 1.2 } };
+      case "snow":
+        return { colors: ["#FFFFFF", lighten(base, 0.6)], o: { speed: [120, 240], size: [cw * 0.1, cw * 0.18], life: [500, 800], gravity: 150, drag: 0.2, shape: 7 } };
+      case "confetti":
+        return { colors: [base, "#F2D16B", "#FFFFFF"], o: { ...basic, speed: [200, 340], size: [cw * 0.1, cw * 0.18], life: [450, 700], gravity: 600, shape: 0 } };
+      default:
+        return { colors: [base, light], o: { ...basic, shape: 0 } };
+    }
+  }
+
+  /** Level clear: a fountain of the theme's debris from every column. */
+  private celebrate(): void {
+    const l = this.board.layout;
+    const n = l.cellNum;
+    const y = cellY(l, n) - l.cellSep;
+    for (let x = 0; x < n; x++) {
+      const color = ((x % 6) + 1) as Color;
+      const { colors, o } = this.debris(color, l.cellW);
+      const up = { ...o, dir: -Math.PI / 2, spread: 0.45, speed: [o.speed[0] * 1.6, o.speed[1] * 1.9] as [number, number], life: [o.life[0] * 1.6, o.life[1] * 1.8] as [number, number], jitter: 0.35 };
+      this.particles.spawn(cellX(l, x) + l.cellW / 2, y, 9, colors, up);
+    }
+  }
+
+  /** 1 right after a level clear, easing to 0 over FLARE_MS. */
+  private flare(): number {
+    const p = clamp01((this.ctx.clock.t - this.flareT0) / D(FLARE_MS));
+    return (1 - p) * (1 - p);
   }
 
   render(g: CanvasRenderingContext2D): void {
@@ -1673,6 +1725,7 @@ export class GameScene implements Scene {
 
     if (world !== 0) this.renderHoldSlot(g);
     if (this.selectedBrick && this.selectedBrick !== this.held) {
+      if (pal.kind === "generated") this.renderHeldGlow(g, this.selectedBrick);
       if (pal.brickStyle !== "flat") this.renderShadow(g, this.selectedBrick);
       this.renderBrick(g, this.selectedBrick);
     }
@@ -1745,11 +1798,36 @@ export class GameScene implements Scene {
     g.translate(-cx, -cy);
   }
 
+  /** Soft pulsing halo in the brick's own colour while it is picked up. */
+  private renderHeldGlow(g: CanvasRenderingContext2D, b: Brick): void {
+    const l = this.board.layout;
+    const f = this.fxOf(b);
+    const p = this.drawPos(b, f);
+    const s = this.brickScale(b, f);
+    if (s <= 0.02) return;
+    const colour = this.ctx.palette.brickColors[b.color];
+    const pulse = 0.5 + 0.5 * Math.sin(this.ctx.clock.t / 170);
+    const w = l.cellW * s;
+    const h = l.cellH * s;
+    const cx = p.x + l.cellW / 2;
+    const cy = p.y + l.cellH / 2;
+    g.save();
+    g.shadowColor = colour;
+    g.shadowBlur = l.cellW * (0.3 + 0.25 * pulse);
+    g.globalAlpha = 0.4 + 0.4 * pulse;
+    fillRoundRect(g, cx - w / 2, cy - h / 2, w, h, l.cellW * 0.18, colour);
+    g.restore();
+  }
+
   /** Where a brick is drawn this frame: interpolated sim position plus feel-layer offsets. */
   private drawPos(b: Brick, f: BrickFx): { x: number; y: number } {
     const alpha = this.ctx.clock.alpha;
     let x = lerp(b.prevX, b.spriteX, alpha) + f.dx;
     let y = lerp(b.prevY, b.spriteY, alpha) + f.dy - 4 * f.lift;
+    // Resting bricks breathe by under a pixel on a slow stagger so a quiet board still feels alive.
+    if (this.ctx.palette.kind === "generated" && b.gridX >= 0 && b !== this.selectedBrick && this.state !== "lost") {
+      y += Math.sin((this.ctx.clock.t / IDLE_MS) * Math.PI * 2 + b.gridX * 0.9 + b.gridY * 1.7) * IDLE_AMP;
+    }
     if (this.pushT0 >= 0 && b.gridX >= 0) {
       const l = this.board.layout;
       const pitch = l.cellH + l.cellSep;
@@ -2112,7 +2190,7 @@ export class GameScene implements Scene {
     const { world } = this.ctx.session;
 
     if (pal.kind === "generated") {
-      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t, l);
+      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t, l, this.flare());
       const pad = l.cellW * 0.04;
       if (pal.timer === "wells") {
         // Wells for every cell and a tray for the replenish line; the next

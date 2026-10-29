@@ -3,7 +3,8 @@
  * storage, no allocation while running. Positions are in logical screen
  * units; velocities in units per second.
  */
-export type ParticleShape = 0 | 1 | 2 | 3; // 0 = rounded square (fleck), 1 = dot, 2 = extruded cube, 3 = paint splat
+/** 0 fleck, 1 dot, 2 extruded cube, 3 paint splat, 4 sprinkle, 5 bat, 6 shard, 7 snowflake. */
+export type ParticleShape = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export interface SpawnOptions {
   /** Outward speed range (units/s). */
@@ -160,10 +161,61 @@ export class Particles {
         g.arc(-s * 0.35, -s * 0.15, s * 0.28, 0, Math.PI * 2);
         g.fill();
         g.restore();
+      } else if (this.shape[i] === 5) {
+        // bat: two wing humps, flapping as it goes
+        const flap = 0.4 + 0.6 * Math.abs(Math.sin(k * Math.PI * 6));
+        g.save();
+        g.translate(this.x[i], this.y[i]);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.quadraticCurveTo(-s * 0.5, -s * (0.6 + flap * 0.4), -s, -s * 0.2 * flap);
+        g.quadraticCurveTo(-s * 0.7, s * 0.1, -s * 0.45, s * 0.05);
+        g.quadraticCurveTo(-s * 0.2, s * 0.25, 0, s * 0.15);
+        g.quadraticCurveTo(s * 0.2, s * 0.25, s * 0.45, s * 0.05);
+        g.quadraticCurveTo(s * 0.7, s * 0.1, s, -s * 0.2 * flap);
+        g.quadraticCurveTo(s * 0.5, -s * (0.6 + flap * 0.4), 0, 0);
+        g.closePath();
+        g.fill();
+        g.restore();
+      } else if (this.shape[i] === 7) {
+        // snowflake: three strokes through the centre
+        g.save();
+        g.translate(this.x[i], this.y[i]);
+        g.rotate(this.rot[i]);
+        g.strokeStyle = this.color[i];
+        g.lineWidth = Math.max(1, s * 0.14);
+        g.lineCap = "round";
+        g.beginPath();
+        for (let a = 0; a < 3; a++) {
+          const ang = (a * Math.PI) / 3;
+          g.moveTo(Math.cos(ang) * s * 0.5, Math.sin(ang) * s * 0.5);
+          g.lineTo(-Math.cos(ang) * s * 0.5, -Math.sin(ang) * s * 0.5);
+        }
+        g.stroke();
+        g.restore();
       } else {
         g.save();
         g.translate(this.x[i], this.y[i]);
         g.rotate(this.rot[i]);
+        if (this.shape[i] === 4) {
+          // sprinkle: a short rounded dash
+          g.beginPath();
+          g.roundRect(-s * 0.7, -s * 0.2, s * 1.4, s * 0.4, s * 0.2);
+          g.fill();
+          g.restore();
+          continue;
+        }
+        if (this.shape[i] === 6) {
+          // shard: a slim triangle
+          g.beginPath();
+          g.moveTo(0, -s * 0.65);
+          g.lineTo(s * 0.4, s * 0.4);
+          g.lineTo(-s * 0.4, s * 0.4);
+          g.closePath();
+          g.fill();
+          g.restore();
+          continue;
+        }
         if (this.shape[i] === 2) {
           g.fillStyle = this.side[i];
           g.beginPath();

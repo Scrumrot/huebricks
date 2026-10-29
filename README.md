@@ -70,6 +70,12 @@ Keyboard: `Q`/`←` rotate counter-clockwise, `E`/`→` rotate clockwise, hold
 `Space`/`↓` to speed up, `H` hold / pick up, `P` pause, `Esc` back to the
 title, `M` mute, `T` switch theme.
 
+Smaller touches: resting bricks breathe on a slow stagger, a picked-up
+brick carries a pulsing halo in its colour, each theme pops into its own
+debris (paint splats, sprinkles, gem shards, bats, snowflakes, confetti),
+and a level clear sends a fountain of it up the board while the backdrop
+reacts (lights flare, snow flurries, the moon brightens).
+
 ## Themes
 
 Switch themes any time: the pill in the top-right of the title screen, the

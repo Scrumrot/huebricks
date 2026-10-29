@@ -245,7 +245,7 @@ export function drawHalloweenTray(g: Ctx, x: number, y: number, w: number, h: nu
  * a band of fog; with a layout a dark slab under the grid, candy-dark wells
  * and the cauldron.
  */
-export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout): void {
+export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout, flare = 0): void {
   const sr = screenRect();
   const sky = g.createLinearGradient(0, 0, 0, sr.h);
   sky.addColorStop(0, BG);
@@ -264,7 +264,7 @@ export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout): void {
   const my = sr.h * 0.2;
   const mr = Math.min(sr.w, sr.h) * 0.11;
   const glow = g.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 3);
-  glow.addColorStop(0, "rgba(255,230,160,0.25)");
+  glow.addColorStop(0, `rgba(255,230,160,${0.25 + flare * 0.45})`);
   glow.addColorStop(1, "rgba(255,230,160,0)");
   g.fillStyle = glow;
   g.fillRect(mx - mr * 3, my - mr * 3, mr * 6, mr * 6);
@@ -289,7 +289,7 @@ export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout): void {
     const ph = (t / (14000 + i * 2300) + i * 0.37) % 1;
     const x = sr.w * (ph * 1.3 - 0.15);
     const y = sr.h * (0.12 + 0.25 * Math.sin(ph * Math.PI * 2 + i)) + Math.sin(t / 300 + i) * 4;
-    bat(g, x, y, 10 + i * 2, 0.5 + 0.5 * Math.sin(t / 120 + i));
+    bat(g, x, y, 10 + i * 2, 0.5 + 0.5 * Math.sin(t / (120 - flare * 70) + i));
   }
   // hills and fog
   g.fillStyle = "#0B0612";
