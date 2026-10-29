@@ -5,9 +5,7 @@ import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, type Pil
 import { fillScreen, screenRect } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
-import { drawPaper } from "../engine/modernSkin";
-import { drawSpectraBackdrop } from "../engine/spectraSkin";
-import { drawDeliciousBackdrop } from "../engine/deliciousSkin";
+import { BACKDROPS } from "../engine/backdrops";
 import { nextTheme, THEME_LABELS } from "../engine/theme";
 import { Tweens } from "../engine/tween";
 import { GameScene } from "./GameScene";
@@ -393,7 +391,7 @@ export class TitleScene implements Scene {
   /** Idle wall animation: random flips (classic) or little hops that swap colour at the top (blocky). */
   private updateWall(): void {
     const theme = this.ctx.palette.name;
-    if (theme === "pigment" || theme === "spectra" || theme === "delicious") return;
+    if (this.ctx.palette.kind === "generated" && this.ctx.palette.titleDeco !== "wall") return;
     if (theme === "blocky") {
       if (this.time % 40 === 0) {
         for (let i = 0; i < 2; i++) {
@@ -601,7 +599,7 @@ export class TitleScene implements Scene {
       g.translate(c.x, c.y - lift);
       g.rotate(tilt);
       const s = c.size;
-      fillRoundRect(g, -s / 2, -s / 2 + 4 + lift * 0.3, s, s, s * 0.18, "rgba(60,40,20,0.18)");
+      fillRoundRect(g, -s / 2, -s / 2 + 4 + lift * 0.3, s, s, s * 0.18, this.ctx.palette.brickShadow ?? "rgba(0,0,0,0.35)");
       drawSprite(g, sp, c.frame, -s / 2, -s / 2, s, s);
       g.restore();
     }
@@ -617,25 +615,12 @@ export class TitleScene implements Scene {
 
     fillScreen(g, pal.background);
 
-    if (pal.name === "pigment") {
-      drawPaper(g, this.ctx.clock.t);
-      this.renderScatter(g);
-      if (subMenu) {
-        // Push the chips back so the menu reads as the foreground.
-        fillScreen(g, "rgba(243,238,228,0.72)");
-      }
-    } else if (pal.name === "delicious") {
-      drawDeliciousBackdrop(g, this.ctx.clock.t);
-      this.renderScatter(g);
-      if (subMenu) {
-        fillScreen(g, "rgba(255,244,234,0.72)");
-      }
-    } else if (pal.name === "spectra") {
-      drawSpectraBackdrop(g, this.ctx.clock.t);
-      this.renderBubbles(g);
-      if (subMenu) {
-        fillScreen(g, "rgba(7,7,12,0.7)");
-      }
+    if (pal.kind === "generated" && pal.titleDeco !== "wall") {
+      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t);
+      if (pal.titleDeco === "chips") this.renderScatter(g);
+      else this.renderBubbles(g);
+      // Push the decoration back so the menu reads as the foreground.
+      if (subMenu) fillScreen(g, pal.titleDim);
     } else if (pal.name === "blocky") {
       drawBlockyBackdrop(g, this.ctx.clock.t);
       // Staggered wall of toy bricks, every other row shifted half a brick.

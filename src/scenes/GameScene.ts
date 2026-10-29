@@ -21,10 +21,9 @@ import { ButtonFeel } from "../engine/buttonFeel";
 import { drawBlock, drawBlockTransformed, drawCard, drawLine, drawPillButton, drawSprite, drawSpritePartX, drawText, fillRoundRect, type PillButton } from "../engine/draw";
 import { fillScreen } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
-import { drawBlockyBackdrop } from "../engine/blockySkin";
-import { drawCellWell, drawPaper, drawStain, drawTray, rgba } from "../engine/modernSkin";
-import { drawSpectraBackdrop } from "../engine/spectraSkin";
-import { drawDeliciousBackdrop } from "../engine/deliciousSkin";
+import { drawCellWell, drawStain, drawTray, rgba } from "../engine/modernSkin";
+import { BACKDROPS, FURNITURE } from "../engine/backdrops";
+import { nextTheme, THEME_LABELS } from "../engine/theme";
 import { Particles } from "../engine/particles";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
@@ -793,6 +792,7 @@ export class GameScene implements Scene {
     this.ctx.audio.play("menuselect_snd");
     if (hit.id === "resume") this.state = "rest";
     else if (hit.id === "menu") this.quitToTitle();
+    else if (hit.id === "theme") this.ctx.setTheme(nextTheme(this.ctx.save.theme));
   }
 
   /** Buttons on the pause and game-over cards. */
@@ -811,6 +811,7 @@ export class GameScene implements Scene {
     return [
       { id: "resume", label: "Resume", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
       { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
+      { id: "theme", label: `Theme: ${THEME_LABELS[this.ctx.palette.name]}`, cx, cy: y + 52, w: w * 2 + 16, h },
     ];
   }
 
@@ -2111,18 +2112,21 @@ export class GameScene implements Scene {
     const { world } = this.ctx.session;
 
     if (pal.kind === "generated") {
-      if (pal.backdrop === "paper") drawPaper(g, this.ctx.clock.t);
-      else if (pal.backdrop === "blocky") drawBlockyBackdrop(g, this.ctx.clock.t, l);
-      else if (pal.backdrop === "delicious") drawDeliciousBackdrop(g, this.ctx.clock.t, l);
-      else drawSpectraBackdrop(g, this.ctx.clock.t, l);
+      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t, l);
       const pad = l.cellW * 0.04;
-      if (pal.backdrop === "paper") {
-        // Cells pressed into the paper, a tray with wells for the replenish line, and any paint stains.
-        for (let x = 0; x < n; x++) {
-          for (let y = 0; y < n; y++) drawCellWell(g, cellX(l, x) + pad, cellY(l, y) + pad, l.cellW - pad * 2, l.cellH - pad * 2);
+      if (pal.timer === "wells") {
+        // Wells for every cell and a tray for the replenish line; the next
+        // well fills with the incoming colour as the timer runs. Paper also
+        // shows its paint stains.
+        const paper = pal.backdrop === "paper";
+        const { well, tray } = (pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]) || { well: drawCellWell, tray: drawTray };
+        if (paper) {
+          for (let x = 0; x < n; x++) {
+            for (let y = 0; y < n; y++) well(g, cellX(l, x) + pad, cellY(l, y) + pad, l.cellW - pad * 2, l.cellH - pad * 2);
+          }
         }
         const ry = replenishY(l);
-        drawTray(g, l.boardX - 8, ry - 8, l.boardW + 16, l.cellH + 16);
+        tray(g, l.boardX - 8, ry - 8, l.boardW + 16, l.cellH + 16);
         const t0 = this.ctx.clock.t;
         if (this.readyToPush) {
           // The tray reddens and pulses as the push gets closer.
@@ -2139,7 +2143,7 @@ export class GameScene implements Scene {
           const wy = ry + pad;
           const ww = l.cellW - pad * 2;
           const wh = l.cellH - pad * 2;
-          drawCellWell(g, wx, wy, ww, wh);
+          well(g, wx, wy, ww, wh);
           if (x !== filling || this.readyToPush) continue;
           const fh = wh * level;
           if (fh < 0.5) continue;
@@ -2154,7 +2158,7 @@ export class GameScene implements Scene {
           g.restore();
         }
         const t = this.ctx.clock.t;
-        for (const st of this.stains) {
+        for (const st of pal.stains ? this.stains : []) {
           const p = (t - st.t0) / st.dur;
           if (p < 0) continue;
           const a = p < 0.08 ? p / 0.08 : 1 - easeOutCubic((p - 0.08) / 0.92);
@@ -2364,7 +2368,7 @@ export class GameScene implements Scene {
     const maxP = Math.max(0, this.maxPercentage);
     const barFlash = t - this.barFlashT0;
 
-    if (pal.backdrop === "paper") return;
+    if (pal.timer === "wells") return;
 
     if (pal.kind === "generated") {
       // Fill timer: a well with one segment per replenish slot. It fills left
@@ -2457,7 +2461,7 @@ export class GameScene implements Scene {
     const off = this.cardOffset();
     const vp = this.ctx.view;
     const w = Math.min(440, vp.w - 24);
-    const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0) - (buttons ? 0 : 50);
+    const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0) - (buttons ? 0 : 50) + (this.state === "menu" ? 52 : 0);
     const x = vp.w / 2 - w / 2;
     const y = vp.h / 2 - 110 + off;
     g.save();
@@ -2495,7 +2499,7 @@ export class GameScene implements Scene {
       "Paused",
       [`${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}   ·   Score ${s.score}`],
       undefined,
-      "Q / E rotate  ·  H hold a brick  ·  Space speed up  ·  P pause  ·  Esc quit",
+      "Q / E rotate  ·  H hold  ·  Space speed up  ·  T theme  ·  P pause  ·  Esc quit",
     );
   }
 

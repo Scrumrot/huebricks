@@ -72,12 +72,27 @@ title, `M` mute, `T` switch theme.
 
 ## Themes
 
-Four themes, cycled with the pill in the top-right corner of the title or
+Switch themes any time: the pill in the top-right of the title screen, the
+"Theme" button on the pause card, or the T key, all cycle through them and
+the choice is remembered.
+
+Nine themes, cycled with the pill in the top-right corner of the title or
 the `T` key:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
   crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
   buttons on a gingham bakery counter.
+- **Crystals** (`src/engine/crystalsSkin.ts`): faceted gemstones in a dark
+  cave, cabochon buttons, and a geode tray whose sockets fill with light as
+  the next gem forms (the Pigment-style fill wells).
+- **Halloween** (`src/engine/halloweenSkin.ts`): glossy candies that drip
+  slime, jack-o'-lantern buttons, bats and a moon over foggy hills, and a
+  cauldron tray.
+- **Winter** (`src/engine/winterSkin.ts`): snow-capped ice cubes, snowball
+  buttons, falling snow over hills and pines, and an ice-shelf tray.
+- **Christmas** (`src/engine/christmasSkin.ts`): wrapped presents with bows,
+  bauble buttons, a string of twinkling lights, a candy-cane wordmark and a
+  sleigh tray.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -136,6 +151,10 @@ src/
     blockySkin.ts  generated "Blocky" sprite set
     spectraSkin.ts generated "Spectra" sprite set
     deliciousSkin.ts generated "Delicious" sprite set
+    crystalsSkin.ts generated "Crystals" sprite set
+    skinKit.ts      shared builder the seasonal themes are made from
+    halloweenSkin.ts, winterSkin.ts, christmasSkin.ts
+    backdrops.ts    backdrop and tray/well registry by theme
     modernSlides.ts tutorial slides, drawn in whichever theme's style
     save.ts      localStorage persistence
   scenes/

@@ -8,6 +8,10 @@ import { buildModernSprites, MODERN_COLORS } from "./engine/modernSkin";
 import { buildBlockySprites } from "./engine/blockySkin";
 import { buildSpectraSprites } from "./engine/spectraSkin";
 import { buildDeliciousSprites } from "./engine/deliciousSkin";
+import { buildCrystalsSprites } from "./engine/crystalsSkin";
+import { buildHalloweenSprites } from "./engine/halloweenSkin";
+import { buildWinterSprites } from "./engine/winterSkin";
+import { buildChristmasSprites } from "./engine/christmasSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
@@ -201,6 +205,10 @@ async function boot(): Promise<void> {
     blocky: buildBlockySprites,
     spectra: buildSpectraSprites,
     delicious: buildDeliciousSprites,
+    crystals: buildCrystalsSprites,
+    halloween: buildHalloweenSprites,
+    winter: buildWinterSprites,
+    christmas: buildChristmasSprites,
   };
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
 

@@ -5,17 +5,27 @@
  */
 import type { Color } from "../core/color";
 
-export type ThemeName = "classic" | "pigment" | "delicious" | "blocky" | "spectra";
+export type ThemeName = "classic" | "pigment" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "blocky" | "spectra";
 
 /** Order the theme toggle cycles through. */
-export const THEME_ORDER: readonly ThemeName[] = ["pigment", "delicious", "spectra", "blocky", "classic"];
+export const THEME_ORDER: readonly ThemeName[] = ["pigment", "delicious", "crystals", "halloween", "winter", "christmas", "spectra", "blocky", "classic"];
 
 export function nextTheme(current: ThemeName): ThemeName {
   const i = THEME_ORDER.indexOf(current);
   return THEME_ORDER[(i + 1) % THEME_ORDER.length];
 }
 
-export const THEME_LABELS: Record<ThemeName, string> = { classic: "Classic", pigment: "Pigment", delicious: "Delicious", blocky: "Blocky", spectra: "Spectra" };
+export const THEME_LABELS: Record<ThemeName, string> = {
+  classic: "Classic",
+  pigment: "Pigment",
+  delicious: "Delicious",
+  crystals: "Crystals",
+  halloween: "Halloween",
+  winter: "Winter",
+  christmas: "Christmas",
+  blocky: "Blocky",
+  spectra: "Spectra",
+};
 
 export interface UiPalette {
   /** Overlay card fill, edge and hard shadow / extrusion. */
@@ -38,9 +48,15 @@ export interface Palette {
   /** Classic uses the original art and layout; generated themes share the modern layout. */
   kind: "classic" | "generated";
   /** How the board backdrop is painted. */
-  backdrop: "sprites" | "paper" | "delicious" | "blocky" | "spectra";
+  backdrop: "sprites" | "paper" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "blocky" | "spectra";
   /** How bricks are drawn around their face sprite. */
   brickStyle: "flat" | "chip" | "extruded" | "gel";
+  /** Fill timer: a bar under the grid, or the next tray well filling with the incoming colour. */
+  timer: "bar" | "wells";
+  /** Title-screen decoration: scattered tiles, tiles floating up, or the flipping brick wall. */
+  titleDeco: "chips" | "bubbles" | "wall";
+  /** Veil over the decoration while a sub-menu is open. */
+  titleDim: string;
   /** Canvas clear colour behind everything (also the page background). */
   background: string;
   hudText: string;
@@ -110,9 +126,12 @@ export interface Palette {
 
 export const CLASSIC: Palette = {
   name: "classic",
+  titleDeco: "wall",
+  titleDim: "rgba(0,0,0,0)",
   kind: "classic",
   backdrop: "sprites",
   brickStyle: "flat",
+  timer: "bar",
   background: "#000000",
   hudText: "#000000",
   hudMuted: "#333333",
@@ -172,9 +191,12 @@ export const CLASSIC: Palette = {
 /** "Pigment": paint chips on warm paper. */
 export const PIGMENT: Palette = {
   name: "pigment",
+  titleDeco: "chips",
+  titleDim: "rgba(243,238,228,0.72)",
   kind: "generated",
   backdrop: "paper",
   brickStyle: "chip",
+  timer: "wells",
   background: "#F3EEE4",
   hudText: "#1F1C18",
   hudMuted: "#8A8378",
@@ -234,9 +256,12 @@ export const PIGMENT: Palette = {
 /** "Blocky": soft 3D toy bricks, one light from the top-left, cel shaded. */
 export const BLOCKY: Palette = {
   name: "blocky",
+  titleDeco: "wall",
+  titleDim: "rgba(18,24,38,0.72)",
   kind: "generated",
   backdrop: "blocky",
   brickStyle: "extruded",
+  timer: "bar",
   background: "#121826",
   hudText: "#F8FAFC",
   hudMuted: "#8B96AD",
@@ -296,9 +321,12 @@ export const BLOCKY: Palette = {
 /** "Spectra": glowing gel tiles on a deep dark field. */
 export const SPECTRA: Palette = {
   name: "spectra",
+  titleDeco: "bubbles",
+  titleDim: "rgba(7,7,12,0.7)",
   kind: "generated",
   backdrop: "spectra",
   brickStyle: "gel",
+  timer: "bar",
   background: "#07070C",
   hudText: "#F2F2F7",
   hudMuted: "#8A8AA3",
@@ -358,9 +386,12 @@ export const SPECTRA: Palette = {
 /** "Delicious": frosted tarts on a gingham bakery counter. */
 export const DELICIOUS: Palette = {
   name: "delicious",
+  titleDeco: "chips",
+  titleDim: "rgba(255,244,234,0.72)",
   kind: "generated",
   backdrop: "delicious",
   brickStyle: "chip",
+  timer: "bar",
   background: "#FFF4EA",
   hudText: "#4A2E2A",
   hudMuted: "#A07E74",
@@ -417,4 +448,274 @@ export const DELICIOUS: Palette = {
   stains: false,
 };
 
-export const PALETTES: Record<ThemeName, Palette> = { classic: CLASSIC, pigment: PIGMENT, delicious: DELICIOUS, blocky: BLOCKY, spectra: SPECTRA };
+/** "Crystals": cut gemstones in a dark cave; the tray sockets fill with light. */
+export const CRYSTALS: Palette = {
+  name: "crystals",
+  titleDeco: "bubbles",
+  titleDim: "rgba(11,16,32,0.7)",
+  kind: "generated",
+  backdrop: "crystals",
+  brickStyle: "gel",
+  timer: "wells",
+  background: "#0B1020",
+  hudText: "#EAF2FF",
+  hudMuted: "#8C9BC0",
+  gridLine: "#ffffff",
+  gridAlpha: 0,
+  crosshair: "rgba(234,242,255,0.6)",
+  titleText: "#EAF2FF",
+  titleMuted: "#8C9BC0",
+  overlayText: "#EAF2FF",
+  overlayAccent: "#F7C848",
+  tutorialText: "#EAF2FF",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Outfit, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "rgba(20,26,46,0.97)",
+    cardEdge: "rgba(140,200,255,0.25)",
+    cardShadow: "rgba(0,0,0,0.55)",
+    dim: "rgba(5,8,20,0.66)",
+    primary: "#5FB8FF",
+    primaryHover: "#8ACBFF",
+    primaryText: "#0B1020",
+    secondary: "rgba(140,200,255,0.10)",
+    secondaryHover: "rgba(140,200,255,0.2)",
+    secondaryEdge: "rgba(140,200,255,0.3)",
+    secondaryText: "#EAF2FF",
+  },
+  brickShadow: null,
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#ffffff",
+  flashAlpha: 0.18,
+  callout: "#EAF2FF",
+  calloutShadow: "rgba(0,0,0,0.8)",
+  multColors: ["", "#EAF2FF", "#F7C848", "#F2803A", "#E2304F", "#9B5DE5"],
+  brickColors: { 1: "#E2304F", 2: "#2F6FE4", 3: "#9B5DE5", 4: "#F7C848", 5: "#F2803A", 6: "#2FCB7A", 7: "#2A2F45" },
+  well: "rgba(0,0,0,0.38)",
+  wellEdge: "rgba(140,200,255,0.2)",
+  wellActive: "rgba(140,200,255,0.15)",
+  wellActiveEdge: "rgba(140,200,255,0.6)",
+  wellHint: "rgba(234,242,255,0.18)",
+  pill: "rgba(140,200,255,0.08)",
+  pillEdge: "rgba(140,200,255,0.18)",
+  track: "rgba(255,255,255,0.12)",
+  trackMax: "rgba(255,255,255,0.3)",
+  barFlash: "#ffffff",
+  goalAccent: "#5FB8FF",
+  ring: "#ffffff",
+  dust: ["rgba(200,230,255,0.6)", "rgba(255,255,255,0.35)"],
+  glow: true,
+  flashFromBrick: true,
+  particlesAdditive: true,
+  stains: false,
+};
+
+/** "Halloween: candies under a harvest moon". */
+export const HALLOWEEN: Palette = {
+  name: "halloween",
+  kind: "generated",
+  backdrop: "halloween",
+  brickStyle: "chip",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(18,10,31,0.72)",
+  background: "#120A1F",
+  hudText: "#F3E9FF",
+  hudMuted: "#9C8BB5",
+  gridLine: "#F3E9FF",
+  gridAlpha: 0,
+  crosshair: "rgba(243,233,255,0.6)",
+  titleText: "#F3E9FF",
+  titleMuted: "#9C8BB5",
+  overlayText: "#F3E9FF",
+  overlayAccent: "#F27A1A",
+  tutorialText: "#F3E9FF",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Fredoka, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#1E1230",
+    cardEdge: "rgba(242,122,26,0.6)",
+    cardShadow: "rgba(0,0,0,0.5)",
+    dim: "rgba(8,4,16,0.66)",
+    primary: "#F27A1A",
+    primaryHover: "#FF9A3C",
+    primaryText: "#1F1A24",
+    secondary: "rgba(242,122,26,0.12)",
+    secondaryHover: "rgba(242,122,26,0.22)",
+    secondaryEdge: "rgba(242,122,26,0.4)",
+    secondaryText: "#F3E9FF",
+  },
+  brickShadow: "rgba(0,0,0,0.45)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFE9A8",
+  flashAlpha: 0.18,
+  callout: "#F3E9FF",
+  calloutShadow: "rgba(0,0,0,0.8)",
+  multColors: ["", "#F3E9FF", "#F2C230", "#F27A1A", "#D9303F", "#8B3FD9"],
+  brickColors: { 1: "#D9303F", 2: "#3C6BE0", 3: "#8B3FD9", 4: "#F2C230", 5: "#F27A1A", 6: "#5BD63A", 7: "#1F1A24" },
+  well: "rgba(0,0,0,0.35)",
+  wellEdge: "rgba(242,122,26,0.25)",
+  wellActive: "rgba(242,122,26,0.15)",
+  wellActiveEdge: "rgba(242,122,26,0.7)",
+  wellHint: "rgba(243,233,255,0.18)",
+  pill: "rgba(242,122,26,0.1)",
+  pillEdge: "rgba(242,122,26,0.25)",
+  track: "rgba(255,255,255,0.12)",
+  trackMax: "rgba(255,255,255,0.3)",
+  barFlash: "#F27A1A",
+  goalAccent: "#7FE33A",
+  ring: "#FFFFFF",
+  dust: ["rgba(127,227,58,0.7)", "rgba(242,122,26,0.6)"],
+  glow: false,
+  flashFromBrick: true,
+  particlesAdditive: false,
+  stains: false,
+};
+
+/** "Winter: ice cubes in the snow". */
+export const WINTER: Palette = {
+  name: "winter",
+  kind: "generated",
+  backdrop: "winter",
+  brickStyle: "chip",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(220,235,247,0.72)",
+  background: "#DCEBF7",
+  hudText: "#1E3448",
+  hudMuted: "#6F8AA3",
+  gridLine: "#1E3448",
+  gridAlpha: 0,
+  crosshair: "rgba(30,52,72,0.5)",
+  titleText: "#1E3448",
+  titleMuted: "#6F8AA3",
+  overlayText: "#1E3448",
+  overlayAccent: "#E5534B",
+  tutorialText: "#1E3448",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Outfit, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#FFFFFF",
+    cardEdge: "rgba(143,192,232,0.8)",
+    cardShadow: "rgba(30,52,72,0.18)",
+    dim: "rgba(30,52,72,0.4)",
+    primary: "#3F86E8",
+    primaryHover: "#5E9CF0",
+    primaryText: "#FFFFFF",
+    secondary: "rgba(63,134,232,0.1)",
+    secondaryHover: "rgba(63,134,232,0.2)",
+    secondaryEdge: "rgba(63,134,232,0.45)",
+    secondaryText: "#1E3448",
+  },
+  brickShadow: "rgba(30,52,72,0.2)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.3,
+  callout: "#1E3448",
+  calloutShadow: "rgba(255,255,255,0.9)",
+  multColors: ["", "#1E3448", "#F0C94A", "#F0914A", "#E5534B", "#8E6BE0"],
+  brickColors: { 1: "#E5534B", 2: "#3F86E8", 3: "#8E6BE0", 4: "#F0C94A", 5: "#F0914A", 6: "#3FBF8A", 7: "#2B3240" },
+  well: "rgba(143,192,232,0.22)",
+  wellEdge: "rgba(143,192,232,0.6)",
+  wellActive: "rgba(63,134,232,0.15)",
+  wellActiveEdge: "#3F86E8",
+  wellHint: "rgba(30,52,72,0.2)",
+  pill: "rgba(63,134,232,0.1)",
+  pillEdge: "rgba(63,134,232,0.3)",
+  track: "rgba(30,52,72,0.1)",
+  trackMax: "rgba(30,52,72,0.22)",
+  barFlash: "#3F86E8",
+  goalAccent: "#3F86E8",
+  ring: "#FFFFFF",
+  dust: ["rgba(255,255,255,0.9)", "rgba(143,192,232,0.8)"],
+  glow: false,
+  flashFromBrick: false,
+  particlesAdditive: false,
+  stains: false,
+};
+
+/** "Christmas: presents under the lights". */
+export const CHRISTMAS: Palette = {
+  name: "christmas",
+  kind: "generated",
+  backdrop: "christmas",
+  brickStyle: "chip",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(7,26,18,0.72)",
+  background: "#0E2A1E",
+  hudText: "#FFF7EC",
+  hudMuted: "#A9C7B3",
+  gridLine: "#FFF7EC",
+  gridAlpha: 0,
+  crosshair: "rgba(255,247,236,0.6)",
+  titleText: "#FFF7EC",
+  titleMuted: "#A9C7B3",
+  overlayText: "#FFF7EC",
+  overlayAccent: "#F2D16B",
+  tutorialText: "#FFF7EC",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Fredoka, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "rgba(10,36,26,0.97)",
+    cardEdge: "rgba(242,209,107,0.7)",
+    cardShadow: "rgba(0,0,0,0.45)",
+    dim: "rgba(3,14,9,0.66)",
+    primary: "#D7263D",
+    primaryHover: "#E8415A",
+    primaryText: "#FFFFFF",
+    secondary: "rgba(242,209,107,0.12)",
+    secondaryHover: "rgba(242,209,107,0.22)",
+    secondaryEdge: "rgba(242,209,107,0.45)",
+    secondaryText: "#FFF7EC",
+  },
+  brickShadow: "rgba(0,0,0,0.45)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.18,
+  callout: "#FFF7EC",
+  calloutShadow: "rgba(0,0,0,0.8)",
+  multColors: ["", "#FFF7EC", "#F2C230", "#F08A2E", "#D7263D", "#8A4FD1"],
+  brickColors: { 1: "#D7263D", 2: "#2F6BD6", 3: "#8A4FD1", 4: "#F2C230", 5: "#F08A2E", 6: "#2E9E4F", 7: "#2B2B2B" },
+  well: "rgba(0,0,0,0.3)",
+  wellEdge: "rgba(242,209,107,0.25)",
+  wellActive: "rgba(242,209,107,0.15)",
+  wellActiveEdge: "rgba(242,209,107,0.8)",
+  wellHint: "rgba(255,247,236,0.18)",
+  pill: "rgba(242,209,107,0.1)",
+  pillEdge: "rgba(242,209,107,0.3)",
+  track: "rgba(255,255,255,0.12)",
+  trackMax: "rgba(255,255,255,0.3)",
+  barFlash: "#F2D16B",
+  goalAccent: "#F2D16B",
+  ring: "#FFFFFF",
+  dust: ["rgba(255,255,255,0.8)", "rgba(242,209,107,0.8)"],
+  glow: false,
+  flashFromBrick: false,
+  particlesAdditive: false,
+  stains: false,
+};
+
+export const PALETTES: Record<ThemeName, Palette> = {
+  classic: CLASSIC,
+  pigment: PIGMENT,
+  delicious: DELICIOUS,
+  crystals: CRYSTALS,
+  halloween: HALLOWEEN,
+  winter: WINTER,
+  christmas: CHRISTMAS,
+  blocky: BLOCKY,
+  spectra: SPECTRA,
+};
