@@ -3,8 +3,8 @@
  * storage, no allocation while running. Positions are in logical screen
  * units; velocities in units per second.
  */
-/** 0 fleck, 1 dot, 2 extruded cube, 3 paint splat, 4 sprinkle, 5 bat, 6 shard, 7 snowflake. */
-export type ParticleShape = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** 0 fleck, 1 dot, 2 extruded cube, 3 paint splat, 4 sprinkle, 5 bat, 6 shard, 7 snowflake, 8 leaf. */
+export type ParticleShape = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export interface SpawnOptions {
   /** Outward speed range (units/s). */
@@ -202,6 +202,23 @@ export class Particles {
           g.beginPath();
           g.roundRect(-s * 0.7, -s * 0.2, s * 1.4, s * 0.4, s * 0.2);
           g.fill();
+          g.restore();
+          continue;
+        }
+        if (this.shape[i] === 8) {
+          // leaf: pointed ellipse with a vein, tumbling
+          g.beginPath();
+          g.moveTo(-s * 0.7, 0);
+          g.quadraticCurveTo(0, -s * 0.55, s * 0.7, 0);
+          g.quadraticCurveTo(0, s * 0.55, -s * 0.7, 0);
+          g.closePath();
+          g.fill();
+          g.strokeStyle = "rgba(0,0,0,0.25)";
+          g.lineWidth = 1;
+          g.beginPath();
+          g.moveTo(-s * 0.5, 0);
+          g.lineTo(s * 0.5, 0);
+          g.stroke();
           g.restore();
           continue;
         }

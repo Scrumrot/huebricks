@@ -5,10 +5,22 @@
  */
 import type { Color } from "../core/color";
 
-export type ThemeName = "classic" | "pigment" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "blocky" | "spectra";
+export type ThemeName =
+  | "classic"
+  | "pigment"
+  | "delicious"
+  | "crystals"
+  | "halloween"
+  | "winter"
+  | "christmas"
+  | "gooey"
+  | "vintage"
+  | "nature"
+  | "blocky"
+  | "spectra";
 
 /** Order the theme toggle cycles through. */
-export const THEME_ORDER: readonly ThemeName[] = ["pigment", "delicious", "crystals", "halloween", "winter", "christmas", "spectra", "blocky", "classic"];
+export const THEME_ORDER: readonly ThemeName[] = ["pigment", "delicious", "crystals", "halloween", "winter", "christmas", "gooey", "vintage", "nature", "spectra", "blocky", "classic"];
 
 export function nextTheme(current: ThemeName): ThemeName {
   const i = THEME_ORDER.indexOf(current);
@@ -23,6 +35,9 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   halloween: "Halloween",
   winter: "Winter",
   christmas: "Christmas",
+  gooey: "Gooey",
+  vintage: "Vintage",
+  nature: "Nature",
   blocky: "Blocky",
   spectra: "Spectra",
 };
@@ -48,13 +63,13 @@ export interface Palette {
   /** Classic uses the original art and layout; generated themes share the modern layout. */
   kind: "classic" | "generated";
   /** How the board backdrop is painted. */
-  backdrop: "sprites" | "paper" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "blocky" | "spectra";
+  backdrop: "sprites" | "paper" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "gooey" | "vintage" | "nature" | "blocky" | "spectra";
   /** How bricks are drawn around their face sprite. */
   brickStyle: "flat" | "chip" | "extruded" | "gel";
   /** Fill timer: a bar under the grid, or the next tray well filling with the incoming colour. */
   timer: "bar" | "wells";
   /** What flies out of a popped brick. */
-  popStyle: "flecks" | "dots" | "cubes" | "splat" | "sprinkles" | "shards" | "bats" | "snow" | "confetti";
+  popStyle: "flecks" | "dots" | "cubes" | "splat" | "sprinkles" | "shards" | "bats" | "snow" | "confetti" | "leaves";
   /** Title-screen decoration: scattered tiles, tiles floating up, or the flipping brick wall. */
   titleDeco: "chips" | "bubbles" | "wall";
   /** Veil over the decoration while a sub-menu is open. */
@@ -719,6 +734,204 @@ export const CHRISTMAS: Palette = {
   stains: false,
 };
 
+/** "Gooey: glossy slime in a dark lab". */
+export const GOOEY: Palette = {
+  name: "gooey",
+  popStyle: "splat",
+  kind: "generated",
+  backdrop: "gooey",
+  brickStyle: "gel",
+  timer: "wells",
+  titleDeco: "bubbles",
+  titleDim: "rgba(20,16,38,0.72)",
+  background: "#141026",
+  hudText: "#F2F0FF",
+  hudMuted: "#9A92BF",
+  gridLine: "#F2F0FF",
+  gridAlpha: 0,
+  crosshair: "rgba(242,240,255,0.6)",
+  titleText: "#F2F0FF",
+  titleMuted: "#9A92BF",
+  overlayText: "#F2F0FF",
+  overlayAccent: "#8CF23B",
+  tutorialText: "#F2F0FF",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Fredoka, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#221A3E",
+    cardEdge: "rgba(140,242,59,0.55)",
+    cardShadow: "rgba(0,0,0,0.5)",
+    dim: "rgba(8,6,20,0.66)",
+    primary: "#8CF23B",
+    primaryHover: "#A8FF66",
+    primaryText: "#1A1430",
+    secondary: "rgba(140,242,59,0.12)",
+    secondaryHover: "rgba(140,242,59,0.22)",
+    secondaryEdge: "rgba(140,242,59,0.4)",
+    secondaryText: "#F2F0FF",
+  },
+  brickShadow: null,
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.18,
+  callout: "#F2F0FF",
+  calloutShadow: "rgba(0,0,0,0.8)",
+  multColors: ["", "#F2F0FF", "#FFE14D", "#FF9A3C", "#FF4F7A", "#B266FF"],
+  brickColors: { 1: "#FF4F7A", 2: "#3FA0FF", 3: "#B266FF", 4: "#FFE14D", 5: "#FF9A3C", 6: "#8CF23B", 7: "#2C2742" },
+  well: "rgba(0,0,0,0.35)",
+  wellEdge: "rgba(140,242,59,0.22)",
+  wellActive: "rgba(140,242,59,0.15)",
+  wellActiveEdge: "rgba(140,242,59,0.7)",
+  wellHint: "rgba(242,240,255,0.18)",
+  pill: "rgba(140,242,59,0.1)",
+  pillEdge: "rgba(140,242,59,0.25)",
+  track: "rgba(255,255,255,0.12)",
+  trackMax: "rgba(255,255,255,0.3)",
+  barFlash: "#8CF23B",
+  goalAccent: "#3FA0FF",
+  ring: "#FFFFFF",
+  dust: ["rgba(200,255,150,0.7)", "rgba(255,255,255,0.4)"],
+  glow: true,
+  flashFromBrick: true,
+  particlesAdditive: true,
+  stains: false,
+};
+
+/** "Vintage: letterpress on aged paper". */
+export const VINTAGE: Palette = {
+  name: "vintage",
+  popStyle: "flecks",
+  kind: "generated",
+  backdrop: "vintage",
+  brickStyle: "chip",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(232,220,194,0.72)",
+  background: "#E8DCC2",
+  hudText: "#2B2622",
+  hudMuted: "#7A6E5E",
+  gridLine: "#2B2622",
+  gridAlpha: 0,
+  crosshair: "rgba(43,38,34,0.5)",
+  titleText: "#2B2622",
+  titleMuted: "#7A6E5E",
+  overlayText: "#2B2622",
+  overlayAccent: "#B5412F",
+  tutorialText: "#2B2622",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Georgia, "Times New Roman", Times, serif',
+  display: 'Georgia, "Times New Roman", Times, serif',
+  ui: {
+    card: "#F3EAD6",
+    cardEdge: "rgba(43,38,34,0.6)",
+    cardShadow: "rgba(43,38,34,0.25)",
+    dim: "rgba(60,48,32,0.42)",
+    primary: "#2B2622",
+    primaryHover: "#4A423A",
+    primaryText: "#F3EAD6",
+    secondary: "rgba(43,38,34,0.06)",
+    secondaryHover: "rgba(43,38,34,0.12)",
+    secondaryEdge: "rgba(43,38,34,0.4)",
+    secondaryText: "#2B2622",
+  },
+  brickShadow: "rgba(43,38,34,0.22)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#F3EAD6",
+  flashAlpha: 0.2,
+  callout: "#2B2622",
+  calloutShadow: "rgba(243,234,214,0.9)",
+  multColors: ["", "#2B2622", "#C9A227", "#C96A2B", "#B5412F", "#6B3E6B"],
+  brickColors: { 1: "#B5412F", 2: "#2F4A6B", 3: "#6B3E6B", 4: "#C9A227", 5: "#C96A2B", 6: "#5E7A3A", 7: "#2B2622" },
+  well: "rgba(43,38,34,0.06)",
+  wellEdge: "rgba(43,38,34,0.35)",
+  wellActive: "rgba(181,65,47,0.12)",
+  wellActiveEdge: "#B5412F",
+  wellHint: "rgba(43,38,34,0.2)",
+  pill: "rgba(43,38,34,0.07)",
+  pillEdge: "rgba(43,38,34,0.25)",
+  track: "rgba(43,38,34,0.12)",
+  trackMax: "rgba(43,38,34,0.25)",
+  barFlash: "#B5412F",
+  goalAccent: "#2F4A6B",
+  ring: "#F3EAD6",
+  dust: ["rgba(43,38,34,0.35)", "rgba(243,234,214,0.6)"],
+  glow: false,
+  flashFromBrick: false,
+  particlesAdditive: false,
+  stains: false,
+};
+
+/** "Nature: river stones on wood in a meadow". */
+export const NATURE: Palette = {
+  name: "nature",
+  popStyle: "leaves",
+  kind: "generated",
+  backdrop: "nature",
+  brickStyle: "chip",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(207,232,245,0.72)",
+  background: "#CFE8F5",
+  hudText: "#2E3A26",
+  hudMuted: "#6F8260",
+  gridLine: "#2E3A26",
+  gridAlpha: 0,
+  crosshair: "rgba(46,58,38,0.5)",
+  titleText: "#2E3A26",
+  titleMuted: "#6F8260",
+  overlayText: "#2E3A26",
+  overlayAccent: "#E8893A",
+  tutorialText: "#2E3A26",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Fredoka, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#FBF7EC",
+    cardEdge: "rgba(91,174,78,0.8)",
+    cardShadow: "rgba(46,58,38,0.22)",
+    dim: "rgba(40,60,30,0.42)",
+    primary: "#5BAE4E",
+    primaryHover: "#6FC262",
+    primaryText: "#FFFFFF",
+    secondary: "rgba(91,174,78,0.12)",
+    secondaryHover: "rgba(91,174,78,0.22)",
+    secondaryEdge: "rgba(91,174,78,0.5)",
+    secondaryText: "#2E3A26",
+  },
+  brickShadow: "rgba(46,58,38,0.25)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.22,
+  callout: "#2E3A26",
+  calloutShadow: "rgba(255,255,255,0.9)",
+  multColors: ["", "#2E3A26", "#F2C94C", "#E8893A", "#D9534F", "#8E63C9"],
+  brickColors: { 1: "#D9534F", 2: "#3F8FD2", 3: "#8E63C9", 4: "#F2C94C", 5: "#E8893A", 6: "#5BAE4E", 7: "#3E3128" },
+  well: "rgba(62,49,40,0.28)",
+  wellEdge: "rgba(0,0,0,0.18)",
+  wellActive: "rgba(91,174,78,0.2)",
+  wellActiveEdge: "#5BAE4E",
+  wellHint: "rgba(46,58,38,0.2)",
+  pill: "rgba(91,174,78,0.12)",
+  pillEdge: "rgba(91,174,78,0.35)",
+  track: "rgba(46,58,38,0.12)",
+  trackMax: "rgba(46,58,38,0.25)",
+  barFlash: "#5BAE4E",
+  goalAccent: "#3F8FD2",
+  ring: "#FFFFFF",
+  dust: ["rgba(91,174,78,0.7)", "rgba(255,255,255,0.6)"],
+  glow: false,
+  flashFromBrick: false,
+  particlesAdditive: false,
+  stains: false,
+};
+
 export const PALETTES: Record<ThemeName, Palette> = {
   classic: CLASSIC,
   pigment: PIGMENT,
@@ -727,6 +940,9 @@ export const PALETTES: Record<ThemeName, Palette> = {
   halloween: HALLOWEEN,
   winter: WINTER,
   christmas: CHRISTMAS,
+  gooey: GOOEY,
+  vintage: VINTAGE,
+  nature: NATURE,
   blocky: BLOCKY,
   spectra: SPECTRA,
 };

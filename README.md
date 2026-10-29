@@ -88,7 +88,7 @@ Switch themes any time: the pill in the top-right of the title screen, the
 "Theme" button on the pause card, or the T key, all cycle through them and
 the choice is remembered.
 
-Nine themes, cycled with the pill in the top-right corner of the title or
+Twelve themes, cycled with the pill in the top-right corner of the title or
 the `T` key:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
@@ -105,6 +105,15 @@ the `T` key:
 - **Christmas** (`src/engine/christmasSkin.ts`): wrapped presents with bows,
   bauble buttons, a string of twinkling lights, a candy-cane wordmark and a
   sleigh tray.
+- **Gooey** (`src/engine/gooeySkin.ts`): wobbly jelly tiles with wet
+  highlights and drips, slime-blob buttons, bubbles rising through a dark lab
+  and a beaker tray.
+- **Vintage** (`src/engine/vintageSkin.ts`): letterpress tiles printed out of
+  register on aged, halftoned paper, badge buttons, a serif wordmark and a
+  wooden type case.
+- **Nature** (`src/engine/natureSkin.ts`): river stones with sprouts on a
+  wooden board, wood-slice buttons, sun, clouds and blowing leaves over a
+  meadow, and a log trough.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -165,7 +174,8 @@ src/
     deliciousSkin.ts generated "Delicious" sprite set
     crystalsSkin.ts generated "Crystals" sprite set
     skinKit.ts      shared builder the seasonal themes are made from
-    halloweenSkin.ts, winterSkin.ts, christmasSkin.ts
+    halloweenSkin.ts, winterSkin.ts, christmasSkin.ts,
+    gooeySkin.ts, vintageSkin.ts, natureSkin.ts
     backdrops.ts    backdrop and tray/well registry by theme
     modernSlides.ts tutorial slides, drawn in whichever theme's style
     save.ts      localStorage persistence

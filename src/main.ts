@@ -12,6 +12,9 @@ import { buildCrystalsSprites } from "./engine/crystalsSkin";
 import { buildHalloweenSprites } from "./engine/halloweenSkin";
 import { buildWinterSprites } from "./engine/winterSkin";
 import { buildChristmasSprites } from "./engine/christmasSkin";
+import { buildGooeySprites } from "./engine/gooeySkin";
+import { buildVintageSprites } from "./engine/vintageSkin";
+import { buildNatureSprites } from "./engine/natureSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
@@ -209,6 +212,9 @@ async function boot(): Promise<void> {
     halloween: buildHalloweenSprites,
     winter: buildWinterSprites,
     christmas: buildChristmasSprites,
+    gooey: buildGooeySprites,
+    vintage: buildVintageSprites,
+    nature: buildNatureSprites,
   };
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
 

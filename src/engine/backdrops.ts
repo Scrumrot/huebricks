@@ -3,6 +3,9 @@ import { drawBlockyBackdrop } from "./blockySkin";
 import { drawChristmasBackdrop, drawChristmasTray, drawChristmasWell } from "./christmasSkin";
 import { drawCrystalsBackdrop, drawCrystalTray, drawCrystalWell } from "./crystalsSkin";
 import { drawDeliciousBackdrop } from "./deliciousSkin";
+import { drawGooeyBackdrop, drawGooeyTray, drawGooeyWell } from "./gooeySkin";
+import { drawNatureBackdrop, drawNatureTray, drawNatureWell } from "./natureSkin";
+import { drawVintageBackdrop, drawVintageTray, drawVintageWell } from "./vintageSkin";
 import { drawHalloweenBackdrop, drawHalloweenTray, drawHalloweenWell } from "./halloweenSkin";
 import { drawCellWell, drawPaper, drawTray, type Ctx } from "./modernSkin";
 import { drawSpectraBackdrop } from "./spectraSkin";
@@ -47,6 +50,9 @@ export const BACKDROPS: Record<BackdropName, Backdrop> = {
   halloween: drawHalloweenBackdrop,
   winter: drawWinterBackdrop,
   christmas: drawChristmasBackdrop,
+  gooey: drawGooeyBackdrop,
+  vintage: drawVintageBackdrop,
+  nature: drawNatureBackdrop,
 };
 
 export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
@@ -55,4 +61,7 @@ export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
   halloween: { well: drawHalloweenWell, tray: drawHalloweenTray },
   winter: { well: drawWinterWell, tray: drawWinterTray },
   christmas: { well: drawChristmasWell, tray: drawChristmasTray },
+  gooey: { well: drawGooeyWell, tray: drawGooeyTray },
+  vintage: { well: drawVintageWell, tray: drawVintageTray },
+  nature: { well: drawNatureWell, tray: drawNatureTray },
 };
