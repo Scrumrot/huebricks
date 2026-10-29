@@ -11,6 +11,8 @@ export const SPRITE_FRAMES = {
   brick_border_sprite: 1,
   brick_noicon_sprite: 8,
   brick_pop_sprite: 15,
+  brick_shadow_sprite: 1,
+  brick_glow_sprite: 7,
   brick_sprite: 7,
   color_wheel_sprite: 1,
   credits_sprite: 1,
@@ -56,7 +58,7 @@ export const SPRITE_FRAMES = {
 export type SpriteName = keyof typeof SPRITE_FRAMES;
 
 /** Sprites with no PNG on disk; both themes build them in code (see classicExtras.ts). */
-export const GENERATED_SPRITES: ReadonlySet<SpriteName> = new Set<SpriteName>(["sound_button_sprite"]);
+export const GENERATED_SPRITES: ReadonlySet<SpriteName> = new Set<SpriteName>(["sound_button_sprite", "brick_shadow_sprite", "brick_glow_sprite"]);
 
 export const SOUND_NAMES = [
   "BlocksCombine_snd",

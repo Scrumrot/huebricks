@@ -1,6 +1,6 @@
 import { BLACK, combineColors, type Color } from "./color";
 import { Brick } from "./Brick";
-import { cellX, cellY, computeLayout, replenishY, type Layout } from "./layout";
+import { cellX, cellY, computeLayout, NO_SPACING, replenishY, type Layout, type LayoutSpacing } from "./layout";
 
 /** Minimum connected bricks of one colour needed to pop. */
 export const POP_GROUP_SIZE = 4;
@@ -31,6 +31,7 @@ export type CombineResult = "combined" | "noadd" | "none";
  */
 export class Board {
   layout: Layout;
+  private spacing: LayoutSpacing;
   /** `grid[x][y]`; `y = 0` is the top row. */
   grid: (Brick | null)[][];
   replenishList: Brick[] = [];
@@ -39,9 +40,17 @@ export class Board {
   comboLength = 0;
   comboBonus = 0;
 
-  constructor(cellNum: number) {
-    this.layout = computeLayout(cellNum);
+  constructor(cellNum: number, spacing: LayoutSpacing = NO_SPACING) {
+    this.spacing = spacing;
+    this.layout = computeLayout(cellNum, spacing);
     this.grid = Board.emptyGrid(cellNum);
+  }
+
+  /** Re-measure the board for a theme's breathing room; bricks keep their cells. */
+  setSpacing(spacing: LayoutSpacing): void {
+    this.spacing = spacing;
+    this.layout = computeLayout(this.cellNum, spacing);
+    this.resetBlockPositions();
   }
 
   get cellNum(): number {
@@ -54,7 +63,7 @@ export class Board {
 
   /** Change board size (the tutorial plays on 4x4). Clears the grid. */
   resize(cellNum: number): void {
-    this.layout = computeLayout(cellNum);
+    this.layout = computeLayout(cellNum, this.spacing);
     this.grid = Board.emptyGrid(cellNum);
     this.replenishList = [];
   }

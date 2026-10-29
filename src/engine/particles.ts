@@ -3,7 +3,7 @@
  * storage, no allocation while running. Positions are in logical screen
  * units; velocities in units per second.
  */
-export type ParticleShape = 0 | 1; // 0 = rounded square (fleck), 1 = dot
+export type ParticleShape = 0 | 1 | 2 | 3; // 0 = rounded square (fleck), 1 = dot, 2 = extruded cube, 3 = paint splat
 
 export interface SpawnOptions {
   /** Outward speed range (units/s). */
@@ -23,6 +23,8 @@ export interface SpawnOptions {
   shape?: ParticleShape;
   /** Randomness applied to speed, 0..1. */
   jitter?: number;
+  /** Side-face colours for cubes, parallel to `colors`. */
+  sides?: readonly string[];
 }
 
 export class Particles {
@@ -41,6 +43,7 @@ export class Particles {
   private readonly drag: Float32Array;
   private readonly shape: Uint8Array;
   private readonly color: string[];
+  private readonly side: string[];
 
   constructor(cap = 400) {
     this.cap = cap;
@@ -57,6 +60,7 @@ export class Particles {
     this.drag = new Float32Array(cap);
     this.shape = new Uint8Array(cap);
     this.color = new Array<string>(cap).fill("");
+    this.side = new Array<string>(cap).fill("");
   }
 
   get count(): number {
@@ -86,7 +90,9 @@ export class Particles {
       this.grav[i] = o.gravity ?? 900;
       this.drag[i] = o.drag ?? 0.15;
       this.shape[i] = o.shape ?? 0;
-      this.color[i] = colors[Math.floor(Math.random() * colors.length)];
+      const ci = Math.floor(Math.random() * colors.length);
+      this.color[i] = colors[ci];
+      this.side[i] = o.sides?.[ci] ?? colors[ci];
     }
   }
 
@@ -126,6 +132,7 @@ export class Particles {
     this.drag[i] = this.drag[last];
     this.shape[i] = this.shape[last];
     this.color[i] = this.color[last];
+    this.side[i] = this.side[last];
   }
 
   render(g: CanvasRenderingContext2D): void {
@@ -141,12 +148,31 @@ export class Particles {
         g.beginPath();
         g.arc(this.x[i], this.y[i], s / 2, 0, Math.PI * 2);
         g.fill();
+      } else if (this.shape[i] === 3) {
+        // three overlapping blobs, stretched along the direction of travel
+        const a = Math.atan2(this.vy[i], this.vx[i]);
+        g.save();
+        g.translate(this.x[i], this.y[i]);
+        g.rotate(a);
+        g.beginPath();
+        g.arc(0, 0, s * 0.5, 0, Math.PI * 2);
+        g.arc(s * 0.45, s * 0.1, s * 0.3, 0, Math.PI * 2);
+        g.arc(-s * 0.35, -s * 0.15, s * 0.28, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
       } else {
         g.save();
         g.translate(this.x[i], this.y[i]);
         g.rotate(this.rot[i]);
+        if (this.shape[i] === 2) {
+          g.fillStyle = this.side[i];
+          g.beginPath();
+          g.roundRect(-s / 2, -s / 2 + s * 0.22, s, s, s * 0.2);
+          g.fill();
+          g.fillStyle = this.color[i];
+        }
         g.beginPath();
-        g.roundRect(-s / 2, -s / 2, s, s, s * 0.25);
+        g.roundRect(-s / 2, -s / 2, s, s, s * 0.2);
         g.fill();
         g.restore();
       }

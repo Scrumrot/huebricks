@@ -2,8 +2,11 @@ import { BTN_H, BTN_W, MAX_WORLD, SCREEN_H, SCREEN_W, type GameType } from "../c
 import type { SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
 import { drawCard, drawSprite, drawText, fillRoundRect } from "../engine/draw";
-import { backOut, clamp01, easeOutCubic } from "../engine/easing";
+import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
+import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { drawPaper } from "../engine/modernSkin";
+import { drawSpectraBackdrop } from "../engine/spectraSkin";
+import { nextTheme, THEME_LABELS } from "../engine/theme";
 import { Tweens } from "../engine/tween";
 import { GameScene } from "./GameScene";
 import type { GameContext, Scene } from "./Scene";
@@ -29,6 +32,21 @@ interface WallBrick {
   nextFrame: number;
   /** 0 = idle; otherwise progress of the flip animation in frames. */
   flip: number;
+  /** Blocky wall: 0 = resting, 1 = at the top of a hop. */
+  hop: number;
+}
+
+/** A gel brick drifting up the dark field behind the Spectra title. */
+interface Bubble {
+  x: number;
+  y: number;
+  size: number;
+  speed: number;
+  drift: number;
+  frame: number;
+  /** Fade phase 0..1 over the climb. */
+  phase: number;
+  wobble: number;
 }
 
 /** A paint chip lying on the paper behind the modern title. */
@@ -61,6 +79,7 @@ export class TitleScene implements Scene {
   private buttons: MenuButton[] = [];
   private wall: WallBrick[] = [];
   private chips: ScatterChip[] = [];
+  private bubbles: Bubble[] = [];
   private held: MenuButton | null = null;
   private time = 0;
   private launchT0 = -1;
@@ -74,19 +93,70 @@ export class TitleScene implements Scene {
   constructor(ctx: GameContext) {
     this.ctx = ctx;
     this.feel = new ButtonFeel(this.tweens);
+    this.resetWall();
+    this.scatterChips();
+    this.resetBubbles();
+    this.showMain();
+  }
+
+  /** Twenty gel bricks that float up and fade like bubbles. */
+  private resetBubbles(): void {
+    this.bubbles = Array.from({ length: 20 }, () => this.newBubble(Math.random()));
+  }
+
+  private newBubble(phase: number): Bubble {
+    const size = 22 + Math.random() * 34;
+    return {
+      x: size + Math.random() * (SCREEN_W - size * 2),
+      y: 0,
+      size,
+      speed: 14 + Math.random() * 16,
+      drift: (Math.random() - 0.5) * 10,
+      frame: Math.floor(Math.random() * 6),
+      phase,
+      wobble: Math.random() * Math.PI * 2,
+    };
+  }
+
+  private renderBubbles(g: CanvasRenderingContext2D): void {
+    const sp = this.ctx.sprites;
+    const dt = this.ctx.clock.dt / 1000;
+    const t = this.ctx.clock.t;
+    const travel = SCREEN_H - BTN_H + 60;
+    for (let i = 0; i < this.bubbles.length; i++) {
+      let b = this.bubbles[i];
+      b.phase += (b.speed * dt) / travel;
+      if (b.phase >= 1) {
+        b = this.newBubble(0);
+        this.bubbles[i] = b;
+      }
+      const y = SCREEN_H - BTN_H + 30 - b.phase * travel;
+      const x = b.x + Math.sin(t / 1400 + b.wobble) * b.drift;
+      const a = Math.sin(b.phase * Math.PI) * 0.55;
+      g.globalAlpha = a;
+      const gw = b.size * 1.5;
+      drawSprite(g, sp.brick_glow_sprite, b.frame, x - gw / 2, y - gw / 2, gw, gw);
+      drawSprite(g, sp.brick_noicon_sprite, b.frame, x - b.size / 2, y - b.size / 2, b.size, b.size);
+    }
+    g.globalAlpha = 1;
+  }
+
+  /** The brick wall behind the classic and blocky titles (blocky starts with a few coloured bricks). */
+  private resetWall(): void {
+    const blocky = this.ctx.palette.name === "blocky";
+    this.wall = [];
     for (let row = 0; row < WALL_ROWS; row++) {
-      for (let col = 0; col < WALL_COLS; col++) {
+      for (let col = 0; col <= WALL_COLS; col++) {
         this.wall.push({
           cx: col * WALL_SIZE + WALL_SIZE / 2,
           cy: SCREEN_H - row * WALL_SIZE - WALL_SIZE / 2,
-          frame: 7,
+          frame: blocky && Math.random() < 0.22 ? Math.floor(Math.random() * 6) : 7,
           nextFrame: 7,
           flip: 0,
+          hop: 0,
         });
       }
     }
-    this.scatterChips();
-    this.showMain();
   }
 
   enter(): void {
@@ -141,14 +211,16 @@ export class TitleScene implements Scene {
     return { id, sprite, cx, cy, w, h, pressedFrame, onPress };
   }
 
-  private get modern(): boolean {
-    return this.ctx.palette.name === "modern";
+  private get generated(): boolean {
+    return this.ctx.palette.kind === "generated";
   }
 
   private showMain(): void {
     this.menu = "main";
-    const logo = this.modern
-      ? this.button("logo", "logo_sprite", SCREEN_W / 2, 205, BTN_W * 1.5, BTN_W * 1.5 * (400 / 768), () => this.showModes(), 1)
+    const lg = this.ctx.sprites.logo_sprite;
+    const logoW = BTN_W * (this.ctx.palette.name === "blocky" ? 2.1 : 1.5);
+    const logo = this.generated
+      ? this.button("logo", "logo_sprite", SCREEN_W / 2, 205, logoW, (logoW * lg.height) / lg.width, () => this.showModes(), 1)
       : this.button("logo", "logo_sprite", SCREEN_W / 2, SCREEN_H - BTN_W, BTN_W, BTN_W, () => this.showModes(), 1);
     this.buttons = [
       logo,
@@ -165,7 +237,7 @@ export class TitleScene implements Scene {
   private showModes(): void {
     this.menu = "mode";
     const y = SCREEN_H - BTN_W;
-    const gap = this.modern ? BTN_W * 0.97 : BTN_W;
+    const gap = this.generated ? BTN_W * 0.97 : BTN_W;
     this.buttons = [
       this.button("puzzle", "puzzle_button_sprite", SCREEN_W / 2 - gap, y, BTN_W, BTN_H, () => this.showWorlds("puzzle")),
       this.button("normal", "normal_button_sprite", SCREEN_W / 2, y, BTN_W, BTN_H, () => this.showWorlds("normal")),
@@ -178,7 +250,7 @@ export class TitleScene implements Scene {
     this.menu = "world";
     this.pendingType = type;
     this.buttons = [];
-    const modern = this.modern;
+    const modern = this.generated;
     const size = modern ? BTN_H * 0.84 : BTN_H;
     for (let w = 0; w <= MAX_WORLD; w++) {
       const col = w % 4;
@@ -233,7 +305,9 @@ export class TitleScene implements Scene {
 
     if (this.menu === "main" && inp.released && inp.inCentered(this.themeToggle.cx, this.themeToggle.cy, this.themeToggle.w, this.themeToggle.h)) {
       this.ctx.audio.play("menuselect_snd");
-      this.ctx.setTheme(this.ctx.save.theme === "modern" ? "classic" : "modern");
+      this.ctx.setTheme(nextTheme(this.ctx.save.theme));
+      this.resetWall();
+      this.resetBubbles();
       this.showMain();
       return;
     }
@@ -252,9 +326,25 @@ export class TitleScene implements Scene {
     if (!inp.down) this.held = null;
   }
 
-  /** Random brick flips, echoing the idle animation of the original title (classic only). */
+  /** Idle wall animation: random flips (classic) or little hops that swap colour at the top (blocky). */
   private updateWall(): void {
-    if (this.modern) return;
+    const theme = this.ctx.palette.name;
+    if (theme === "pigment" || theme === "spectra") return;
+    if (theme === "blocky") {
+      if (this.time % 40 === 0) {
+        for (let i = 0; i < 2; i++) {
+          const b = this.wall[Math.floor(Math.random() * this.wall.length)];
+          if (b.hop !== 0) continue;
+          this.tweens.to(b, { hop: 1 }, 150, easeOutCubic, {
+            onDone: () => {
+              b.frame = b.frame === 7 ? Math.floor(Math.random() * 6) : Math.random() < 0.5 ? 7 : Math.floor(Math.random() * 6);
+              this.tweens.to(b, { hop: 0 }, 340, easeOutBack);
+            },
+          });
+        }
+      }
+      return;
+    }
     if (this.time % 45 === 0) {
       for (let i = 0; i < 2; i++) {
         const b = this.wall[Math.floor(Math.random() * this.wall.length)];
@@ -305,7 +395,7 @@ export class TitleScene implements Scene {
     g.fill();
     g.restore();
     if (hover) {
-      const label = this.modern ? "Switch to Classic" : "Switch to Modern";
+      const label = `Switch to ${THEME_LABELS[nextTheme(this.ctx.save.theme)]}`;
       drawText(g, label, t.cx - 4, t.cy + h / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600, align: "right" });
       drawText(g, "(T)", t.cx + 14, t.cy + h / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600, align: "left" });
     }
@@ -333,22 +423,45 @@ export class TitleScene implements Scene {
     const sp = this.ctx.sprites;
     const inp = this.ctx.input;
     const pal = this.ctx.palette;
-    const modern = this.modern;
+    const modern = this.generated;
+    const subMenu = this.menu !== "main" && this.menu !== "launch";
 
     g.fillStyle = pal.background;
     g.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
-    if (modern) {
+    if (pal.name === "pigment") {
       drawPaper(g, this.ctx.clock.t);
       this.renderScatter(g);
-      if (this.menu !== "main" && this.menu !== "launch") {
+      if (subMenu) {
         // Push the chips back so the menu reads as the foreground.
         g.fillStyle = "rgba(243,238,228,0.72)";
+        g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+      }
+    } else if (pal.name === "spectra") {
+      drawSpectraBackdrop(g, this.ctx.clock.t);
+      this.renderBubbles(g);
+      if (subMenu) {
+        g.fillStyle = "rgba(7,7,12,0.7)";
+        g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+      }
+    } else if (pal.name === "blocky") {
+      drawBlockyBackdrop(g, this.ctx.clock.t);
+      // Staggered wall of toy bricks, every other row shifted half a brick.
+      const wallSprite = sp.brick_noicon_sprite;
+      for (const b of this.wall) {
+        const row = Math.round((SCREEN_H - WALL_SIZE / 2 - b.cy) / WALL_SIZE);
+        const ox = row % 2 === 1 ? -WALL_SIZE / 2 : 0;
+        if (ox === 0 && b.cx > SCREEN_W) continue;
+        drawSprite(g, wallSprite, b.frame, b.cx + ox - WALL_SIZE / 2, b.cy - WALL_SIZE / 2 - 10 * b.hop, WALL_SIZE, WALL_SIZE);
+      }
+      if (subMenu) {
+        g.fillStyle = "rgba(18,24,38,0.72)";
         g.fillRect(0, 0, SCREEN_W, SCREEN_H);
       }
     } else {
       const wallSprite = sp.brick_noicon_sprite;
       for (const b of this.wall) {
+        if (b.cx > SCREEN_W) continue;
         let xs = 1;
         if (b.flip > 0) {
           const t = b.flip / FLIP_FRAMES;

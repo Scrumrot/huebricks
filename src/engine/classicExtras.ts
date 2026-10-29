@@ -52,6 +52,25 @@ function inpaintIcon(g: CanvasRenderingContext2D, w: number, h: number): void {
   g.putImageData(img, 0, 0);
 }
 
+/** The classic art has no ambient brick shadow; a blank frame keeps the sprite map complete. */
+export function buildBlankShadow(): Sprite {
+  const c = document.createElement("canvas");
+  c.width = 4;
+  c.height = 4;
+  return { name: "brick_shadow_sprite", frames: [c], width: 4, height: 4 };
+}
+
+/** No outer glow in the classic art either. */
+export function buildBlankGlow(): Sprite {
+  const frames = Array.from({ length: 7 }, () => {
+    const c = document.createElement("canvas");
+    c.width = 4;
+    c.height = 4;
+    return c;
+  });
+  return { name: "brick_glow_sprite", frames, width: 4, height: 4 };
+}
+
 export function buildClassicSoundButton(sprites: SpriteMap): Sprite {
   const face = sprites.pause_button_sprite;
   const w = face.width;

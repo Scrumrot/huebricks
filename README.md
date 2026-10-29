@@ -54,24 +54,38 @@ title, `M` mute, `T` switch theme.
 
 ## Themes
 
+Four themes, cycled with the pill in the top-right corner of the title or
+the `T` key:
+
+- **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
+  near-black field. Each brick has an inner glow, a crisp inner edge and a
+  soft outer bloom so same-colour groups read as one light; pops flare to
+  white with additive glowing particles; the score and chain meter glow in
+  the multiplier colour; the title is a spectrum wordmark over gel bricks
+  floating up like bubbles. Display text is Space Grotesk.
+
 - **Classic** uses the original sprite PNGs and sounds from the GameMaker
   project (`public/assets`).
-- **Modern** ("Pigment") rebuilds every sprite on offscreen canvases at
-  start-up (`src/engine/modernSkin.ts`): thick paint chips with hand-cut
+- **Blocky** (`src/engine/blockySkin.ts`): soft 3D toy bricks with
+  a flat top face and a darker extruded side, lit from the top-left. The
+  extrusion is drawn live: it grows when a brick is lifted, squashes when it
+  lands and collapses as a brick hops out of a pop. Dark flat backdrop with a
+  dot grid, raised panels for the HUD rail and the replenish tray, and a
+  staggered wall of hopping bricks on the title. Display text is Outfit.
+- **Pigment** (default, `src/engine/modernSkin.ts`) rebuilds every sprite on
+  offscreen canvases at start-up: thick paint chips with hand-cut
   edges on warm paper, ink glyphs in the same shape language as the original
-  art, paper chip buttons and a "HueBricks" wordmark. Display text uses
+  art (white on every chip), paper chip buttons and a "HueBricks" wordmark. Display text uses
   Fredoka and HUD text uses Inter, loaded from Google Fonts with system
   fallbacks when offline. The ten tutorial slides are redrawn too
   (`src/engine/modernSlides.ts`), with the same lesson order as the originals.
 
-Both themes share a real-time **feel layer**: the simulation still runs at
+All themes share a real-time **feel layer**: the simulation still runs at
 the original 30 Hz, but everything you see is interpolated or tweened at the
 display's refresh rate. Pops have hit-stop, particles, a shockwave, screen
 shake on big chains and rising score labels; bricks squash when they land,
 the board turns as one piece with a small overshoot, combines wipe the new
 colour in radially, invalid moves shake, buttons spring, and cards slide in.
-Hovering a board brick while holding a replenish brick previews the colour
-you would get.
 
 The theme is remembered in `localStorage` together with the high score, the
 furthest world reached and the mute setting.
@@ -97,7 +111,10 @@ src/
     particles.ts pooled particle system
     clock.ts     frame clock with hit-stop and sim interpolation
     buttonFeel.ts press / hover scale for buttons
-    modernSkin.ts  generated modern ("Pigment") sprite set
+    modernSkin.ts  generated "Pigment" sprite set and shared drawing helpers
+    blockySkin.ts  generated "Blocky" sprite set
+    spectraSkin.ts generated "Spectra" sprite set
+    modernSlides.ts tutorial slides, drawn in whichever theme's style
     save.ts      localStorage persistence
   scenes/
     TitleScene.ts  logo -> mode -> world menus, credits, theme toggle

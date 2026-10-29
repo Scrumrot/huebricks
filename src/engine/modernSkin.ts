@@ -1,7 +1,7 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
 import { SCREEN_H, SCREEN_W } from "../core/constants";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
-import { buildTutorialSlides } from "./modernSlides";
+import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
 
 /**
  * "Pigment": the modern sprite set, generated on offscreen canvases.
@@ -304,8 +304,11 @@ function glyphPath(g: Ctx, glyph: Glyph, cx: number, cy: number, r: number): voi
   }
 }
 
-/** Ink glyphs: a 2.5 px stroke at cell scale; the innermost shape is filled on mixed colours. */
-export function drawGlyphs(g: Ctx, color: Color, cx: number, cy: number, size: number, ink = inkOn(MODERN_COLORS[color])): void {
+/** Glyph ink: white on every chip. */
+export const GLYPH_INK = "rgba(255,255,255,0.92)";
+
+/** White glyphs: a 2.5 px stroke at cell scale; the innermost shape is filled on mixed colours. */
+export function drawGlyphs(g: Ctx, color: Color, cx: number, cy: number, size: number, ink = GLYPH_INK): void {
   const glyphs = GLYPHS[color];
   g.lineWidth = size * 0.04;
   g.lineJoin = "round";
@@ -393,7 +396,7 @@ export function chevronUp(g: Ctx, cx: number, cy: number, r: number): void {
   }
 }
 
-function gearIcon(g: Ctx, cx: number, cy: number, r: number): void {
+export function gearIcon(g: Ctx, cx: number, cy: number, r: number): void {
   const teeth = 8;
   const outer = r * 0.52;
   const inner = r * 0.38;
@@ -514,6 +517,79 @@ export function drawPaper(g: Ctx, t: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Board furniture
+// ---------------------------------------------------------------------------
+
+let wellCanvas: HTMLCanvasElement | null = null;
+
+/** A cell pressed into the paper: darker top-left inner shadow, light bottom-right lip. */
+function cellWell(): HTMLCanvasElement {
+  if (wellCanvas) return wellCanvas;
+  wellCanvas = canvas(128, 128, (g, w, h) => {
+    const r = w * 0.18;
+    roundRect(g, 0, 0, w, h, r);
+    g.fillStyle = PAPER_CELL;
+    g.fill();
+    g.save();
+    g.clip();
+    g.lineWidth = w * 0.06;
+    g.strokeStyle = "rgba(60,40,20,0.12)";
+    roundRect(g, -w * 0.02, -h * 0.02, w, h, r);
+    g.stroke();
+    g.lineWidth = w * 0.03;
+    g.strokeStyle = "rgba(255,255,255,0.55)";
+    roundRect(g, w * 0.025, h * 0.025, w, h, r);
+    g.stroke();
+    g.restore();
+  });
+  return wellCanvas;
+}
+
+export function drawCellWell(g: Ctx, x: number, y: number, w: number, h: number): void {
+  g.drawImage(cellWell(), x, y, w, h);
+}
+
+/** Shallow paper tray that holds the replenish line. */
+export function drawTray(g: Ctx, x: number, y: number, w: number, h: number): void {
+  roundRect(g, x, y + 4, w, h, 12);
+  g.fillStyle = "rgba(60,40,20,0.16)";
+  g.fill();
+  roundRect(g, x, y, w, h, 12);
+  g.fillStyle = "#EDE7DB";
+  g.fill();
+  g.lineWidth = 1;
+  g.strokeStyle = "rgba(60,40,20,0.14)";
+  g.stroke();
+}
+
+/**
+ * A paint stain: a few overlapping blobs, seeded so each stain keeps its
+ * shape while it fades. Drawn with multiply so it soaks into the paper.
+ */
+export function drawStain(g: Ctx, cx: number, cy: number, r: number, color: string, alpha: number, seed: number): void {
+  const rnd = seeded(seed);
+  g.save();
+  g.globalCompositeOperation = "multiply";
+  g.globalAlpha = alpha;
+  for (let i = 0; i < 5; i++) {
+    const a = rnd() * Math.PI * 2;
+    const d = rnd() * r * 0.4;
+    const rr = r * (0.5 + rnd() * 0.4);
+    const bx = cx + Math.cos(a) * d;
+    const by = cy + Math.sin(a) * d;
+    const grad = g.createRadialGradient(bx, by, 0, bx, by, rr);
+    grad.addColorStop(0, color);
+    grad.addColorStop(0.55, rgba(color, 0.7));
+    grad.addColorStop(1, rgba(color, 0));
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(bx, by, rr, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}
+
+// ---------------------------------------------------------------------------
 // Sprite builders
 // ---------------------------------------------------------------------------
 
@@ -546,6 +622,19 @@ function buildBorder(): Sprite {
   });
 }
 
+/** Soft warm shadow drawn under the hard one; wider and darker when a brick is lifted. */
+function buildSoftShadow(): Sprite {
+  return sprite("brick_shadow_sprite", S, S, (g, _i, w, h) => {
+    const pad = w * 0.14;
+    g.shadowColor = "rgba(60,40,20,0.55)";
+    g.shadowBlur = w * 0.12;
+    g.shadowOffsetX = w * 4;
+    g.fillStyle = "#000";
+    roundRect(g, pad - w * 4, pad, w - pad * 2, h - pad * 2, w * 0.18);
+    g.fill();
+  });
+}
+
 /** Unused by the new pop (particles and scale do the work); a faint ink ring keeps the sprite valid. */
 function buildPop(): Sprite {
   const n = SPRITE_FRAMES.brick_pop_sprite;
@@ -564,7 +653,7 @@ function buildExpand(name: SpriteName): Sprite {
   return sprite(name, 8, 8, () => undefined);
 }
 
-/** Ink selector ring with a little paint drip at the bottom in the brick's colour. */
+/** Ink selector ring with a faint tint of the brick's colour. */
 function buildSelector(): Sprite {
   return sprite("replenish_selector_sprite", S, S, (g, i, w, h) => {
     const colour = i < 7 ? MODERN_COLORS[(i + 1) as Color] : null;
@@ -578,20 +667,6 @@ function buildSelector(): Sprite {
     g.lineWidth = lw;
     g.strokeStyle = INK;
     g.lineJoin = "round";
-    g.stroke();
-    // drip tab
-    const cx = w / 2;
-    const by = h - pad - lw / 2;
-    g.fillStyle = colour ?? INK;
-    g.beginPath();
-    g.moveTo(cx - w * 0.06, by);
-    g.lineTo(cx + w * 0.06, by);
-    g.quadraticCurveTo(cx + w * 0.05, by + w * 0.06, cx, by + w * 0.1);
-    g.quadraticCurveTo(cx - w * 0.05, by + w * 0.06, cx - w * 0.06, by);
-    g.closePath();
-    g.fill();
-    g.lineWidth = lw * 0.5;
-    g.strokeStyle = INK;
     g.stroke();
   });
 }
@@ -807,7 +882,7 @@ function buildModeButton(name: SpriteName, label: string, base: string, glyph: G
     const pressed = i === 1;
     chip(g, pad, pad + (pressed ? 6 : 0), w - pad * 2, h - pad * 2 - 10, pressed ? shade(base, -0.12) : base, { radius: h * 0.22, wobble: 2.5, seed: 70 + label.length, shadow: pressed ? 0 : 10 });
     const ink = inkOn(base);
-    modeGlyph(g, glyph, w * 0.2, h / 2 - 4 + (pressed ? 6 : 0), h * 0.15, ink);
+    modeGlyph(g, glyph, w * 0.2, h / 2 - 4 + (pressed ? 6 : 0), h * 0.15, GLYPH_INK);
     display(g, label, w * 0.61, h / 2 - 2 + (pressed ? 6 : 0), h * 0.29, ink);
   });
 }
@@ -864,13 +939,48 @@ function buildCredits(): Sprite {
   });
 }
 
-/** Build the modern sprite set, falling back to the classic sprites where no modern art exists. */
+/** How the tutorial slides look in this theme. */
+export const PIGMENT_SLIDES: SlideStyle = {
+  background(g, w, h) {
+    g.fillStyle = PAPER;
+    g.fillRect(0, 0, w, h);
+    const vig = g.createRadialGradient(w / 2, h * 0.45, w * 0.25, w / 2, h * 0.45, w * 0.75);
+    vig.addColorStop(0, "rgba(230,223,210,0)");
+    vig.addColorStop(1, "rgba(230,223,210,1)");
+    g.fillStyle = vig;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = "rgba(60,40,20,0.07)";
+    g.fillRect(0, h * 0.78, w, h * 0.22);
+  },
+  font: FONT,
+  display: DISPLAY,
+  text: INK,
+  muted: INK_MUTED,
+  bgColor: PAPER,
+  dotIdle: "rgba(31,28,24,0.2)",
+  card: CARD,
+  cardEdge: "rgba(31,28,24,0.18)",
+  cardShadow: "rgba(60,40,20,0.14)",
+  gridLine: "rgba(31,28,24,0.07)",
+  well: PAPER_CELL,
+  wellEdge: "rgba(31,28,24,0.14)",
+  track: "rgba(31,28,24,0.12)",
+  colors: MODERN_COLORS,
+  inkOn,
+  tile,
+  glyphs: (g, c, cx, cy, size) => drawGlyphs(g, c, cx, cy, size),
+  button: chipButton,
+};
+
+/** Build the Pigment sprite set, falling back to the classic sprites where no modern art exists. */
 export function buildModernSprites(classic: SpriteMap): SpriteMap {
   const modern: Partial<SpriteMap> = {
     brick_sprite: buildBricks(),
     brick_noicon_sprite: buildNoIcon(),
     brick_border_sprite: buildBorder(),
     brick_pop_sprite: buildPop(),
+    brick_shadow_sprite: buildSoftShadow(),
+    brick_glow_sprite: sprite("brick_glow_sprite", 8, 8, () => undefined),
     red_expand_sprite: buildExpand("red_expand_sprite"),
     blue_expand_sprite: buildExpand("blue_expand_sprite"),
     yellow_expand_sprite: buildExpand("yellow_expand_sprite"),
@@ -903,7 +1013,7 @@ export function buildModernSprites(classic: SpriteMap): SpriteMap {
   for (let w = 0; w <= 7; w++) {
     modern[`world${w}_sprite` as SpriteName] = buildWorldButton(w);
   }
-  const slides = buildTutorialSlides(modern.logo_sprite!);
+  const slides = buildTutorialSlides(modern.logo_sprite!, PIGMENT_SLIDES);
   modern.tutorial_intro_sprite = slides.intro;
   modern.tutorial_outro_sprite = slides.outro;
   return { ...classic, ...modern } as SpriteMap;

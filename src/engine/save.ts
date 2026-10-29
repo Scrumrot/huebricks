@@ -17,17 +17,26 @@ export interface SaveData {
 
 const KEY = "huebricks.save.v1";
 
-/** Bumped to 2 when Modern became the default theme: older saves drop their stored theme once. */
-const SAVE_VERSION = 2;
+/**
+ * 2: Modern became the default theme (older saves drop their stored theme once).
+ * 3: themes renamed; "modern" is now "pigment" and "blocky" is the default.
+ * 4: "spectra" added and made the default.
+ * 5: "pigment" is the default.
+ */
+const SAVE_VERSION = 5;
 
-const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: false, theme: "modern", v: SAVE_VERSION };
+const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: false, theme: "pigment", v: SAVE_VERSION };
+
+const THEMES: readonly string[] = ["classic", "pigment", "blocky", "spectra"];
 
 export function loadGame(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw) as Partial<SaveData>;
-    if ((parsed.v ?? 1) < 2) parsed.theme = DEFAULTS.theme;
+    const v = parsed.v ?? 1;
+    if (v < 5) parsed.theme = DEFAULTS.theme;
+    if (!THEMES.includes(parsed.theme as string)) parsed.theme = DEFAULTS.theme;
     return { ...DEFAULTS, ...parsed, v: SAVE_VERSION };
   } catch {
     return { ...DEFAULTS };

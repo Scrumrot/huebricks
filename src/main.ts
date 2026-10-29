@@ -5,9 +5,11 @@ import { Clock } from "./engine/clock";
 import { drawText, fillRoundRect, setDefaultFont } from "./engine/draw";
 import { Input } from "./engine/input";
 import { buildModernSprites, MODERN_COLORS } from "./engine/modernSkin";
-import { buildClassicSoundButton } from "./engine/classicExtras";
+import { buildBlockySprites } from "./engine/blockySkin";
+import { buildSpectraSprites } from "./engine/spectraSkin";
+import { buildBlankGlow, buildBlankShadow, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
-import { PALETTES, type ThemeName } from "./engine/theme";
+import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
 import type { GameContext, Scene } from "./scenes/Scene";
 import { TitleScene } from "./scenes/TitleScene";
 
@@ -62,7 +64,7 @@ resize();
 /** Loading screen: one paint chip cycling through the seven colours. */
 const LOAD_COLORS = [1, 2, 3, 4, 5, 6, 7].map((c) => MODERN_COLORS[c as 1 | 2 | 3 | 4 | 5 | 6 | 7]);
 function renderLoading(done: number, total: number): void {
-  const pal = PALETTES.modern;
+  const pal = PALETTES.pigment;
   g.fillStyle = pal.background;
   g.fillRect(0, 0, SCREEN_W, SCREEN_H);
   const size = 64;
@@ -84,6 +86,8 @@ async function waitForFonts(): Promise<void> {
     document.fonts.load('600 32px "Fredoka"'),
     document.fonts.load('700 16px "Inter"'),
     document.fonts.load('500 16px "Inter"'),
+    document.fonts.load('700 32px "Outfit"'),
+    document.fonts.load('700 32px "Space Grotesk"'),
   ]).then(() => document.fonts.ready.then(() => undefined));
   await Promise.race([load, timeout]).catch(() => undefined);
 }
@@ -126,15 +130,22 @@ async function boot(): Promise<void> {
   }
   loading = false;
   sprites.sound_button_sprite = buildClassicSoundButton(sprites);
+  sprites.brick_shadow_sprite = buildBlankShadow();
+  sprites.brick_glow_sprite = buildBlankGlow();
   loadingEl?.remove();
 
   const classicSprites = sprites;
-  let modernSprites: SpriteMap | null = null;
+  const builders: Record<Exclude<ThemeName, "classic">, (c: SpriteMap) => SpriteMap> = {
+    pigment: buildModernSprites,
+    blocky: buildBlockySprites,
+    spectra: buildSpectraSprites,
+  };
+  const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
 
   let scene: Scene;
   const ctx: GameContext = {
     sprites,
-    palette: PALETTES[save.theme] ?? PALETTES.modern,
+    palette: PALETTES[save.theme] ?? PALETTES.pigment,
     audio,
     input,
     clock,
@@ -146,12 +157,8 @@ async function boot(): Promise<void> {
       next.enter?.();
     },
     setTheme(theme: ThemeName) {
-      if (theme === "modern") {
-        modernSprites ??= buildModernSprites(classicSprites);
-        ctx.sprites = modernSprites;
-      } else {
-        ctx.sprites = classicSprites;
-      }
+      if (theme !== "classic") skins[theme] ??= builders[theme](classicSprites);
+      ctx.sprites = skins[theme]!;
       ctx.palette = PALETTES[theme];
       setDefaultFont(ctx.palette.font);
       applyPageTheme(theme);
@@ -162,7 +169,7 @@ async function boot(): Promise<void> {
       saveGame(save);
     },
   };
-  ctx.setTheme(save.theme === "classic" ? "classic" : "modern");
+  ctx.setTheme(save.theme);
   scene = new TitleScene(ctx);
   scene.enter?.();
 
@@ -182,7 +189,7 @@ async function boot(): Promise<void> {
       saveGame(save);
     }
     if (e.key === "t" || e.key === "T") {
-      ctx.setTheme(save.theme === "modern" ? "classic" : "modern");
+      ctx.setTheme(nextTheme(save.theme));
     }
   });
 
