@@ -56,6 +56,8 @@ const audio = new AudioSystem();
 const input = new Input(canvas, toLogical, () => audio.unlock());
 const save = loadGame();
 audio.muted = save.muted;
+audio.setSfxVolume(save.sfx);
+audio.setMusicVolume(save.music);
 const clock = new Clock();
 
 window.addEventListener("resize", resize);

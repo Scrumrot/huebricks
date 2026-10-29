@@ -1,7 +1,7 @@
 import { BTN_H, BTN_W, MAX_WORLD, SCREEN_H, SCREEN_W, type GameType } from "../core/constants";
 import type { SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
-import { drawCard, drawSprite, drawText, fillRoundRect } from "../engine/draw";
+import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, type PillButton } from "../engine/draw";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { drawPaper } from "../engine/modernSkin";
@@ -11,7 +11,7 @@ import { Tweens } from "../engine/tween";
 import { GameScene } from "./GameScene";
 import type { GameContext, Scene } from "./Scene";
 
-type MenuState = "main" | "mode" | "world" | "credits" | "launch";
+type MenuState = "main" | "mode" | "world" | "credits" | "settings" | "launch";
 
 interface MenuButton {
   id: string;
@@ -87,6 +87,8 @@ export class TitleScene implements Scene {
   private readonly tweens = new Tweens();
   private readonly feel: ButtonFeel;
   private enterT0 = 0;
+  /** Which slider the pointer is dragging on the sound card. */
+  private dragging: "music" | "sfx" | null = null;
   /** Icon pill in the top-right corner that switches the theme. */
   private readonly themeToggle = { cx: SCREEN_W - 36, cy: 26, w: 48, h: 30 };
 
@@ -172,6 +174,12 @@ export class TitleScene implements Scene {
     const inp = this.ctx.input;
     if (this.menu === "launch") return "default";
     if (this.menu === "credits") return "pointer";
+    if (this.menu === "settings") {
+      const L = this.settingsLayout();
+      if (this.dragging) return "grabbing";
+      if (inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h)) return "pointer";
+      return L.sliders.some((sl) => inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) ? "pointer" : "default";
+    }
     const t = this.themeToggle;
     if (this.menu === "main" && inp.inCentered(t.cx, t.cy, t.w, t.h)) return "pointer";
     return this.buttons.some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ? "pointer" : "default";
@@ -228,8 +236,8 @@ export class TitleScene implements Scene {
         this.menu = "credits";
       }),
       this.button("settings", "settings_button_sprite", SCREEN_W - BTN_H / 2, SCREEN_H - BTN_H / 2, BTN_H, BTN_H, () => {
-        this.ctx.save.muted = this.ctx.audio.toggleMute();
-        this.ctx.persist();
+        this.menu = "settings";
+        this.buttons = [];
       }),
     ];
   }
@@ -294,7 +302,12 @@ export class TitleScene implements Scene {
     }
 
     if (this.menu === "credits") {
-      if (inp.released || inp.keysPressed.has("Escape")) this.menu = "main";
+      if (inp.released || inp.keysPressed.has("Escape")) this.showMain();
+      return;
+    }
+
+    if (this.menu === "settings") {
+      this.updateSettings();
       return;
     }
 
@@ -367,6 +380,97 @@ export class TitleScene implements Scene {
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+
+  /** Sound card geometry: card rect, toggle pill and the two slider tracks. */
+  private settingsLayout(): { x: number; y: number; w: number; h: number; toggle: PillButton; sliders: Array<{ id: "music" | "sfx"; label: string; x: number; y: number; w: number }> } {
+    const w = 420;
+    const h = 270;
+    const x = SCREEN_W / 2 - w / 2;
+    const y = SCREEN_H / 2 - h / 2;
+    const muted = this.ctx.audio.muted;
+    const toggle: PillButton = { id: "mute", label: muted ? "Sound off" : "Sound on", cx: SCREEN_W / 2, cy: y + 92, w: 170, h: 42, primary: !muted };
+    const sx = x + 140;
+    const sw = w - 230;
+    return {
+      x,
+      y,
+      w,
+      h,
+      toggle,
+      sliders: [
+        { id: "music", label: "Music", x: sx, y: y + 156, w: sw },
+        { id: "sfx", label: "Effects", x: sx, y: y + 206, w: sw },
+      ],
+    };
+  }
+
+  private updateSettings(): void {
+    const inp = this.ctx.input;
+    const L = this.settingsLayout();
+    if (inp.keysPressed.has("Escape") || inp.keysPressed.has("Backspace")) {
+      this.showMain();
+      return;
+    }
+    if (inp.pressed) {
+      this.dragging = null;
+      for (const sl of L.sliders) {
+        if (inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) this.dragging = sl.id;
+      }
+    }
+    if ((inp.down || inp.pressed) && this.dragging) {
+      const sl = L.sliders.find((q) => q.id === this.dragging)!;
+      const v = Math.max(0, Math.min(1, (inp.x - sl.x) / sl.w));
+      if (sl.id === "music") {
+        this.ctx.save.music = v;
+        this.ctx.audio.setMusicVolume(v);
+      } else {
+        this.ctx.save.sfx = v;
+        this.ctx.audio.setSfxVolume(v);
+      }
+    }
+    if (inp.released) {
+      if (this.dragging) {
+        if (this.dragging === "sfx") this.ctx.audio.play("BlocksSelection_snd");
+        this.dragging = null;
+        this.ctx.persist();
+        return;
+      }
+      if (inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h)) {
+        this.ctx.save.muted = this.ctx.audio.toggleMute();
+        this.ctx.persist();
+        if (!this.ctx.audio.muted) this.ctx.audio.play("menuselect_snd");
+        return;
+      }
+      if (!inp.inRect(L.x, L.y, L.w, L.h)) this.showMain();
+    }
+  }
+
+  private renderSettings(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const L = this.settingsLayout();
+    g.fillStyle = pal.ui.dim;
+    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    drawCard(g, pal.ui, L.x, L.y, L.w, L.h, 20);
+    drawText(g, "Sound", SCREEN_W / 2, L.y + 42, { size: 28, color: pal.overlayText, weight: 600, font: pal.display });
+    const hover = inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h);
+    L.toggle.scale = this.feel.scale("settings:mute", hover, hover && inp.down);
+    drawPillButton(g, pal.ui, L.toggle, hover, hover && inp.down, pal.font);
+    const muted = this.ctx.audio.muted;
+    for (const sl of L.sliders) {
+      const v = sl.id === "music" ? this.ctx.save.music : this.ctx.save.sfx;
+      drawText(g, sl.label, sl.x - 18, sl.y, { size: 15, color: pal.overlayText, weight: 700, align: "right" });
+      g.globalAlpha = muted ? 0.45 : 1;
+      fillRoundRect(g, sl.x, sl.y - 4, sl.w, 8, 4, pal.track);
+      fillRoundRect(g, sl.x, sl.y - 4, Math.max(8, sl.w * v), 8, 4, pal.ui.primary);
+      const kx = sl.x + sl.w * v;
+      const active = this.dragging === sl.id;
+      fillRoundRect(g, kx - 9, sl.y - 9, 18, 18, 9, pal.ui.card, pal.ui.primary, active ? 3 : 2);
+      g.globalAlpha = 1;
+      drawText(g, `${Math.round(v * 100)}%`, sl.x + sl.w + 16, sl.y, { size: 13, color: pal.hudMuted, weight: 600, tabular: true, align: "left" });
+    }
+    drawText(g, "In game, the speaker button toggles sound  ·  M mutes", SCREEN_W / 2, L.y + L.h - 24, { size: 12, color: pal.hudMuted, weight: 500 });
+  }
 
   /** Icon pill that switches the theme; the label only appears on hover. */
   private renderThemeToggle(g: CanvasRenderingContext2D): void {
@@ -541,6 +645,7 @@ export class TitleScene implements Scene {
       g.fillRect(0, 0, SCREEN_W, SCREEN_H);
       drawSprite(g, sp.credits_sprite, 0, BTN_H, BTN_H, SCREEN_W - BTN_H * 2, SCREEN_H - BTN_H * 2);
     }
+    if (this.menu === "settings") this.renderSettings(g);
 
     // Scene fades: in from the background on entry, out to it on launch.
     const e = this.ctx.clock.t - this.enterT0;

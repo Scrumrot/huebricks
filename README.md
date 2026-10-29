@@ -35,7 +35,9 @@ colours contain two primaries; "chromatic gray" (black) contains all three.
   **Zen**: like Normal, but you cannot lose.
 - Rotate the board with the side buttons, hold the speed button to hurry the
   replenish line, and pause with the top button. The speaker button on the
-  left rail toggles sound (it works during the tutorial too).
+  left rail toggles sound (it works during the tutorial too). Sound starts
+  off; the gear on the title screen opens a Sound card with an on/off toggle
+  and separate music and effects sliders.
 - **Chain meter**: every scoring pop fills the meter and raises the
   multiplier (up to x5) for the next pop, as long as the meter has not
   drained. Cascades keep it full; big chains briefly slow the pops down.
@@ -88,7 +90,7 @@ the board turns as one piece with a small overshoot, combines wipe the new
 colour in radially, invalid moves shake, buttons spring, and cards slide in.
 
 The theme is remembered in `localStorage` together with the high score, the
-furthest world reached and the mute setting.
+furthest world reached, the mute setting and the two volume levels.
 
 ## Project layout
 
@@ -135,5 +137,9 @@ src/
 - New to this version: the chain meter and multiplier, the next-brick
   preview, the hold slot, refined bricks and the subtract bonus goal. The
   GML scoring formula is kept and the multiplier is applied on top of it.
+- Replenish timer: it keeps running during board animations, a pop rewinds
+  the current slot instead of banking a pause, using a brick no longer stalls
+  it, and the push arms as soon as the line is full and fires after 60% of a
+  period (the original waited two full periods).
 - Items (bombs, colour subtract, randomize, colour shift) and the store were
   never wired into the original UI and are not included.

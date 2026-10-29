@@ -93,6 +93,12 @@ const MAX_MULTIPLIER = 5;
 const REFINED_BONUS = 150;
 /** One-time bonus for completing the level's subtract goal. */
 const GOAL_BONUS = 500;
+/**
+ * Once the replenish line is full the push counts down for this fraction of a
+ * replenish period. The original waited a full period to arm the push and
+ * another to fire it; this arms it at once and fires sooner.
+ */
+const PUSH_COUNTDOWN = 0.6;
 /** Upcoming replenish colours shown as ghosts in the empty slots. */
 const PREVIEW_COUNT = 3;
 
@@ -300,6 +306,9 @@ export class GameScene implements Scene {
   private readonly selFx = { s: 1 };
   private lastMult = 1;
   private readonly lostFx = { desat: 0 };
+  /** Paint level shown while a pop rewinds the current well. */
+  private readonly levelFx = { v: 0 };
+  private rewindUntil = -1;
 
   constructor(ctx: GameContext) {
     this.ctx = ctx;
@@ -429,6 +438,11 @@ export class GameScene implements Scene {
       return { cx, chainY: h * 1.85, levelY: h * 2.75, holdLabelY: h * 3.5, holdY: h * 4.1, soundY: h * 5.4, goalLabelY: h * 6.25, goalY: h * 6.6, slot: l.cellW * 0.8 };
     }
     return { cx, chainY: h * 1.65, levelY: h * 1.95, holdLabelY: h * 2.42, holdY: h * 3, soundY: h * 4.25, goalLabelY: h * 5.2, goalY: h * 5.55, slot: l.cellW * 0.9 };
+  }
+
+  /** Sim steps the push countdown lasts once the line is full. */
+  private pushCountdown(): number {
+    return this.replenishTimer * PUSH_COUNTDOWN;
   }
 
   private chainMultiplier(): number {
@@ -570,15 +584,16 @@ export class GameScene implements Scene {
         if (this.replenishNum === 0) {
           block = this.spawnReplenishBrick();
         }
-        if (this.replenishLine > this.replenishTimer) {
-          if (this.readyToPush) {
+        if (this.readyToPush) {
+          if (this.replenishLine > this.pushCountdown()) {
             this.doPush();
             this.readyToPush = false;
-          } else if (this.replenishNum < n) {
+            this.replenishLine = 0;
+          }
+        } else if (this.replenishLine > this.replenishTimer) {
+          if (this.replenishNum < n) {
             block = this.spawnReplenishBrick();
             this.ctx.audio.play("BlocksFillRepLine_snd");
-          } else {
-            this.readyToPush = true;
           }
           this.replenishLine = 0;
         }
@@ -594,6 +609,11 @@ export class GameScene implements Scene {
           }
         }
         this.replenishNum = this.board.replenishList.length;
+        if (this.replenishNum >= n && !this.readyToPush) {
+          // The line is full: arm the push straight away.
+          this.readyToPush = true;
+          this.replenishLine = 0;
+        }
       }
 
       this.board.comboLength = 0;
@@ -605,20 +625,25 @@ export class GameScene implements Scene {
           this.chain = 0;
         }
       }
-      if (this.currentPercentage === this.maxPercentage) {
-        this.replenishLine += this.accel;
-      } else {
-        this.maxPercentage -= this.accel / n / this.replenishTimer;
-      }
+      // The original held the timer whenever progress dropped below its
+      // high-water mark (after every brick used), which read as a freeze.
+      this.replenishLine += this.accel;
+    }
+
+    // The original only ran the timer at rest, so a fast player kept it
+    // frozen behind their own combines and pops. Let it tick through board
+    // animations too; spawning and pushing still wait for rest.
+    if (this.state === "animation" && this.animation !== "push" && this.animation !== "begin" && this.animation !== "fadeout") {
+      if (this.replenishLine < (this.readyToPush ? this.pushCountdown() : this.replenishTimer)) this.replenishLine += 1;
     }
 
     if (this.board.countBricks() + this.board.replenishList.length > 0) {
       this.currentPercentage =
         this.replenishLine !== 0
-          ? (this.replenishNum - 1 + (this.readyToPush ? 1 : 0)) / n + this.replenishLine / this.replenishTimer / n
+          ? (this.replenishNum - 1 + (this.readyToPush ? 1 : 0)) / n + this.replenishLine / (this.readyToPush ? this.pushCountdown() : this.replenishTimer) / n
           : 0;
     }
-    if (this.currentPercentage > this.maxPercentage) this.maxPercentage = this.currentPercentage;
+    this.maxPercentage = this.currentPercentage;
   }
 
   private beginLevelComplete(): void {
@@ -819,7 +844,16 @@ export class GameScene implements Scene {
       }
     });
 
-    this.maxPercentage = Math.min(1, this.maxPercentage + 1 / this.board.cellNum);
+    // A pop rewinds the current well instead of pausing the timer (the
+    // original banked a pause, which read as the timer freezing).
+    if (!this.readyToPush) {
+      const from = clamp01(this.replenishLine / this.replenishTimer);
+      this.replenishLine = 0;
+      this.maxPercentage = 0;
+      this.tweens.set(this.levelFx, { v: from });
+      this.tweens.to(this.levelFx, { v: 0 }, D(360), easeOutCubic);
+      this.rewindUntil = t + D(360);
+    }
     this.state = "animation";
     this.animation = "pop";
 
@@ -1979,32 +2013,32 @@ export class GameScene implements Scene {
         const t0 = this.ctx.clock.t;
         if (this.readyToPush) {
           // The tray reddens and pulses as the push gets closer.
-          const near = clamp01(this.replenishLine / this.replenishTimer);
+          const near = clamp01(this.replenishLine / this.pushCountdown());
           const pulse = 0.8 + 0.2 * Math.sin(t0 / 110);
           fillRoundRect(g, l.boardX - 8, ry - 8, l.boardW + 16, l.cellH + 16, 12, rgba(pal.overlayAccent, (0.08 + 0.3 * near) * pulse), rgba(pal.overlayAccent, 0.5 * near), 1.5);
         }
         const filling = this.board.replenishList.length;
-        const level = this.readyToPush ? 0 : clamp01(this.replenishLine / this.replenishTimer);
+        const rewinding = t0 < this.rewindUntil;
+        const level = this.readyToPush ? 0 : rewinding ? this.levelFx.v : clamp01(this.replenishLine / this.replenishTimer);
+        const colour = pal.brickColors[this.nextColors[0] ?? 1];
         for (let x = 0; x < n; x++) {
           const wx = cellX(l, x) + pad;
           const wy = ry + pad;
           const ww = l.cellW - pad * 2;
           const wh = l.cellH - pad * 2;
           drawCellWell(g, wx, wy, ww, wh);
-          if (x === filling && level > 0.01) {
-            // Paint rising in the well the next brick will appear in.
-            const colour = pal.brickColors[this.nextColors[0] ?? 1];
-            const fh = wh * level;
-            g.save();
-            g.beginPath();
-            g.roundRect(wx, wy, ww, wh, l.cellW * 0.18);
-            g.clip();
-            g.fillStyle = rgba(colour, 0.4);
-            g.fillRect(wx, wy + wh - fh, ww, fh);
-            g.fillStyle = rgba(colour, 0.75);
-            g.fillRect(wx, wy + wh - fh, ww, 1.5);
-            g.restore();
-          }
+          if (x !== filling || this.readyToPush) continue;
+          const fh = wh * level;
+          if (fh < 0.5) continue;
+          g.save();
+          g.beginPath();
+          g.roundRect(wx, wy, ww, wh, l.cellW * 0.18);
+          g.clip();
+          g.fillStyle = rgba(colour, 0.4);
+          g.fillRect(wx, wy + wh - fh, ww, fh);
+          g.fillStyle = rgba(colour, 0.75);
+          g.fillRect(wx, wy + wh - fh, ww, 1.5);
+          g.restore();
         }
         const t = this.ctx.clock.t;
         for (const st of this.stains) {
@@ -2213,7 +2247,7 @@ export class GameScene implements Scene {
 
     const bar = sp.progressbar_sprite;
     const barX = Math.floor(l.boardX);
-    const current = Math.max(0, this.readyToPush ? 1 - this.replenishLine / this.replenishTimer : this.currentPercentage);
+    const current = Math.max(0, this.readyToPush ? 1 - this.replenishLine / this.pushCountdown() : this.currentPercentage);
     const maxP = Math.max(0, this.maxPercentage);
     const barFlash = t - this.barFlashT0;
 

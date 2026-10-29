@@ -10,6 +10,9 @@ export interface SaveData {
   worldProgress: number;
   tutorialDone: boolean;
   muted: boolean;
+  /** Effects and music volume, 0..1. */
+  sfx: number;
+  music: number;
   theme: ThemeName;
   /** Save format version; bumped when a stored field should be reset. */
   v: number;
@@ -22,10 +25,11 @@ const KEY = "huebricks.save.v1";
  * 3: themes renamed; "modern" is now "pigment" and "blocky" is the default.
  * 4: "spectra" added and made the default.
  * 5: "pigment" is the default.
+ * 6: sound off by default, with separate effects and music volumes.
  */
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
-const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: false, theme: "pigment", v: SAVE_VERSION };
+const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: true, sfx: 0.6, music: 0.35, theme: "pigment", v: SAVE_VERSION };
 
 const THEMES: readonly string[] = ["classic", "pigment", "blocky", "spectra"];
 
@@ -36,6 +40,11 @@ export function loadGame(): SaveData {
     const parsed = JSON.parse(raw) as Partial<SaveData>;
     const v = parsed.v ?? 1;
     if (v < 5) parsed.theme = DEFAULTS.theme;
+    if (v < 6) {
+      parsed.muted = true;
+      parsed.sfx = DEFAULTS.sfx;
+      parsed.music = DEFAULTS.music;
+    }
     if (!THEMES.includes(parsed.theme as string)) parsed.theme = DEFAULTS.theme;
     return { ...DEFAULTS, ...parsed, v: SAVE_VERSION };
   } catch {

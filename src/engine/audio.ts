@@ -16,8 +16,8 @@ export class AudioSystem {
   private unlocked = false;
 
   muted = false;
-  sfxVolume = 1;
-  musicVolume = 0.6;
+  sfxVolume = 0.6;
+  musicVolume = 0.35;
 
   unlock(): void {
     if (this.unlocked) return;
@@ -81,6 +81,15 @@ export class AudioSystem {
       this.music = null;
       this.musicName = null;
     }
+  }
+
+  setSfxVolume(v: number): void {
+    this.sfxVolume = Math.max(0, Math.min(1, v));
+  }
+
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.max(0, Math.min(1, v));
+    if (this.music) this.music.volume = this.muted ? 0 : this.musicVolume;
   }
 
   toggleMute(): boolean {
