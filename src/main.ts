@@ -7,6 +7,7 @@ import { Input } from "./engine/input";
 import { buildModernSprites, MODERN_COLORS } from "./engine/modernSkin";
 import { buildBlockySprites } from "./engine/blockySkin";
 import { buildSpectraSprites } from "./engine/spectraSkin";
+import { buildDeliciousSprites } from "./engine/deliciousSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
@@ -199,6 +200,7 @@ async function boot(): Promise<void> {
     pigment: buildModernSprites,
     blocky: buildBlockySprites,
     spectra: buildSpectraSprites,
+    delicious: buildDeliciousSprites,
   };
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
 

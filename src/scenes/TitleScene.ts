@@ -7,6 +7,7 @@ import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { drawPaper } from "../engine/modernSkin";
 import { drawSpectraBackdrop } from "../engine/spectraSkin";
+import { drawDeliciousBackdrop } from "../engine/deliciousSkin";
 import { nextTheme, THEME_LABELS } from "../engine/theme";
 import { Tweens } from "../engine/tween";
 import { GameScene } from "./GameScene";
@@ -392,7 +393,7 @@ export class TitleScene implements Scene {
   /** Idle wall animation: random flips (classic) or little hops that swap colour at the top (blocky). */
   private updateWall(): void {
     const theme = this.ctx.palette.name;
-    if (theme === "pigment" || theme === "spectra") return;
+    if (theme === "pigment" || theme === "spectra" || theme === "delicious") return;
     if (theme === "blocky") {
       if (this.time % 40 === 0) {
         for (let i = 0; i < 2; i++) {
@@ -622,6 +623,12 @@ export class TitleScene implements Scene {
       if (subMenu) {
         // Push the chips back so the menu reads as the foreground.
         fillScreen(g, "rgba(243,238,228,0.72)");
+      }
+    } else if (pal.name === "delicious") {
+      drawDeliciousBackdrop(g, this.ctx.clock.t);
+      this.renderScatter(g);
+      if (subMenu) {
+        fillScreen(g, "rgba(255,244,234,0.72)");
       }
     } else if (pal.name === "spectra") {
       drawSpectraBackdrop(g, this.ctx.clock.t);

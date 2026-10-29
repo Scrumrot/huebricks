@@ -75,6 +75,9 @@ title, `M` mute, `T` switch theme.
 Four themes, cycled with the pill in the top-right corner of the title or
 the `T` key:
 
+- **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
+  crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
+  buttons on a gingham bakery counter.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -132,6 +135,7 @@ src/
     modernSkin.ts  generated "Pigment" sprite set and shared drawing helpers
     blockySkin.ts  generated "Blocky" sprite set
     spectraSkin.ts generated "Spectra" sprite set
+    deliciousSkin.ts generated "Delicious" sprite set
     modernSlides.ts tutorial slides, drawn in whichever theme's style
     save.ts      localStorage persistence
   scenes/

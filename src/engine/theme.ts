@@ -5,17 +5,17 @@
  */
 import type { Color } from "../core/color";
 
-export type ThemeName = "classic" | "pigment" | "blocky" | "spectra";
+export type ThemeName = "classic" | "pigment" | "delicious" | "blocky" | "spectra";
 
 /** Order the theme toggle cycles through. */
-export const THEME_ORDER: readonly ThemeName[] = ["pigment", "spectra", "blocky", "classic"];
+export const THEME_ORDER: readonly ThemeName[] = ["pigment", "delicious", "spectra", "blocky", "classic"];
 
 export function nextTheme(current: ThemeName): ThemeName {
   const i = THEME_ORDER.indexOf(current);
   return THEME_ORDER[(i + 1) % THEME_ORDER.length];
 }
 
-export const THEME_LABELS: Record<ThemeName, string> = { classic: "Classic", pigment: "Pigment", blocky: "Blocky", spectra: "Spectra" };
+export const THEME_LABELS: Record<ThemeName, string> = { classic: "Classic", pigment: "Pigment", delicious: "Delicious", blocky: "Blocky", spectra: "Spectra" };
 
 export interface UiPalette {
   /** Overlay card fill, edge and hard shadow / extrusion. */
@@ -38,7 +38,7 @@ export interface Palette {
   /** Classic uses the original art and layout; generated themes share the modern layout. */
   kind: "classic" | "generated";
   /** How the board backdrop is painted. */
-  backdrop: "sprites" | "paper" | "blocky" | "spectra";
+  backdrop: "sprites" | "paper" | "delicious" | "blocky" | "spectra";
   /** How bricks are drawn around their face sprite. */
   brickStyle: "flat" | "chip" | "extruded" | "gel";
   /** Canvas clear colour behind everything (also the page background). */
@@ -355,4 +355,66 @@ export const SPECTRA: Palette = {
   stains: false,
 };
 
-export const PALETTES: Record<ThemeName, Palette> = { classic: CLASSIC, pigment: PIGMENT, blocky: BLOCKY, spectra: SPECTRA };
+/** "Delicious": frosted tarts on a gingham bakery counter. */
+export const DELICIOUS: Palette = {
+  name: "delicious",
+  kind: "generated",
+  backdrop: "delicious",
+  brickStyle: "chip",
+  background: "#FFF4EA",
+  hudText: "#4A2E2A",
+  hudMuted: "#A07E74",
+  gridLine: "#4A2E2A",
+  gridAlpha: 0,
+  crosshair: "rgba(74,46,42,0.5)",
+  titleText: "#4A2E2A",
+  titleMuted: "#A07E74",
+  overlayText: "#4A2E2A",
+  overlayAccent: "#E8445A",
+  tutorialText: "#4A2E2A",
+  tutorialShadow: "rgba(255,255,255,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Fredoka, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#FFFBF6",
+    cardEdge: "rgba(221,167,108,0.7)",
+    cardShadow: "rgba(120,70,40,0.2)",
+    dim: "rgba(90,50,40,0.4)",
+    primary: "#E8607F",
+    primaryHover: "#F07A95",
+    primaryText: "#FFFFFF",
+    secondary: "rgba(232,96,127,0.10)",
+    secondaryHover: "rgba(232,96,127,0.2)",
+    secondaryEdge: "rgba(232,96,127,0.45)",
+    secondaryText: "#4A2E2A",
+  },
+  brickShadow: "rgba(120,70,40,0.22)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.2,
+  callout: "#4A2E2A",
+  calloutShadow: "rgba(255,255,255,0.9)",
+  multColors: ["", "#4A2E2A", "#F5C542", "#F28C3A", "#E8445A", "#8E5BD6"],
+  brickColors: { 1: "#E8445A", 2: "#4A7BE0", 3: "#8E5BD6", 4: "#F5C542", 5: "#F28C3A", 6: "#4FBF7A", 7: "#3A2A28" },
+  well: "#F7E6D8",
+  wellEdge: "rgba(221,167,108,0.6)",
+  wellActive: "#F7D9DF",
+  wellActiveEdge: "#E8607F",
+  wellHint: "rgba(74,46,42,0.2)",
+  pill: "rgba(232,96,127,0.12)",
+  pillEdge: "rgba(232,96,127,0.3)",
+  track: "rgba(74,46,42,0.10)",
+  trackMax: "rgba(74,46,42,0.22)",
+  barFlash: "#E8607F",
+  goalAccent: "#4A7BE0",
+  ring: "#FFFFFF",
+  dust: ["rgba(255,255,255,0.85)", "rgba(247,169,196,0.85)"],
+  glow: false,
+  flashFromBrick: false,
+  particlesAdditive: false,
+  stains: false,
+};
+
+export const PALETTES: Record<ThemeName, Palette> = { classic: CLASSIC, pigment: PIGMENT, delicious: DELICIOUS, blocky: BLOCKY, spectra: SPECTRA };

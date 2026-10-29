@@ -24,6 +24,7 @@ import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQua
 import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { drawCellWell, drawPaper, drawStain, drawTray, rgba } from "../engine/modernSkin";
 import { drawSpectraBackdrop } from "../engine/spectraSkin";
+import { drawDeliciousBackdrop } from "../engine/deliciousSkin";
 import { Particles } from "../engine/particles";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
@@ -2112,6 +2113,7 @@ export class GameScene implements Scene {
     if (pal.kind === "generated") {
       if (pal.backdrop === "paper") drawPaper(g, this.ctx.clock.t);
       else if (pal.backdrop === "blocky") drawBlockyBackdrop(g, this.ctx.clock.t, l);
+      else if (pal.backdrop === "delicious") drawDeliciousBackdrop(g, this.ctx.clock.t, l);
       else drawSpectraBackdrop(g, this.ctx.clock.t, l);
       const pad = l.cellW * 0.04;
       if (pal.backdrop === "paper") {
