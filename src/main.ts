@@ -61,21 +61,42 @@ function toLogical(clientX: number, clientY: number): { x: number; y: number } {
 // A toggle for the title screen and the F key; phones held sideways also ask
 // for it on their first tap so the address bar goes away. Browsers without
 // element fullscreen (iPhone Safari) just keep the edge-to-edge canvas.
+// WebKit builds may expose the API only under the old webkit-prefixed names.
+interface PrefixedDoc extends Document {
+  webkitFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+}
+interface PrefixedEl extends HTMLElement {
+  webkitRequestFullscreen?: (options?: FullscreenOptions) => Promise<void> | void;
+}
+const fsDoc = document as PrefixedDoc;
+const fsEl = document.documentElement as PrefixedEl;
+
 const fullscreen: FullscreenControl = {
   get supported() {
-    return typeof document.documentElement.requestFullscreen === "function" && document.fullscreenEnabled !== false;
+    if (typeof fsEl.requestFullscreen === "function") return document.fullscreenEnabled !== false;
+    if (typeof fsEl.webkitRequestFullscreen === "function") return fsDoc.webkitFullscreenEnabled !== false;
+    return false;
   },
   get active() {
-    return document.fullscreenElement !== null;
+    return (document.fullscreenElement ?? fsDoc.webkitFullscreenElement ?? null) !== null;
   },
   toggle() {
     if (!this.supported) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => undefined);
-    } else {
-      document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {
-        // Not allowed here (no user activation, embedded page, ...): stay edge to edge.
-      });
+    try {
+      if (this.active) {
+        const exit = typeof document.exitFullscreen === "function" ? document.exitFullscreen() : fsDoc.webkitExitFullscreen?.();
+        void Promise.resolve(exit).catch(() => undefined);
+      } else {
+        const opts: FullscreenOptions = { navigationUI: "hide" };
+        const enter = typeof fsEl.requestFullscreen === "function" ? fsEl.requestFullscreen(opts) : fsEl.webkitRequestFullscreen?.(opts);
+        void Promise.resolve(enter).catch(() => {
+          // Not allowed here (no user activation, embedded page, ...): stay edge to edge.
+        });
+      }
+    } catch {
+      // Older WebKit throws synchronously instead of rejecting.
     }
   },
 };
@@ -88,7 +109,7 @@ window.addEventListener("keydown", (e) => {
   if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey) fullscreen.toggle();
 });
 document.addEventListener("fullscreenchange", resize);
-document.addEventListener("fullscreenchange", resize);
+document.addEventListener("webkitfullscreenchange", resize);
 
 const audio = new AudioSystem();
 const input = new Input(canvas, toLogical, () => audio.unlock());
