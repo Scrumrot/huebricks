@@ -15,7 +15,7 @@ import { buildChristmasSprites } from "./engine/christmasSkin";
 import { buildGooeySprites } from "./engine/gooeySkin";
 import { buildVintageSprites } from "./engine/vintageSkin";
 import { buildNatureSprites } from "./engine/natureSkin";
-import { buildBlankGlow, buildBlankShadow, buildClassicSoundButton } from "./engine/classicExtras";
+import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
 import type { GameContext, Scene } from "./scenes/Scene";
@@ -198,6 +198,7 @@ async function boot(): Promise<void> {
   }
   loading = false;
   sprites.sound_button_sprite = buildClassicSoundButton(sprites);
+  sprites.arcade_button_sprite = buildClassicArcadeButton(sprites);
   sprites.brick_shadow_sprite = buildBlankShadow();
   sprites.brick_glow_sprite = buildBlankGlow();
   loadingEl?.remove();
@@ -228,7 +229,7 @@ async function boot(): Promise<void> {
     view,
     fullscreen,
     save,
-    session: { gameType: "normal", world: 1, level: 0, score: 0 },
+    session: { gameType: "normal", world: 1, level: 0, score: 0, arcade: null },
     setScene(next: Scene) {
       scene = next;
       next.enter?.();

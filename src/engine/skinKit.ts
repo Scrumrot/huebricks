@@ -383,6 +383,7 @@ export function buildSkin(classic: SpriteMap, spec: SkinSpec): SpriteMap {
   skin.normal_button_sprite = mode("normal_button_sprite", "Normal", C[YELLOW], "diamond");
   skin.puzzle_button_sprite = mode("puzzle_button_sprite", "Puzzle", C[RED], "octagon");
   skin.zen_button_sprite = mode("zen_button_sprite", "Zen", C[BLUE], "circle");
+  skin.arcade_button_sprite = mode("arcade_button_sprite", "Arcade", C[GREEN], "octagon");
 
   const colorOf = [null, RED, YELLOW, BLUE, ORANGE, PURPLE, GREEN, BLACK] as const;
   for (let world = 0; world <= 7; world++) {

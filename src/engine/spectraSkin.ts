@@ -640,6 +640,7 @@ export function buildSpectraSprites(classic: SpriteMap): SpriteMap {
     normal_button_sprite: buildModeButton("normal_button_sprite", "Normal", SPECTRA_COLORS[YELLOW], "diamond"),
     puzzle_button_sprite: buildModeButton("puzzle_button_sprite", "Puzzle", SPECTRA_COLORS[RED], "octagon"),
     zen_button_sprite: buildModeButton("zen_button_sprite", "Zen", SPECTRA_COLORS[BLUE], "circle"),
+    arcade_button_sprite: buildModeButton("arcade_button_sprite", "Arcade", SPECTRA_COLORS[GREEN], "octagon"),
     back_button_sprite: buildBack(),
     info_button_sprite: buildInfo(),
     settings_button_sprite: buildSettings(),

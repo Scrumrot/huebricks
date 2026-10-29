@@ -1,3 +1,4 @@
+import type { ArcadeMode } from "../core/arcade";
 import type { GameType } from "../core/constants";
 import type { FullscreenControl, View } from "../engine/view";
 import type { SpriteMap } from "../engine/assets";
@@ -15,6 +16,8 @@ export interface Session {
   /** 0..5 within a world. */
   level: number;
   score: number;
+  /** The arcade mode being played, or null in the main game. */
+  arcade: ArcadeMode | null;
 }
 
 export interface GameContext {

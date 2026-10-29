@@ -1,3 +1,4 @@
+import type { ArcadeMode } from "../core/arcade";
 import type { ThemeName } from "./theme";
 
 /**
@@ -14,6 +15,8 @@ export interface SaveData {
   sfx: number;
   music: number;
   theme: ThemeName;
+  /** Best score per arcade mode. */
+  arcadeBest: Partial<Record<ArcadeMode, number>>;
   /** Save format version; bumped when a stored field should be reset. */
   v: number;
 }
@@ -29,7 +32,7 @@ const KEY = "huebricks.save.v1";
  */
 const SAVE_VERSION = 6;
 
-const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: true, sfx: 0.6, music: 0.35, theme: "pigment", v: SAVE_VERSION };
+const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: true, sfx: 0.6, music: 0.35, theme: "pigment", arcadeBest: {}, v: SAVE_VERSION };
 
 const THEMES: readonly string[] = ["classic", "pigment", "delicious", "crystals", "halloween", "winter", "christmas", "gooey", "vintage", "nature", "blocky", "spectra"];
 
@@ -46,7 +49,7 @@ export function loadGame(): SaveData {
       parsed.music = DEFAULTS.music;
     }
     if (!THEMES.includes(parsed.theme as string)) parsed.theme = DEFAULTS.theme;
-    return { ...DEFAULTS, ...parsed, v: SAVE_VERSION };
+    return { ...DEFAULTS, ...parsed, arcadeBest: { ...(parsed.arcadeBest ?? {}) }, v: SAVE_VERSION };
   } catch {
     return { ...DEFAULTS };
   }

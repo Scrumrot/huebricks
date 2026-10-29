@@ -82,6 +82,31 @@ colour as it arrives (the original's menu wall did this); chips lift under
 the cursor and shift with it, bubbles drift aside, snow swirls, bats veer
 away and bulbs brighten near the pointer.
 
+## Arcade
+
+The mode menu has a fourth button, **Arcade**, which opens a grid of
+score-attack games built on the same colour rules. Each has a how-to-play
+card on its first screen, a pause card (with the theme switch), on-screen
+touch controls, and its own best score. Three so far:
+
+- **Hue Bobble** (Puzzle Bobble): aim the launcher with the mouse or a
+  drag, click / tap / `Space` to shoot. A shot that can mix with the bubble
+  it hits mixes in and recolours it; a shot that cannot mix sticks beside it.
+  Three or more of a colour pop, anything left hanging falls for a bonus,
+  and the ceiling comes down a row every few shots. Clear the cluster to go
+  up a level.
+- **Dr. Hue** (Dr. Mario): the well starts with locked *stains* in its lower
+  half. Dominoes fall from the top (`←`/`→` move, `↑`/`Z`/`X` or tap rotate,
+  `↓` soft drop, `Space` or a swipe down hard drops). A half that lands on a
+  stain mixes into it, which is how an unreachable orange stain becomes a red
+  you can line up; four in a line, stains included, clears. Clear every stain
+  to finish the level. There is no hand-authored puzzle file in this project,
+  so the forty layouts are generated from a seed per level and grow with it.
+- **Hue Trist** (Tetris-ish): a single brick falls down a seven-wide well.
+  Land on a brick it can mix with and the two become one new colour (the
+  ghost shows the result); land anywhere else and it stacks. Four or more
+  touching pop, the stack falls and chains, and the drops speed up as you go.
+
 ## Themes
 
 Switch themes any time: the pill in the top-right of the title screen, the
@@ -157,6 +182,10 @@ src/
     Brick.ts     per-brick state and animation flags
     level.ts     difficulty curve per world/level
     layout.ts    board geometry
+    arcade.ts    arcade mode catalogue (names, rules)
+    well.ts      tall well of cells for Dr. Hue / Hue Trist (lines, groups, gravity)
+    bobble.ts    hex-packed bubble grid for Hue Bobble
+    stains.ts    seeded Dr. Hue stain layouts
   engine/      browser plumbing
     assets.ts    sprite/audio manifest and loader
     audio.ts     Web Audio SFX + looping music
@@ -178,10 +207,14 @@ src/
     gooeySkin.ts, vintageSkin.ts, natureSkin.ts
     backdrops.ts    backdrop and tray/well registry by theme
     modernSlides.ts tutorial slides, drawn in whichever theme's style
+    tiles.ts     one themed brick anywhere on screen (square, bubble or blob)
     save.ts      localStorage persistence
   scenes/
     TitleScene.ts  logo -> mode -> world menus, credits, theme toggle
     GameScene.ts   gameplay state machine, replenish line, tutorial, pause
+    arcade/
+      ArcadeScene.ts   shared well layout, HUD, cards, controls and effects
+      HueBobbleScene.ts, DrHueScene.ts, HueTristScene.ts
   main.ts      canvas scaling and the fixed 30 Hz loop
 ```
 

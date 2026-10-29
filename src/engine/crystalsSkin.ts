@@ -834,6 +834,7 @@ export function buildCrystalsSprites(classic: SpriteMap): SpriteMap {
     normal_button_sprite: buildModeButton("normal_button_sprite", "Normal", CRYSTAL_COLORS[YELLOW], "diamond"),
     puzzle_button_sprite: buildModeButton("puzzle_button_sprite", "Puzzle", CRYSTAL_COLORS[RED], "octagon"),
     zen_button_sprite: buildModeButton("zen_button_sprite", "Zen", CRYSTAL_COLORS[BLUE], "circle"),
+    arcade_button_sprite: buildModeButton("arcade_button_sprite", "Arcade", CRYSTAL_COLORS[GREEN], "octagon"),
     back_button_sprite: buildBack(),
     info_button_sprite: buildInfo(),
     settings_button_sprite: buildSettings(),

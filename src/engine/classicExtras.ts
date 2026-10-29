@@ -14,10 +14,10 @@ import { speakerIcon } from "./modernSkin";
  * refill it row by row, blending from the face pixel just left of the box to
  * the one just right of it, which keeps the brushed sheen roughly continuous.
  */
-function inpaintIcon(g: CanvasRenderingContext2D, w: number, h: number): void {
+function inpaintIcon(g: CanvasRenderingContext2D, w: number, h: number, insetFrac = 0.16): void {
   const img = g.getImageData(0, 0, w, h);
   const d = img.data;
-  const inset = Math.round(w * 0.16);
+  const inset = Math.round(w * insetFrac);
   let x0 = w;
   let y0 = h;
   let x1 = -1;
@@ -69,6 +69,37 @@ export function buildBlankGlow(): Sprite {
     return c;
   });
   return { name: "brick_glow_sprite", frames, width: 4, height: 4 };
+}
+
+/**
+ * The original had three mode buttons. The arcade button is the Normal
+ * button's brushed-metal plate shifted to green, with its label painted out
+ * and "Arcade" set in the same heavy black type.
+ */
+export function buildClassicArcadeButton(sprites: SpriteMap): Sprite {
+  const src = sprites.normal_button_sprite;
+  const w = src.width;
+  const h = src.height;
+  const frames = src.frames.map((img) => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const g = c.getContext("2d")!;
+    g.filter = "hue-rotate(85deg) saturate(0.9)";
+    g.drawImage(img, 0, 0, w, h);
+    g.filter = "none";
+    // the label runs nearly edge to edge, so search almost the whole plate
+    inpaintIcon(g, w, h, 0.06);
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = `bold ${Math.round(h * 0.5)}px Arial, Helvetica, sans-serif`;
+    g.fillStyle = "rgba(255,255,255,0.35)";
+    g.fillText("Arcade", w / 2, h / 2 + h * 0.03 + 1);
+    g.fillStyle = "#101010";
+    g.fillText("Arcade", w / 2, h / 2 + h * 0.03);
+    return c;
+  });
+  return { name: "arcade_button_sprite", frames, width: w, height: h };
 }
 
 export function buildClassicSoundButton(sprites: SpriteMap): Sprite {

@@ -616,6 +616,7 @@ export function buildBlockySprites(classic: SpriteMap): SpriteMap {
     normal_button_sprite: buildModeButton("normal_button_sprite", "Normal", BLOCKY_COLORS[YELLOW], "diamond"),
     puzzle_button_sprite: buildModeButton("puzzle_button_sprite", "Puzzle", BLOCKY_COLORS[RED], "octagon"),
     zen_button_sprite: buildModeButton("zen_button_sprite", "Zen", BLOCKY_COLORS[BLUE], "circle"),
+    arcade_button_sprite: buildModeButton("arcade_button_sprite", "Arcade", BLOCKY_COLORS[GREEN], "octagon"),
     back_button_sprite: buildBack(),
     info_button_sprite: buildInfo(),
     settings_button_sprite: buildSettings(),

@@ -1,3 +1,4 @@
+import { ARCADE_MODES, type ArcadeInfo, type ArcadeMode } from "../core/arcade";
 import { BTN_H, BTN_W, MAX_WORLD, type GameType } from "../core/constants";
 import type { SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
@@ -7,15 +8,26 @@ import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { BACKDROPS, type Pointer, type Tap } from "../engine/backdrops";
 import { debrisFor } from "../engine/debris";
-import { drawStain } from "../engine/modernSkin";
+import { drawStain, rgba as rgbaOf } from "../engine/modernSkin";
 import { Particles } from "../engine/particles";
 import type { Color } from "../core/color";
 import { nextTheme, THEME_LABELS } from "../engine/theme";
 import { Tweens } from "../engine/tween";
+import { drawTile } from "../engine/tiles";
+import { createArcadeScene } from "./arcade";
 import { GameScene } from "./GameScene";
 import type { GameContext, Scene } from "./Scene";
 
-type MenuState = "main" | "mode" | "world" | "credits" | "settings" | "launch";
+type MenuState = "main" | "mode" | "arcade" | "world" | "credits" | "settings" | "launch";
+
+/** A mode tile on the arcade grid. */
+interface ArcadeTile {
+  info: ArcadeInfo;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 interface MenuButton {
   id: string;
@@ -105,6 +117,9 @@ export class TitleScene implements Scene {
   private time = 0;
   private launchT0 = -1;
   private pendingType: GameType = "normal";
+  private pendingArcade: ArcadeMode | null = null;
+  private arcadeTiles: ArcadeTile[] = [];
+  private heldTile: ArcadeTile | null = null;
   private readonly tweens = new Tweens();
   private readonly feel: ButtonFeel;
   private enterT0 = 0;
@@ -153,13 +168,15 @@ export class TitleScene implements Scene {
     this.held = null;
     if (this.menu === "main") this.showMain();
     else if (this.menu === "mode") this.showModes();
+    else if (this.menu === "arcade") this.showArcade();
     else if (this.menu === "world") this.showWorlds(this.pendingType);
   }
 
-  constructor(ctx: GameContext) {
+  constructor(ctx: GameContext, initial: "main" | "arcade" = "main") {
     this.ctx = ctx;
     this.feel = new ButtonFeel(this.tweens);
     this.relayout();
+    if (initial === "arcade") this.showArcade();
   }
 
   /** Twenty gel bricks that float up and fade like bubbles. */
@@ -278,6 +295,7 @@ export class TitleScene implements Scene {
       if (inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h)) return "pointer";
       return L.sliders.some((sl) => inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) ? "pointer" : "default";
     }
+    if (this.menu === "arcade" && this.arcadeTiles.some((tile) => inp.inRect(tile.x, tile.y, tile.w, tile.h))) return "pointer";
     const t = this.themeToggle;
     if (this.menu === "main" && inp.inCentered(t.cx, t.cy, t.w, t.h)) return "pointer";
     const fs = this.fullscreenToggle;
@@ -344,17 +362,62 @@ export class TitleScene implements Scene {
 
   private showModes(): void {
     this.menu = "mode";
-    const stacked = this.ctx.view.portrait || this.W < BTN_W * 3 + 16;
-    const y = stacked ? this.H / 2 : this.H - BTN_W;
-    const gap = this.generated ? BTN_W * 0.97 : BTN_W;
+    const stacked = this.ctx.view.portrait || this.W < BTN_W * 2 + 40;
     const vGap = BTN_H * 1.22;
-    const at = (i: number): [number, number] => (stacked ? [this.W / 2, y + (i - 1) * vGap] : [this.W / 2 + (i - 1) * gap, y]);
+    const gap = this.generated ? BTN_W * 1.04 : BTN_W + 8;
+    const cy = this.H / 2 + (stacked ? 0 : 12);
+    // Four modes: a 2 x 2 grid sideways, one column upright.
+    const at = (i: number): [number, number] => (stacked ? [this.W / 2, cy + (i - 1.5) * vGap] : [this.W / 2 + ((i % 2) - 0.5) * gap, cy + (Math.floor(i / 2) - 0.5) * vGap]);
     this.buttons = [
       this.button("puzzle", "puzzle_button_sprite", ...at(0), BTN_W, BTN_H, () => this.showWorlds("puzzle")),
       this.button("normal", "normal_button_sprite", ...at(1), BTN_W, BTN_H, () => this.showWorlds("normal")),
       this.button("zen", "zen_button_sprite", ...at(2), BTN_W, BTN_H, () => this.showWorlds("zen")),
+      this.button("arcade", "arcade_button_sprite", ...at(3), BTN_W, BTN_H, () => this.showArcade()),
       this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showMain()),
     ];
+  }
+
+  /** The arcade grid: one tile per mode, as many across as fit. */
+  private showArcade(): void {
+    this.menu = "arcade";
+    this.heldTile = null;
+    this.buttons = [this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showModes())];
+    const card = this.arcadeCard();
+    const n = ARCADE_MODES.length;
+    const cols = Math.max(1, Math.min(n, Math.floor((card.w - 32) / 176)));
+    const rows = Math.ceil(n / cols);
+    const gapX = 14;
+    const tw = (card.w - 32 - (cols - 1) * gapX) / cols;
+    const th = card.tileH;
+    const gridW = cols * tw + (cols - 1) * gapX;
+    this.arcadeTiles = ARCADE_MODES.map((info, i) => {
+      const c = i % cols;
+      const r = Math.floor(i / cols);
+      const lastRow = r === rows - 1 ? n - r * cols : cols;
+      const rowW = lastRow * tw + (lastRow - 1) * gapX;
+      return { info, x: card.x + card.w / 2 - rowW / 2 + c * (tw + gapX), y: card.y + 66 + r * (th + 14), w: tw, h: th };
+    });
+    void gridW;
+  }
+
+  /** Card behind the arcade grid, sized to the tiles it will hold. */
+  private arcadeCard(): { x: number; y: number; w: number; h: number; tileH: number } {
+    const w = Math.min(640, this.W - 16);
+    const n = ARCADE_MODES.length;
+    const cols = Math.max(1, Math.min(n, Math.floor((w - 32) / 176)));
+    const rows = Math.ceil(n / cols);
+    const tileH = Math.min(168, Math.max(120, (this.H - 150) / rows - 14));
+    const h = 66 + rows * (tileH + 14) + 22;
+    return { x: this.W / 2 - w / 2, y: Math.max(8, this.H / 2 - h / 2 - 6), w, h, tileH };
+  }
+
+  private launchArcade(mode: ArcadeMode): void {
+    this.ctx.session.arcade = mode;
+    this.ctx.session.score = 0;
+    this.pendingArcade = mode;
+    this.menu = "launch";
+    this.buttons = [];
+    this.launchT0 = this.ctx.clock.t;
   }
 
   private showWorlds(type: GameType): void {
@@ -384,6 +447,8 @@ export class TitleScene implements Scene {
     s.world = world;
     s.level = 0;
     s.score = 0;
+    s.arcade = null;
+    this.pendingArcade = null;
     this.menu = "launch";
     this.buttons = [];
     this.launchT0 = this.ctx.clock.t;
@@ -401,7 +466,7 @@ export class TitleScene implements Scene {
 
     if (this.menu === "launch") {
       if (this.ctx.clock.t - this.launchT0 >= FADE_MS) {
-        this.ctx.setScene(new GameScene(this.ctx));
+        this.ctx.setScene(this.pendingArcade ? createArcadeScene(this.ctx, this.pendingArcade) : new GameScene(this.ctx));
       }
       return;
     }
@@ -418,6 +483,7 @@ export class TitleScene implements Scene {
 
     if (inp.keysPressed.has("Escape") || inp.keysPressed.has("Backspace")) {
       if (this.menu === "mode") this.showMain();
+      else if (this.menu === "arcade") this.showModes();
       else if (this.menu === "world") this.showModes();
     }
 
@@ -439,20 +505,29 @@ export class TitleScene implements Scene {
 
     if (inp.pressed) {
       this.held = this.buttons.find((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ?? null;
+      this.heldTile = this.menu === "arcade" ? (this.arcadeTiles.find((tile) => inp.inRect(tile.x, tile.y, tile.w, tile.h)) ?? null) : null;
       const tt = this.themeToggle;
       const onPill = this.menu === "main" && (inp.inCentered(tt.cx, tt.cy, tt.w, tt.h) || inp.inCentered(fs.cx, fs.cy, fs.w, fs.h));
-      if (!this.held && !onPill) this.ripple(inp.x, inp.y);
+      if (!this.held && !this.heldTile && !onPill) this.ripple(inp.x, inp.y);
     }
     this.stepRipples();
     if (inp.released) {
       const target = this.held;
+      const tile = this.heldTile;
       this.held = null;
+      this.heldTile = null;
       if (target && inp.inCentered(target.cx, target.cy, target.w, target.h)) {
         this.ctx.audio.play("menuselect_snd");
         target.onPress();
+      } else if (tile && inp.inRect(tile.x, tile.y, tile.w, tile.h)) {
+        this.ctx.audio.play("menuselect_snd");
+        this.launchArcade(tile.info.id);
       }
     }
-    if (!inp.down) this.held = null;
+    if (!inp.down) {
+      this.held = null;
+      this.heldTile = null;
+    }
   }
 
   /** Idle wall animation: random flips (classic) or little hops that swap colour at the top (blocky). */
@@ -574,6 +649,97 @@ export class TitleScene implements Scene {
         return;
       }
       if (!inp.inRect(L.x, L.y, L.w, L.h)) this.showMain();
+    }
+  }
+
+  /** The arcade grid: a card of mode tiles, each with a little scene from its game. */
+  private renderArcade(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const modern = this.generated;
+    const card = this.arcadeCard();
+    const textC = modern ? pal.titleText : pal.overlayText;
+    const mutedC = modern ? pal.titleMuted : "#b0b0b0";
+    drawCard(g, pal.ui, card.x, card.y, card.w, card.h, 24);
+    drawText(g, "Arcade", this.W / 2, card.y + 30, { size: 24, color: textC, weight: 600, font: pal.display });
+    drawText(g, "The colour rules, new games", this.W / 2, card.y + 52, { size: 12, color: mutedC, weight: 500 });
+    for (const tile of this.arcadeTiles) {
+      const hover = inp.inRect(tile.x, tile.y, tile.w, tile.h) && inp.x >= 0;
+      const pressed = hover && this.heldTile === tile && inp.down;
+      const scale = this.feel.scale(`arcade:${tile.info.id}`, hover, pressed);
+      const w = tile.w * scale;
+      const h = tile.h * scale;
+      const x = tile.x + tile.w / 2 - w / 2;
+      const y = tile.y + tile.h / 2 - h / 2;
+      const accent = pal.brickColors[tile.info.color];
+      fillRoundRect(g, x, y + 3, w, h, 16, pal.ui.cardShadow);
+      fillRoundRect(g, x, y, w, h, 16, hover ? pal.ui.secondaryHover : pal.ui.secondary, hover ? accent : pal.ui.secondaryEdge, hover ? 2 : 1.5);
+      this.renderArcadeIcon(g, tile.info.id, x + w / 2, y + h * 0.36, Math.min(w, h) * 0.5);
+      drawText(g, tile.info.name, x + w / 2, y + h - 44, { size: Math.min(19, w * 0.11), color: textC, weight: 600, font: pal.display });
+      drawText(g, tile.info.tagline, x + w / 2, y + h - 24, { size: 11, color: mutedC, weight: 500 });
+      const best = this.ctx.save.arcadeBest[tile.info.id];
+      if (best) drawText(g, `Best ${best}`, x + w / 2, y + h - 10, { size: 10, color: accent, weight: 700, tabular: true });
+    }
+  }
+
+  /** A tiny tableau of each mode in the theme's own bricks. */
+  private renderArcadeIcon(g: CanvasRenderingContext2D, mode: ArcadeMode, cx: number, cy: number, size: number): void {
+    const sp = this.ctx.sprites;
+    const pal = this.ctx.palette;
+    const u = size / 4;
+    const t = this.ctx.clock.t;
+    const tile = (c: Color, x: number, y: number, s: number, shape: "square" | "round" | "blob" = "square", seed = 1, lift = 0) => drawTile(g, sp, pal, c, cx + x - s / 2, cy + y - s / 2, s, { shape, seed, lift });
+    if (mode === "bobble") {
+      const d = u * 1.05;
+      tile(1, -d, -u * 1.6, d, "round");
+      tile(2, 0, -u * 1.6, d, "round");
+      tile(4, d, -u * 1.6, d, "round");
+      tile(1, -d / 2, -u * 1.6 + d * 0.87, d, "round");
+      tile(6, d / 2, -u * 1.6 + d * 0.87, d, "round");
+      // the shot on its way up
+      const rise = (t / 900) % 1;
+      g.save();
+      g.globalAlpha = 0.5;
+      g.fillStyle = pal.brickColors[2];
+      for (let i = 0; i < 4; i++) {
+        g.beginPath();
+        g.arc(cx + u * 0.5 - i * u * 0.16, cy + u * 1.9 - i * u * 0.45, 1.5, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+      tile(2, u * 0.5 - rise * u * 0.6, u * 1.9 - rise * u * 1.6, d * 0.9, "round", 1, 0.3);
+    } else if (mode === "drhue") {
+      const d = u * 1.1;
+      tile(5, -d * 1.2, u * 1.4, d, "blob", 11);
+      tile(1, 0, u * 1.4, d, "blob", 23);
+      tile(2, d * 1.2, u * 1.4, d, "blob", 37);
+      tile(4, -d * 1.2, u * 0.3, d, "blob", 41);
+      const bob = Math.sin(t / 500) * u * 0.15;
+      tile(1, d * 0.1, -u * 1.3 + bob, d, "square", 1, 0.3);
+      tile(4, d * 1.2, -u * 1.3 + bob, d, "square", 1, 0.3);
+      g.fillStyle = "rgba(255,255,255,0.45)";
+      g.beginPath();
+      g.roundRect(cx + d * 0.65 - d * 0.1, cy - u * 1.3 + bob - 4 * 0.3 - d * 0.22, d * 0.2, d * 0.44, d * 0.08);
+      g.fill();
+    } else {
+      const d = u * 1.1;
+      g.save();
+      g.strokeStyle = pal.kind === "classic" ? "rgba(255,255,255,0.3)" : rgbaOf(pal.titleText, 0.25);
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(cx - d * 1.9, cy - u * 2.2);
+      g.lineTo(cx - d * 1.9, cy + u * 2.1);
+      g.lineTo(cx + d * 1.9, cy + u * 2.1);
+      g.lineTo(cx + d * 1.9, cy - u * 2.2);
+      g.stroke();
+      g.restore();
+      tile(1, -d * 1.2, u * 1.5, d);
+      tile(1, 0, u * 1.5, d);
+      tile(2, d * 1.2, u * 1.5, d);
+      tile(1, -d * 1.2, u * 1.5 - d, d);
+      tile(6, d * 1.2, u * 1.5 - d, d);
+      const fall = (t / 1100) % 1;
+      tile(4, 0, -u * 1.9 + fall * u * 2.2, d, "square", 1, 0.3);
     }
   }
 
@@ -918,6 +1084,7 @@ export class TitleScene implements Scene {
           puzzle: "Clear the whole board",
           normal: "Pop the target number of groups",
           zen: "Like Normal, but you can't lose",
+          arcade: "New games on the colour rules",
         };
         for (const b of modes) {
           const d = descriptions[b.id];
@@ -927,6 +1094,8 @@ export class TitleScene implements Scene {
         drawText(g, "Choose a game mode", this.W / 2, top - BTN_H, { size: 20, color: pal.overlayText, shadow: "#000" });
       }
     }
+
+    if (this.menu === "arcade") this.renderArcade(g);
 
     for (const b of this.buttons) {
       const sprite = sp[b.sprite];

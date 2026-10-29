@@ -916,6 +916,7 @@ export function buildDeliciousSprites(classic: SpriteMap): SpriteMap {
     normal_button_sprite: buildModeButton("normal_button_sprite", "Normal", DELICIOUS_COLORS[YELLOW], "diamond"),
     puzzle_button_sprite: buildModeButton("puzzle_button_sprite", "Puzzle", DELICIOUS_COLORS[RED], "octagon"),
     zen_button_sprite: buildModeButton("zen_button_sprite", "Zen", DELICIOUS_COLORS[BLUE], "circle"),
+    arcade_button_sprite: buildModeButton("arcade_button_sprite", "Arcade", DELICIOUS_COLORS[GREEN], "octagon"),
     back_button_sprite: buildBack(),
     info_button_sprite: buildInfo(),
     settings_button_sprite: buildSettings(),
