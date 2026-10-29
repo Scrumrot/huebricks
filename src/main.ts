@@ -1,4 +1,4 @@
-import { FPS, SCREEN_H, SCREEN_W } from "./core/constants";
+import { FPS, SCREEN_H } from "./core/constants";
 import { loadSprites, type SpriteMap } from "./engine/assets";
 import { AudioSystem } from "./engine/audio";
 import { Clock } from "./engine/clock";
@@ -12,15 +12,18 @@ import { loadGame, saveGame } from "./engine/save";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
 import type { GameContext, Scene } from "./scenes/Scene";
 import { TitleScene } from "./scenes/TitleScene";
+import { fillScreen, PORTRAIT_W, view, type FullscreenControl } from "./engine/view";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const g = canvas.getContext("2d")!;
 const loadingEl = document.getElementById("loading");
 
-// --- canvas scaling: fixed 760 x 506.67 logical resolution, letterboxed ---
-const view = { scale: 1 };
+// --- canvas scaling ----------------------------------------------------------
+// The canvas covers the window; engine/view.ts explains how logical units are
+// chosen for each orientation. Scenes relayout themselves when view changes.
 /** Touch targets stay at least this many CSS pixels on small screens. */
 const MIN_HIT_CSS = 44;
+const touchLandscape = window.matchMedia("(pointer: coarse) and (orientation: landscape)");
 
 function resize(): void {
   const style = getComputedStyle(document.body);
@@ -28,29 +31,64 @@ function resize(): void {
   const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
   const availW = Math.max(100, window.innerWidth - padX);
   const availH = Math.max(100, window.innerHeight - padY);
-  const scale = Math.min(availW / SCREEN_W, availH / SCREEN_H);
-  const cssW = SCREEN_W * scale;
-  const cssH = SCREEN_H * scale;
+  const portrait = availH > availW;
+  const scale = portrait ? availW / PORTRAIT_W : availH / SCREEN_H;
+  view.scale = scale;
+  view.w = availW / scale;
+  view.h = availH / scale;
+  view.portrait = portrait;
   // Up to 3x for high-density displays so chips and ink stay crisp.
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  canvas.style.width = `${cssW}px`;
-  canvas.style.height = `${cssH}px`;
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssH * dpr);
-  g.setTransform(canvas.width / SCREEN_W, 0, 0, canvas.height / SCREEN_H, 0, 0);
+  canvas.style.width = `${availW}px`;
+  canvas.style.height = `${availH}px`;
+  canvas.width = Math.round(availW * dpr);
+  canvas.height = Math.round(availH * dpr);
+  g.setTransform(canvas.width / view.w, 0, 0, canvas.height / view.h, 0, 0);
   g.imageSmoothingEnabled = true;
   g.imageSmoothingQuality = "high";
-  view.scale = scale;
   input.minHit = MIN_HIT_CSS / scale;
 }
 
 function toLogical(clientX: number, clientY: number): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
   return {
-    x: ((clientX - rect.left) / rect.width) * SCREEN_W,
-    y: ((clientY - rect.top) / rect.height) * SCREEN_H,
+    x: ((clientX - rect.left) / rect.width) * view.w,
+    y: ((clientY - rect.top) / rect.height) * view.h,
   };
 }
+
+// --- fullscreen ----------------------------------------------------------------
+// A toggle for the title screen and the F key; phones held sideways also ask
+// for it on their first tap so the address bar goes away. Browsers without
+// element fullscreen (iPhone Safari) just keep the edge-to-edge canvas.
+const fullscreen: FullscreenControl = {
+  get supported() {
+    return typeof document.documentElement.requestFullscreen === "function" && document.fullscreenEnabled !== false;
+  },
+  get active() {
+    return document.fullscreenElement !== null;
+  },
+  toggle() {
+    if (!this.supported) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => undefined);
+    } else {
+      document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {
+        // Not allowed here (no user activation, embedded page, ...): stay edge to edge.
+      });
+    }
+  },
+};
+function autoFullscreen(): void {
+  if (touchLandscape.matches && !fullscreen.active) fullscreen.toggle();
+}
+// pointerup (not pointerdown) is what counts as a user gesture for touch.
+window.addEventListener("pointerup", autoFullscreen, { passive: true });
+window.addEventListener("keydown", (e) => {
+  if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey) fullscreen.toggle();
+});
+document.addEventListener("fullscreenchange", resize);
+document.addEventListener("fullscreenchange", resize);
 
 const audio = new AudioSystem();
 const input = new Input(canvas, toLogical, () => audio.unlock());
@@ -61,23 +99,23 @@ audio.setMusicVolume(save.music);
 const clock = new Clock();
 
 window.addEventListener("resize", resize);
+touchLandscape.addEventListener("change", resize);
 resize();
 
 /** Loading screen: one paint chip cycling through the seven colours. */
 const LOAD_COLORS = [1, 2, 3, 4, 5, 6, 7].map((c) => MODERN_COLORS[c as 1 | 2 | 3 | 4 | 5 | 6 | 7]);
 function renderLoading(done: number, total: number): void {
   const pal = PALETTES.pigment;
-  g.fillStyle = pal.background;
-  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  fillScreen(g, pal.background);
   const size = 64;
-  const x = SCREEN_W / 2 - size / 2;
-  const y = SCREEN_H / 2 - size / 2 - 10;
+  const x = view.w / 2 - size / 2;
+  const y = view.h / 2 - size / 2 - 10;
   const idx = Math.floor((performance.now() / 180) % LOAD_COLORS.length);
   fillRoundRect(g, x, y + 4, size, size, size * 0.18, "rgba(60,40,20,0.18)");
   fillRoundRect(g, x, y, size, size, size * 0.18, LOAD_COLORS[idx]);
-  drawText(g, "HueBricks", SCREEN_W / 2, y + size + 34, { size: 22, color: pal.hudText, weight: 600, font: pal.display });
+  drawText(g, "HueBricks", view.w / 2, y + size + 34, { size: 22, color: pal.hudText, weight: 600, font: pal.display });
   const pct = total > 0 ? Math.round((100 * done) / total) : 0;
-  drawText(g, `${pct}%`, SCREEN_W / 2, y + size + 60, { size: 13, color: pal.hudMuted, weight: 500, font: pal.font, tabular: true });
+  drawText(g, `${pct}%`, view.w / 2, y + size + 60, { size: 13, color: pal.hudMuted, weight: 500, font: pal.font, tabular: true });
 }
 
 /** Wait for the web fonts (bounded, so an offline start is not delayed). */
@@ -125,9 +163,8 @@ async function boot(): Promise<void> {
     sprites = loaded;
   } catch (err) {
     loading = false;
-    g.fillStyle = "#111";
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    drawText(g, `Failed to load assets:\n${String(err)}`, SCREEN_W / 2, SCREEN_H / 2, { size: 16, color: "#f66" });
+    fillScreen(g, "#111");
+    drawText(g, `Failed to load assets:\n${String(err)}`, view.w / 2, view.h / 2, { size: 16, color: "#f66" });
     throw err;
   }
   loading = false;
@@ -152,6 +189,7 @@ async function boot(): Promise<void> {
     input,
     clock,
     view,
+    fullscreen,
     save,
     session: { gameType: "normal", world: 1, level: 0, score: 0 },
     setScene(next: Scene) {

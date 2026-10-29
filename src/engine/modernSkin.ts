@@ -1,7 +1,7 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
-import { SCREEN_H, SCREEN_W } from "../core/constants";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
+import { fillScreen, screenRect } from "./view";
 
 /**
  * "Pigment": the modern sprite set, generated on offscreen canvases.
@@ -491,8 +491,7 @@ function paperNoise(): HTMLCanvasElement {
  * little over twenty seconds. Fills the whole logical screen.
  */
 export function drawPaper(g: Ctx, t: number): void {
-  g.fillStyle = PAPER;
-  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  fillScreen(g, PAPER);
   let pat = patterns.get(g);
   if (!pat) {
     const p = g.createPattern(paperNoise(), "repeat");
@@ -503,17 +502,16 @@ export function drawPaper(g: Ctx, t: number): void {
   }
   if (pat) {
     g.globalAlpha = 0.04;
-    g.fillStyle = pat;
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    fillScreen(g, pat);
     g.globalAlpha = 1;
   }
-  const cx = SCREEN_W / 2 + 20 * Math.sin((t / 20000) * Math.PI * 2);
-  const cy = SCREEN_H / 2 + 20 * Math.sin((t / 20000) * Math.PI * 1.6 + 1.3);
-  const vig = g.createRadialGradient(cx, cy, Math.min(SCREEN_W, SCREEN_H) * 0.3, cx, cy, Math.max(SCREEN_W, SCREEN_H) * 0.72);
+  const sr = screenRect();
+  const cx = sr.w / 2 + 20 * Math.sin((t / 20000) * Math.PI * 2);
+  const cy = sr.h / 2 + 20 * Math.sin((t / 20000) * Math.PI * 1.6 + 1.3);
+  const vig = g.createRadialGradient(cx, cy, Math.min(sr.w, sr.h) * 0.3, cx, cy, Math.max(sr.w, sr.h) * 0.72);
   vig.addColorStop(0, "rgba(230,223,210,0)");
   vig.addColorStop(1, "rgba(230,223,210,1)");
-  g.fillStyle = vig;
-  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  fillScreen(g, vig);
 }
 
 // ---------------------------------------------------------------------------

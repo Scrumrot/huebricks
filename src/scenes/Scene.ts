@@ -1,4 +1,5 @@
 import type { GameType } from "../core/constants";
+import type { FullscreenControl, View } from "../engine/view";
 import type { SpriteMap } from "../engine/assets";
 import type { AudioSystem } from "../engine/audio";
 import type { Clock } from "../engine/clock";
@@ -25,8 +26,10 @@ export interface GameContext {
   input: Input;
   /** Frame clock: wall time, game time (pauses in hit-stop) and sim interpolation. */
   clock: Clock;
-  /** CSS pixels per logical pixel for the current window size. */
-  view: { scale: number };
+  /** Logical viewport size and scale for the current window. */
+  view: View;
+  /** Browser fullscreen toggle (unsupported on iPhone Safari). */
+  fullscreen: FullscreenControl;
   save: SaveData;
   session: Session;
   setScene(scene: Scene): void;

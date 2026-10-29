@@ -13,18 +13,18 @@ import {
   YELLOW,
   type Color,
 } from "../core/color";
-import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD, SCREEN_H, SCREEN_W } from "../core/constants";
-import { cellX, cellY, gridBottom, NO_SPACING, replenishY, screenToGrid, type LayoutSpacing } from "../core/layout";
+import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD } from "../core/constants";
+import { cellX, cellY, gridBottom, NO_SPACING, replenishY, screenToGrid, type Layout, type LayoutSpacing, type Viewport } from "../core/layout";
 import { levelParams } from "../core/level";
 import type { MusicName, SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
 import { drawBlock, drawBlockTransformed, drawCard, drawLine, drawPillButton, drawSprite, drawSpritePartX, drawText, fillRoundRect, type PillButton } from "../engine/draw";
+import { fillScreen } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { drawCellWell, drawPaper, drawStain, drawTray, rgba } from "../engine/modernSkin";
 import { drawSpectraBackdrop } from "../engine/spectraSkin";
 import { Particles } from "../engine/particles";
-import type { ThemeName } from "../engine/theme";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
@@ -210,6 +210,46 @@ function spacingFor(kind: "classic" | "generated"): LayoutSpacing {
   return kind === "generated" ? GENERATED_SPACING : NO_SPACING;
 }
 
+/** The board's viewport: the classic theme keeps its side rails even on an upright phone. */
+function viewportFor(v: { w: number; h: number; portrait: boolean }, kind: "classic" | "generated"): Viewport {
+  return { w: v.w, h: v.h, portrait: v.portrait && kind === "generated" };
+}
+
+/** Diameter of the board buttons along the bottom band (portrait). */
+function portraitButton(l: Layout): number {
+  return Math.min(64, l.hudBottom * 0.55);
+}
+
+/** Where the HUD pieces sit for the current layout (see `rail()`). */
+interface HudRail {
+  /** Hold slot centre x and the sound button beside it. */
+  cx: number;
+  holdLabelY: number;
+  holdY: number;
+  slot: number;
+  soundX: number;
+  soundY: number;
+  /** Score caption/number and the chain meter under them. */
+  scoreCx: number;
+  scoreCapY: number;
+  scoreY: number;
+  meterW: number;
+  chainY: number;
+  /** Level pill. */
+  pillCx: number;
+  pillW: number;
+  levelY: number;
+  /** Pops/bricks-left counter. */
+  popsCx: number;
+  popsCapY: number;
+  popsY: number;
+  /** Subtract-goal counter. */
+  goalX: number;
+  goalLabelY: number;
+  goalY: number;
+  textSize: number;
+}
+
 /**
  * The playing scene: board, replenish line, side buttons, pause menu and the
  * tutorial. A port of the `Board`, `Brick`, `BrickDieAnim`, `ReplenishSelector`,
@@ -249,7 +289,7 @@ export class GameScene implements Scene {
 
   // --- side buttons ---
   private buttons: SideButton[] = [];
-  private buttonsTheme: ThemeName = "classic";
+  private buttonsTheme = "";
   private accel = 1;
 
   // --- chain meter ---
@@ -312,7 +352,7 @@ export class GameScene implements Scene {
 
   constructor(ctx: GameContext) {
     this.ctx = ctx;
-    this.board = new Board(DEFAULT_CELL_NUM, spacingFor(ctx.palette.kind));
+    this.board = new Board(DEFAULT_CELL_NUM, spacingFor(ctx.palette.kind), viewportFor(ctx.view, ctx.palette.kind));
     this.selected = this.board.cellNum;
     this.selX = cellX(this.board.layout, this.selected);
     for (let i = 0; i < PREVIEW_COUNT; i++) this.nextColors.push(randomSpawnColor());
@@ -361,42 +401,67 @@ export class GameScene implements Scene {
   // Setup
   // ---------------------------------------------------------------------------
 
+  /** Theme plus viewport: when it changes, the board and HUD are measured again. */
+  private layoutKey(): string {
+    const v = this.ctx.view;
+    return `${this.ctx.palette.name}:${Math.round(v.w)}x${Math.round(v.h)}:${v.portrait}`;
+  }
+
   private layoutButtons(): void {
     const l = this.board.layout;
-    this.buttonsTheme = this.ctx.palette.name;
-    const cx = l.boardX + l.boardW + (SCREEN_W - l.boardW) / 4;
+    const vp = l.vp;
+    this.buttonsTheme = this.layoutKey();
+    const cx = l.boardX + l.boardW + l.railW / 2;
 
     if (this.ctx.palette.kind === "generated") {
-      const railW = (SCREEN_W - l.boardW) / 2;
-      const d = Math.min(railW * 0.66, SCREEN_H / 5.2);
-      const margin = 16;
-      const pairGap = 8;
-      const ys = [margin + d / 2, SCREEN_H / 2 - d / 2 - pairGap / 2, SCREEN_H / 2 + d / 2 + pairGap / 2, SCREEN_H - margin - d / 2];
-      const mk = (kind: SideButton["kind"], sprite: SpriteName, baseFrame: number, cy: number): SideButton => ({
+      const mk = (kind: SideButton["kind"], sprite: SpriteName, baseFrame: number, bx: number, by: number, d: number): SideButton => ({
         kind,
         sprite,
         baseFrame,
-        cx,
-        cy,
+        cx: bx,
+        cy: by,
         w: d,
         h: d,
         hilite: false,
         pressed: false,
       });
+      const r = this.rail();
+      if (l.portrait) {
+        // Pause in the top band; the board controls in a row along the bottom band.
+        const d = portraitButton(l);
+        const yB = l.hudBottomY + l.hudBottom / 2;
+        const right = vp.w - 16 - d / 2;
+        const step = d + 10;
+        this.buttons = [
+          mk("pause", "pause_button_sprite", 0, vp.w - 16 - d * 0.45, l.hudTopY + l.hudTop / 2, d * 0.9),
+          mk("ccw", "rotate_button_sprite", 0, right - step * 2, yB, d),
+          mk("cw", "rotate_button_sprite", 2, right - step, yB, d),
+          mk("speed", "speedup_button_sprite", 0, right, yB, d),
+          mk("sound", "sound_button_sprite", 0, r.soundX, r.soundY, d * 0.6),
+        ];
+        return;
+      }
+      const d = Math.min(l.railW * 0.66, vp.h / 5.2);
+      const margin = 16;
+      const pairGap = 8;
+      const y0 = l.stackY;
+      const ym = l.stackY + l.boardH / 2;
+      const y1 = l.stackY + l.boardH;
+      const ys = [y0 + margin + d / 2, ym - d / 2 - pairGap / 2, ym + d / 2 + pairGap / 2, y1 - margin - d / 2];
       this.buttons = [
-        mk("pause", "pause_button_sprite", 0, ys[0]),
-        mk("ccw", "rotate_button_sprite", 0, ys[1]),
-        mk("cw", "rotate_button_sprite", 2, ys[2]),
-        mk("speed", "speedup_button_sprite", 0, ys[3]),
-        { ...mk("sound", "sound_button_sprite", 0, this.rail().soundY), cx: l.boardX / 2, w: d * 0.6, h: d * 0.6 },
+        mk("pause", "pause_button_sprite", 0, cx, ys[0], d),
+        mk("ccw", "rotate_button_sprite", 0, cx, ys[1], d),
+        mk("cw", "rotate_button_sprite", 2, cx, ys[2], d),
+        mk("speed", "speedup_button_sprite", 0, cx, ys[3], d),
+        mk("sound", "sound_button_sprite", 0, r.soundX, r.soundY, d * 0.6),
       ];
       return;
     }
 
-    let wid = ((SCREEN_W - l.boardW) / 2) * 0.8;
+    let wid = l.railW * 0.8;
     let hit = wid;
-    if (hit > SCREEN_H / 4) {
-      hit = SCREEN_H / 4;
+    if (hit > l.boardH / 4) {
+      hit = l.boardH / 4;
       wid = hit;
     }
     const mk = (kind: SideButton["kind"], sprite: SpriteName, baseFrame: number, cy: number, scale = 1): SideButton => ({
@@ -411,33 +476,76 @@ export class GameScene implements Scene {
       pressed: false,
     });
     this.buttons = [
-      mk("pause", "pause_button_sprite", 0, hit / 2),
-      mk("ccw", "rotate_button_sprite", 0, SCREEN_H / 2 - hit / 2, 0.95),
-      mk("cw", "rotate_button_sprite", 2, SCREEN_H / 2 + hit / 2, 0.95),
-      mk("speed", "speedup_button_sprite", 0, SCREEN_H - hit / 2),
-      { ...mk("sound", "sound_button_sprite", 0, this.rail().soundY, 0.55), cx: l.boardX / 2 },
+      mk("pause", "pause_button_sprite", 0, l.stackY + hit / 2),
+      mk("ccw", "rotate_button_sprite", 0, l.stackY + l.boardH / 2 - hit / 2, 0.95),
+      mk("cw", "rotate_button_sprite", 2, l.stackY + l.boardH / 2 + hit / 2, 0.95),
+      mk("speed", "speedup_button_sprite", 0, l.stackY + l.boardH - hit / 2),
+      { ...mk("sound", "sound_button_sprite", 0, this.rail().soundY, 0.55), cx: this.rail().soundX },
     ];
   }
 
   /** Vertical layout of the left rail (HUD column), in multiples of the cell height. */
-  private rail(): {
-    cx: number;
-    chainY: number;
-    levelY: number;
-    holdLabelY: number;
-    holdY: number;
-    soundY: number;
-    goalLabelY: number;
-    goalY: number;
-    slot: number;
-  } {
+  /** HUD geometry: where the score column, hold slot, sound button and goal live for this layout. */
+  private rail(): HudRail {
     const l = this.board.layout;
+    const vp = l.vp;
     const h = l.cellH;
-    const cx = l.boardX / 2;
-    if (this.ctx.palette.kind === "generated") {
-      return { cx, chainY: h * 1.85, levelY: h * 2.75, holdLabelY: h * 3.5, holdY: h * 4.1, soundY: h * 5.4, goalLabelY: h * 6.25, goalY: h * 6.6, slot: l.cellW * 0.8 };
+    if (l.portrait) {
+      // Upright: score and chain top-left, level pill and pops top-centre,
+      // hold slot and sound bottom-left, the goal between them and the buttons.
+      const d = portraitButton(l);
+      const yT = l.hudTopY;
+      const yB = l.hudBottomY + l.hudBottom / 2;
+      const slot = Math.min(l.cellW * 0.8, l.hudBottom * 0.55);
+      const colW = 150;
+      const soundX = l.boardX + slot + 46;
+      const buttonsLeft = vp.w - 16 - (d + 10) * 2 - d;
+      return {
+        cx: l.boardX + slot / 2 + 4,
+        holdLabelY: yB - slot / 2 - 10,
+        holdY: yB + 6,
+        slot,
+        soundX,
+        soundY: yB + 6,
+        scoreCx: l.boardX + colW / 2,
+        scoreCapY: yT + 22,
+        scoreY: yT + 54,
+        meterW: colW - 16,
+        chainY: yT + 82,
+        pillCx: vp.w / 2 + 12,
+        pillW: 160,
+        levelY: yT + 30,
+        popsCx: vp.w / 2 + 12,
+        popsCapY: yT + 64,
+        popsY: yT + 90,
+        goalX: (soundX + 24 + buttonsLeft) / 2,
+        goalLabelY: yB - 10,
+        goalY: yB + 12,
+        textSize: Math.max(12, 160 * 0.13),
+      };
     }
-    return { cx, chainY: h * 1.65, levelY: h * 1.95, holdLabelY: h * 2.42, holdY: h * 3, soundY: h * 4.25, goalLabelY: h * 5.2, goalY: h * 5.55, slot: l.cellW * 0.9 };
+    // Sideways: everything in the column left of the board, as in the original.
+    const cx = l.boardX - l.railW / 2;
+    const textSize = Math.max(12, l.railW * 0.13);
+    const y0 = l.stackY;
+    const y1 = l.stackY + l.boardH;
+    const base = {
+      cx,
+      soundX: cx,
+      scoreCx: cx,
+      pillCx: cx,
+      popsCx: cx,
+      goalX: cx,
+      meterW: l.railW * 0.7,
+      pillW: l.railW * 0.7,
+      textSize,
+      popsCapY: y1 - h * 1.1,
+      popsY: y1 - h * 0.45,
+    };
+    if (this.ctx.palette.kind === "generated") {
+      return { ...base, scoreCapY: y0 + h * 0.55, scoreY: y0 + h * 1.25, chainY: y0 + h * 1.85, levelY: y0 + h * 2.75, holdLabelY: y0 + h * 3.5, holdY: y0 + h * 4.1, soundY: y0 + h * 5.4, goalLabelY: y0 + h * 6.25, goalY: y0 + h * 6.6, slot: l.cellW * 0.8 };
+    }
+    return { ...base, scoreCapY: y0 + h, scoreY: y0 + h, chainY: y0 + h * 1.65, levelY: y0 + h * 1.95, holdLabelY: y0 + h * 2.42, holdY: y0 + h * 3, soundY: y0 + h * 4.25, goalLabelY: y0 + h * 5.2, goalY: y0 + h * 5.55, slot: l.cellW * 0.9, popsY: y1 - h / 2, meterW: l.railW * 0.6 };
   }
 
   /** Sim steps the push countdown lasts once the line is full. */
@@ -530,8 +638,8 @@ export class GameScene implements Scene {
       return;
     }
 
-    if (this.buttonsTheme !== this.ctx.palette.name) {
-      this.board.setSpacing(spacingFor(this.ctx.palette.kind));
+    if (this.buttonsTheme !== this.layoutKey()) {
+      this.board.setEnv(spacingFor(this.ctx.palette.kind), viewportFor(this.ctx.view, this.ctx.palette.kind));
       for (const b of this.board.allBricks()) b.settle();
       this.placeHeld();
       this.held?.settle();
@@ -688,8 +796,9 @@ export class GameScene implements Scene {
 
   /** Buttons on the pause and game-over cards. */
   private overlayButtons(): PillButton[] {
-    const cx = SCREEN_W / 2;
-    const y = SCREEN_H / 2 + 72;
+    const vp = this.ctx.view;
+    const cx = vp.w / 2;
+    const y = vp.h / 2 + 72;
     const w = 150;
     const h = 44;
     if (this.state === "lost") {
@@ -895,7 +1004,7 @@ export class GameScene implements Scene {
         this.goalAwarded = true;
         gained += GOAL_BONUS;
         this.ctx.audio.play("achievment_snd");
-        this.addCallout(`SUBTRACT GOAL +${GOAL_BONUS}`, l.boardX + l.boardW / 2, l.boardH * 0.4, { delay: 300, size: 24, color: pal.goalAccent, dur: 1400, rise: 30, display: true });
+        this.addCallout(`SUBTRACT GOAL +${GOAL_BONUS}`, l.boardX + l.boardW / 2, l.boardY + l.boardH * 0.4, { delay: 300, size: 24, color: pal.goalAccent, dur: 1400, rise: 30, display: true });
       }
     }
     this.ctx.session.score += gained;
@@ -1387,10 +1496,9 @@ export class GameScene implements Scene {
     const inp = this.ctx.input;
     const slides =
       this.tutorialPhase === "intro" ? this.ctx.sprites.tutorial_intro_sprite : this.ctx.sprites.tutorial_outro_sprite;
-    const w = SCREEN_W;
-    const h = SCREEN_H;
-    const next = inp.keysPressed.has("ArrowRight") || inp.keysPressed.has("Enter") || (inp.pressed && inp.x > w - h / 5 && inp.y > h * 0.8);
-    const back = inp.keysPressed.has("ArrowLeft") || (inp.pressed && inp.x < h * 0.2 && inp.y > h * 0.8);
+    const { x: sx, y: sy, w, h } = this.slideRect();
+    const next = inp.keysPressed.has("ArrowRight") || inp.keysPressed.has("Enter") || (inp.pressed && inp.x > sx + w - h / 5 && inp.y > sy + h * 0.8);
+    const back = inp.keysPressed.has("ArrowLeft") || (inp.pressed && inp.x < sx + h * 0.2 && inp.y > sy + h * 0.8);
 
     if (next) {
       this.ctx.audio.play("menuselect_snd");
@@ -1512,8 +1620,7 @@ export class GameScene implements Scene {
     const pal = this.ctx.palette;
     const t = this.ctx.clock.t;
 
-    g.fillStyle = pal.background;
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    fillScreen(g, pal.background);
 
     if (this.state === "tutorial" && this.tutorialPhase !== "add") {
       this.renderTutorialSlides(g);
@@ -1585,13 +1692,18 @@ export class GameScene implements Scene {
     if (this.state === "lost") this.renderLost(g);
 
     if (world === 0 && this.tutorialPhase === "add" && this.tutorialText) {
+      const lay = this.board.layout;
+      const vp = lay.vp;
+      // Upright, the caption sits in the top band; sideways it floats over the top of the board.
+      const ty = lay.portrait ? lay.hudTopY + lay.hudTop / 2 : vp.h / 4;
       if (pal.kind === "generated") {
         const lines = this.tutorialText.split("\n").length;
         const h = 24 * lines + 28;
-        drawCard(g, pal.ui, SCREEN_W / 2 - 230, SCREEN_H / 4 - h / 2, 460, h, 16);
-        drawText(g, this.tutorialText, SCREEN_W / 2, SCREEN_H / 4, { size: 20, color: pal.tutorialText, weight: 600, font: pal.display });
+        const w = Math.min(460, vp.w - 24);
+        drawCard(g, pal.ui, vp.w / 2 - w / 2, ty - h / 2, w, h, 16);
+        drawText(g, this.tutorialText, vp.w / 2, ty, { size: 20, color: pal.tutorialText, weight: 600, font: pal.display });
       } else {
-        drawText(g, this.tutorialText, SCREEN_W / 2, SCREEN_H / 4, { size: 22, color: pal.tutorialText, shadow: pal.tutorialShadow });
+        drawText(g, this.tutorialText, vp.w / 2, ty, { size: 22, color: pal.tutorialText, shadow: pal.tutorialShadow });
       }
     }
     this.renderFade(g);
@@ -1602,8 +1714,7 @@ export class GameScene implements Scene {
     const e = this.ctx.clock.t - this.fadeT0;
     if (e >= D(FADE_MS)) return;
     g.globalAlpha = 1 - clamp01(e / D(FADE_MS));
-    g.fillStyle = this.ctx.palette.background;
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    fillScreen(g, this.ctx.palette.background);
     g.globalAlpha = 1;
   }
 
@@ -1804,7 +1915,7 @@ export class GameScene implements Scene {
     const active = this.holdHover && (this.selectedBrick !== null || this.held !== null);
     if (pal.kind === "generated") {
       fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, 1.5);
-      drawText(g, "HOLD", r.cx, r.holdLabelY, { size: Math.max(10, l.boardX * 0.08), color: pal.hudMuted, weight: 700 });
+      drawText(g, "HOLD", r.cx, r.holdLabelY, { size: Math.max(10, r.textSize * 0.62), color: pal.hudMuted, weight: 700 });
     } else {
       drawSprite(g, this.ctx.sprites.replenish_frame_sprite, 0, x - 2, y - 2, r.slot + 4, r.slot + 4);
       if (active) fillRoundRect(g, x, y, r.slot, r.slot, 4, "rgba(255,255,255,0.18)");
@@ -2074,7 +2185,7 @@ export class GameScene implements Scene {
         sp.replenish_frame_sprite,
         0,
         l.boardX + (l.cellW + l.cellSep) * i,
-        l.boardH - l.cellH - l.cellSep * 2 - 1,
+        replenishY(l) - l.cellSep - 1,
         l.cellW + l.cellSep,
         l.cellH + 2 * l.cellSep,
       );
@@ -2104,8 +2215,8 @@ export class GameScene implements Scene {
       g.restore();
     }
 
-    drawSprite(g, sp.sidebar_sprite, 0, 0, 0, l.boardX, SCREEN_H);
-    drawSprite(g, sp.sidebar_sprite, 1, Math.floor(l.boardX) + l.boardW, 0, l.boardX, SCREEN_H);
+    drawSprite(g, sp.sidebar_sprite, 0, l.boardX - l.railW, l.stackY, l.railW, l.boardH);
+    drawSprite(g, sp.sidebar_sprite, 1, Math.floor(l.boardX) + l.boardW, l.stackY, l.railW, l.boardH);
   }
 
   private renderButtons(g: CanvasRenderingContext2D): void {
@@ -2126,35 +2237,35 @@ export class GameScene implements Scene {
     const l = this.board.layout;
     const n = l.cellNum;
     const s = this.ctx.session;
-    const textSize = Math.max(12, l.boardX * 0.13);
     const pal = this.ctx.palette;
     const t = this.ctx.clock.t;
     const shown = String(Math.round(this.scoreFx.v));
 
     const goal = s.gameType === "puzzle" ? this.board.countBricks() : this.comboRemaining;
     const label = s.gameType === "puzzle" ? "Bricks left" : "Pops left";
-    const cx = l.boardX / 2;
     const r = this.rail();
+    const textSize = r.textSize;
+    const cx = r.cx;
     const mult = this.chainMultiplier();
 
     if (pal.kind === "generated") {
-      const caption = (txt: string, y: number) => drawText(g, txt.toUpperCase(), cx, y, { size: textSize * 0.62, color: pal.hudMuted, weight: 700 });
-      const big = (txt: string, y: number) => drawText(g, txt, cx, y, { size: textSize * 1.9, color: pal.hudText, weight: 700, tabular: true });
-      caption("Score", l.cellH * 0.55);
+      const caption = (txt: string, x: number, y: number) => drawText(g, txt.toUpperCase(), x, y, { size: textSize * 0.62, color: pal.hudMuted, weight: 700 });
+      const big = (txt: string, x: number, y: number) => drawText(g, txt, x, y, { size: textSize * 1.9, color: pal.hudText, weight: 700, tabular: true });
+      caption("Score", r.scoreCx, r.scoreCapY);
       if (pal.glow) {
         g.save();
         g.shadowColor = pal.multColors[mult];
         g.shadowBlur = 6;
-        big(shown, l.cellH * 1.25);
+        big(shown, r.scoreCx, r.scoreY);
         g.restore();
       } else {
-        big(shown, l.cellH * 1.25);
+        big(shown, r.scoreCx, r.scoreY);
       }
 
       // Chain meter: a track that drains while the chain cools off.
-      const meterW = l.boardX * 0.7;
+      const meterW = r.meterW;
       const meterH = 5;
-      const meterX = cx - meterW / 2;
+      const meterX = r.scoreCx - meterW / 2;
       const meterY = r.chainY;
       fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, pal.track);
       if (this.heat > 0) {
@@ -2185,7 +2296,7 @@ export class GameScene implements Scene {
         }
       }
       g.save();
-      g.translate(cx, meterY + 12);
+      g.translate(r.scoreCx, meterY + 12);
       g.scale(this.badgeFx.s, this.badgeFx.s);
       drawText(g, this.chain > 0 ? `CHAIN  x${mult}` : "CHAIN", 0, 0, {
         size: textSize * 0.55,
@@ -2194,20 +2305,20 @@ export class GameScene implements Scene {
       });
       g.restore();
 
-      const pillW = l.boardX * 0.7;
+      const pillW = r.pillW;
       const pillH = textSize * 1.5;
       const pillY = r.levelY;
-      fillRoundRect(g, cx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2, pal.pill, pal.pillEdge);
-      drawText(g, `${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}`, cx, pillY, {
+      fillRoundRect(g, r.pillCx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2, pal.pill, pal.pillEdge);
+      drawText(g, `${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}`, r.pillCx, pillY, {
         size: textSize * 0.75,
         color: pal.hudText,
         weight: 700,
       });
 
       if (this.subtractGoal > 0) {
-        caption("Subtract pops", r.goalLabelY);
+        caption("Subtract pops", r.goalX, r.goalLabelY);
         const done = this.goalAwarded;
-        drawText(g, done ? `${this.subtractGoal} / ${this.subtractGoal}  ✓` : `${this.subtractDone} / ${this.subtractGoal}`, cx, r.goalY, {
+        drawText(g, done ? `${this.subtractGoal} / ${this.subtractGoal}  ✓` : `${this.subtractDone} / ${this.subtractGoal}`, r.goalX, r.goalY, {
           size: textSize * 1.1,
           color: done ? pal.goalAccent : pal.hudText,
           weight: 700,
@@ -2215,11 +2326,11 @@ export class GameScene implements Scene {
         });
       }
 
-      caption(label, SCREEN_H - l.cellH * 1.1);
-      big(String(goal), SCREEN_H - l.cellH * 0.45);
+      caption(label, r.popsCx, r.popsCapY);
+      big(String(goal), r.popsCx, r.popsY);
     } else {
-      drawText(g, `Score:\n${shown}`, cx, l.cellH, { size: textSize, color: pal.hudText, tabular: true });
-      const meterW = l.boardX * 0.6;
+      drawText(g, `Score:\n${shown}`, cx, r.scoreY, { size: textSize, color: pal.hudText, tabular: true });
+      const meterW = r.meterW;
       g.fillStyle = "rgba(0,0,0,0.15)";
       g.fillRect(cx - meterW / 2, r.chainY - 2, meterW, 4);
       if (this.heat > 0) {
@@ -2242,7 +2353,7 @@ export class GameScene implements Scene {
           tabular: true,
         });
       }
-      drawText(g, `${label}\n${goal}`, cx, SCREEN_H - l.cellH / 2, { size: textSize, color: pal.hudText, tabular: true });
+      drawText(g, `${label}\n${goal}`, cx, r.popsY, { size: textSize, color: pal.hudText, tabular: true });
     }
 
     const bar = sp.progressbar_sprite;
@@ -2327,8 +2438,9 @@ export class GameScene implements Scene {
   /** Where the card sits this frame: it slides up from below with an overshoot. */
   private cardOffset(): number {
     const e = this.ctx.clock.t - this.cardT0;
-    if (e < 0) return SCREEN_H;
-    return (1 - CARD_EASE(clamp01(e / D(CARD_MS)))) * SCREEN_H * 0.6;
+    const vh = this.ctx.view.h;
+    if (e < 0) return vh;
+    return (1 - CARD_EASE(clamp01(e / D(CARD_MS)))) * vh * 0.6;
   }
 
   /** Centred card with a title, body lines and the overlay buttons. */
@@ -2336,25 +2448,25 @@ export class GameScene implements Scene {
     const inp = this.ctx.input;
     const pal = this.ctx.palette;
     const e = this.ctx.clock.t - this.cardT0;
-    g.fillStyle = pal.ui.dim;
     g.globalAlpha = clamp01(e / D(200));
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    fillScreen(g, pal.ui.dim);
     g.globalAlpha = 1;
 
     const off = this.cardOffset();
-    const w = 440;
+    const vp = this.ctx.view;
+    const w = Math.min(440, vp.w - 24);
     const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0) - (buttons ? 0 : 50);
-    const x = SCREEN_W / 2 - w / 2;
-    const y = SCREEN_H / 2 - 110 + off;
+    const x = vp.w / 2 - w / 2;
+    const y = vp.h / 2 - 110 + off;
     g.save();
     g.translate(0, 0);
     drawCard(g, pal.ui, x, y, w, h, 20);
-    if (footer) drawText(g, footer, SCREEN_W / 2, y + h - 22, { size: 12, color: pal.hudMuted, weight: 500 });
-    drawText(g, title, SCREEN_W / 2, y + 46, { size: 30, color: pal.overlayText, weight: 600, font: pal.display });
+    if (footer) drawText(g, footer, vp.w / 2, y + h - 22, { size: 12, color: pal.hudMuted, weight: 500 });
+    drawText(g, title, vp.w / 2, y + 46, { size: 30, color: pal.overlayText, weight: 600, font: pal.display });
     lines.forEach((line, i) => {
-      drawText(g, line, SCREEN_W / 2, y + 90 + i * 24, { size: 16, color: pal.hudMuted, weight: 500, tabular: true });
+      drawText(g, line, vp.w / 2, y + 90 + i * 24, { size: 16, color: pal.hudMuted, weight: 500, tabular: true });
     });
-    if (accent) drawText(g, accent, SCREEN_W / 2, y + 90 + lines.length * 24, { size: 16, color: pal.overlayAccent, weight: 700 });
+    if (accent) drawText(g, accent, vp.w / 2, y + 90 + lines.length * 24, { size: 16, color: pal.overlayAccent, weight: 700 });
     if (buttons && (this.state !== "lost" || this.lostTimer > 20)) {
       for (const b of this.overlayButtons()) {
         const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
@@ -2391,21 +2503,29 @@ export class GameScene implements Scene {
     this.renderOverlayCard(g, "Out of room", [`Score ${s.score}`, `Best ${this.ctx.save.hiscore}`], best ? "New high score!" : undefined);
   }
 
+  /** Where the 3:2 tutorial slides sit: as large as fits, centred. */
+  private slideRect(): { x: number; y: number; w: number; h: number } {
+    const vp = this.ctx.view;
+    const w = Math.min(vp.w, vp.h * 1.5);
+    const h = w / 1.5;
+    return { x: (vp.w - w) / 2, y: (vp.h - h) / 2, w, h };
+  }
+
   private renderTutorialSlides(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
     const slides = this.tutorialPhase === "intro" ? sp.tutorial_intro_sprite : sp.tutorial_outro_sprite;
-    const h = SCREEN_H;
+    const { x, y, w, h } = this.slideRect();
     const inp = this.ctx.input;
-    drawSprite(g, slides, this.tutorialState, 0, 0, SCREEN_W, SCREEN_H);
+    drawSprite(g, slides, this.tutorialState, x, y, w, h);
     const size = h * 0.2;
     if (this.tutorialState > 0) {
-      const hover = inp.inRect(0, h * 0.8, size, size);
+      const hover = inp.inRect(x, y + h * 0.8, size, size);
       const sc = this.feel.scale("slide:back", hover, hover && inp.down);
-      drawSprite(g, sp.back_button_sprite, 0, size / 2 - (size * sc) / 2, h * 0.9 - (size * sc) / 2, size * sc, size * sc);
+      drawSprite(g, sp.back_button_sprite, 0, x + size / 2 - (size * sc) / 2, y + h * 0.9 - (size * sc) / 2, size * sc, size * sc);
     }
-    const hover = inp.inRect(SCREEN_W - size, h * 0.8, size, size);
+    const hover = inp.inRect(x + w - size, y + h * 0.8, size, size);
     const sc = this.feel.scale("slide:next", hover, hover && inp.down);
-    drawSprite(g, sp.back_button_sprite, 2, SCREEN_W - size / 2 - (size * sc) / 2, h * 0.9 - (size * sc) / 2, size * sc, size * sc);
+    drawSprite(g, sp.back_button_sprite, 2, x + w - size / 2 - (size * sc) / 2, y + h * 0.9 - (size * sc) / 2, size * sc, size * sc);
   }
 }
 

@@ -1,10 +1,10 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
-import { SCREEN_H, SCREEN_W } from "../core/constants";
 import type { Layout } from "../core/layout";
 import { cellY, replenishY } from "../core/layout";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
 import { chevronUp, gearIcon, polygon, rotateIcon, roundRect, shade, speakerIcon, sprite, text, type Ctx } from "./modernSkin";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
+import { fillScreen, screenRect } from "./view";
 
 /**
  * "Blocky": the third sprite set. Soft 3D toy bricks: a flat top face, a
@@ -186,11 +186,11 @@ export function toyButton(g: Ctx, w: number, h: number, pressed: boolean, icon: 
  * panel on the left and the tray under the replenish line.
  */
 export function drawBlockyBackdrop(g: Ctx, t: number, l?: Layout): void {
-  g.fillStyle = BG;
-  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  fillScreen(g, BG);
+  const sr = screenRect();
   const x0 = l ? l.boardX : 0;
-  const x1 = l ? l.boardX + l.boardW : SCREEN_W;
-  const y1 = l ? cellY(l, l.cellNum) - l.cellSep : SCREEN_H;
+  const x1 = l ? l.boardX + l.boardW : sr.w;
+  const y1 = l ? cellY(l, l.cellNum) - l.cellSep : sr.h;
   const cxm = (x0 + x1) / 2;
   g.fillStyle = "rgba(255,255,255,0.03)";
   for (let x = cxm - Math.floor((cxm - x0) / 48) * 48; x <= x1; x += 48) {
@@ -200,11 +200,11 @@ export function drawBlockyBackdrop(g: Ctx, t: number, l?: Layout): void {
       g.fill();
     }
   }
-  const band = ((t / 60000) % 1) * SCREEN_H;
+  const band = ((t / 60000) % 1) * sr.h;
   g.fillStyle = "rgba(255,255,255,0.05)";
-  g.fillRect(0, band, SCREEN_W, 1);
+  g.fillRect(0, band, sr.w, 1);
   if (l) {
-    panel(g, 8, 8, l.boardX - 16, SCREEN_H - 22, 14);
+    if (!l.portrait) panel(g, l.boardX - l.railW + 8, 8, l.railW - 16, sr.h - 22, 14);
     const ry = replenishY(l);
     panel(g, l.boardX - 6, ry - 6, l.boardW + 12, l.cellH + 12, 12);
   }

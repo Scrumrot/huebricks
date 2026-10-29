@@ -1,10 +1,10 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
-import { SCREEN_H, SCREEN_W } from "../core/constants";
 import type { Layout } from "../core/layout";
 import { cellX, cellY, replenishY } from "../core/layout";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
 import { chevronUp, gearIcon, polygon, rgba, rotateIcon, roundRect, shade, speakerIcon, sprite, text, type Ctx } from "./modernSkin";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
+import { fillScreen, screenRect } from "./view";
 
 /**
  * "Spectra": glowing gel tiles on a deep dark field. Light instead of gloss:
@@ -166,10 +166,10 @@ export function glassButton(g: Ctx, w: number, h: number, pressed: boolean, icon
  * board, and the glass tray under the replenish line.
  */
 export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout): void {
-  g.fillStyle = BG;
-  g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-  const bx = l ? l.boardX + l.boardW / 2 : SCREEN_W / 2;
-  const by = l ? (cellY(l, l.cellNum) - l.cellSep) / 2 : SCREEN_H / 2;
+  fillScreen(g, BG);
+  const sr = screenRect();
+  const bx = l ? l.boardX + l.boardW / 2 : sr.w / 2;
+  const by = l ? (cellY(l, l.cellNum) - l.cellSep) / 2 : sr.h / 2;
   const blob = (x: number, y: number, r: number, color: string, a: number) => {
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, rgba(color, a));
@@ -181,7 +181,7 @@ export function drawSpectraBackdrop(g: Ctx, t: number, l?: Layout): void {
   const p2 = (t / 30000) * Math.PI * 2 + 2.1;
   blob(bx + Math.cos(p1) * 140, by + Math.sin(p1 * 0.7) * 90, 260, "#1B2F7A", 0.1);
   blob(bx - Math.cos(p2 * 0.8) * 160, by + Math.sin(p2) * 80, 240, "#3B1B5E", 0.1);
-  blob(bx, by, Math.max(SCREEN_W, SCREEN_H) * 0.42, "#FFFFFF", 0.06);
+  blob(bx, by, Math.max(sr.w, sr.h) * 0.42, "#FFFFFF", 0.06);
   if (l) {
     const n = l.cellNum;
     const gridBottom = cellY(l, n) - l.cellSep;

@@ -20,6 +20,22 @@ The production `dist/` folder is fully static and can be dropped on any web
 host (GitHub Pages, Netlify, an S3 bucket, ...). Paths are relative, so it also
 works from a sub-folder.
 
+### Screen sizes
+
+The canvas fills the browser window and the layout adapts to its shape. Sideways
+(landscape) the HUD sits in columns either side of the board, as in the original;
+on wider windows the columns hug the board and the paper backdrop fills the rest,
+and on squarer windows the board shrinks so the columns keep their room. Upright
+(portrait) the game stacks: score, level and pops above the board, hold slot,
+sound and the board controls below it, and the title menus stack their buttons.
+The Classic theme keeps its side rails in every orientation.
+
+On a phone held sideways the first tap asks the browser for fullscreen so the
+address bar goes away. The title screen also has a fullscreen toggle (or press
+F), which works on desktop browsers and Android; Safari on iPhone has no element
+fullscreen, so the toggle hides itself there and adding the page to the home
+screen is the way to lose the bar.
+
 ## How to play
 
 Bricks are colours made of three primaries (red, blue, yellow). Secondary

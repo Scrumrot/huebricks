@@ -1,7 +1,8 @@
-import { BTN_H, BTN_W, MAX_WORLD, SCREEN_H, SCREEN_W, type GameType } from "../core/constants";
+import { BTN_H, BTN_W, MAX_WORLD, type GameType } from "../core/constants";
 import type { SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
 import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, type PillButton } from "../engine/draw";
+import { fillScreen, screenRect } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
 import { drawPaper } from "../engine/modernSkin";
@@ -62,7 +63,8 @@ interface ScatterChip {
 
 const WALL_COLS = 12;
 const WALL_SIZE = BTN_H / 2;
-const WALL_ROWS = Math.ceil((WALL_COLS * SCREEN_H) / SCREEN_W);
+/** Rows of the original 760 x 507 wall; the classic world-select card is sized from it. */
+const WALL_ROWS = Math.ceil((WALL_COLS * 2) / 3);
 const FLIP_FRAMES = 16;
 const FADE_MS = 180;
 const SCATTER_EASE = backOut(1.4);
@@ -89,16 +91,48 @@ export class TitleScene implements Scene {
   private enterT0 = 0;
   /** Which slider the pointer is dragging on the sound card. */
   private dragging: "music" | "sfx" | null = null;
+  /** Viewport size the menus were last laid out for. */
+  private sizeKey = "";
+
+  private get W(): number {
+    return this.ctx.view.w;
+  }
+
+  private get H(): number {
+    return this.ctx.view.h;
+  }
+
   /** Icon pill in the top-right corner that switches the theme. */
-  private readonly themeToggle = { cx: SCREEN_W - 36, cy: 26, w: 48, h: 30 };
+  private get themeToggle(): { cx: number; cy: number; w: number; h: number } {
+    return { cx: this.W - 36, cy: 26, w: 48, h: 30 };
+  }
+
+  /** Icon pill left of the theme pill that toggles browser fullscreen. */
+  private get fullscreenToggle(): { cx: number; cy: number; w: number; h: number } {
+    return { cx: this.W - 36 - 58, cy: 26, w: 48, h: 30 };
+  }
+
+  /** Where the logo sits: a third of the way down sideways, centred above the bar upright. */
+  private logoY(): number {
+    return this.ctx.view.portrait ? (this.H - BTN_H) / 2 - 10 : 205;
+  }
+
+  /** Re-place everything for a new window size, keeping the current menu. */
+  private relayout(): void {
+    this.sizeKey = `${Math.round(this.W)}x${Math.round(this.H)}`;
+    this.resetWall();
+    this.scatterChips();
+    this.resetBubbles();
+    this.held = null;
+    if (this.menu === "main") this.showMain();
+    else if (this.menu === "mode") this.showModes();
+    else if (this.menu === "world") this.showWorlds(this.pendingType);
+  }
 
   constructor(ctx: GameContext) {
     this.ctx = ctx;
     this.feel = new ButtonFeel(this.tweens);
-    this.resetWall();
-    this.scatterChips();
-    this.resetBubbles();
-    this.showMain();
+    this.relayout();
   }
 
   /** Twenty gel bricks that float up and fade like bubbles. */
@@ -109,7 +143,7 @@ export class TitleScene implements Scene {
   private newBubble(phase: number): Bubble {
     const size = 22 + Math.random() * 34;
     return {
-      x: size + Math.random() * (SCREEN_W - size * 2),
+      x: size + Math.random() * (this.W - size * 2),
       y: 0,
       size,
       speed: 14 + Math.random() * 16,
@@ -124,7 +158,7 @@ export class TitleScene implements Scene {
     const sp = this.ctx.sprites;
     const dt = this.ctx.clock.dt / 1000;
     const t = this.ctx.clock.t;
-    const travel = SCREEN_H - BTN_H + 60;
+    const travel = this.H - BTN_H + 60;
     for (let i = 0; i < this.bubbles.length; i++) {
       let b = this.bubbles[i];
       b.phase += (b.speed * dt) / travel;
@@ -132,7 +166,7 @@ export class TitleScene implements Scene {
         b = this.newBubble(0);
         this.bubbles[i] = b;
       }
-      const y = SCREEN_H - BTN_H + 30 - b.phase * travel;
+      const y = this.H - BTN_H + 30 - b.phase * travel;
       const x = b.x + Math.sin(t / 1400 + b.wobble) * b.drift;
       const a = Math.sin(b.phase * Math.PI) * 0.55;
       g.globalAlpha = a;
@@ -147,11 +181,13 @@ export class TitleScene implements Scene {
   private resetWall(): void {
     const blocky = this.ctx.palette.name === "blocky";
     this.wall = [];
-    for (let row = 0; row < WALL_ROWS; row++) {
-      for (let col = 0; col <= WALL_COLS; col++) {
+    const rows = Math.ceil(this.H / WALL_SIZE);
+    const cols = Math.ceil(this.W / WALL_SIZE);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col <= cols; col++) {
         this.wall.push({
           cx: col * WALL_SIZE + WALL_SIZE / 2,
-          cy: SCREEN_H - row * WALL_SIZE - WALL_SIZE / 2,
+          cy: this.H - row * WALL_SIZE - WALL_SIZE / 2,
           frame: blocky && Math.random() < 0.22 ? Math.floor(Math.random() * 6) : 7,
           nextFrame: 7,
           flip: 0,
@@ -182,6 +218,8 @@ export class TitleScene implements Scene {
     }
     const t = this.themeToggle;
     if (this.menu === "main" && inp.inCentered(t.cx, t.cy, t.w, t.h)) return "pointer";
+    const fs = this.fullscreenToggle;
+    if (this.menu === "main" && this.ctx.fullscreen.supported && inp.inCentered(fs.cx, fs.cy, fs.w, fs.h)) return "pointer";
     return this.buttons.some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ? "pointer" : "default";
   }
 
@@ -192,10 +230,10 @@ export class TitleScene implements Scene {
     let guard = 0;
     while (chips.length < count && guard++ < 400) {
       const size = 34 + Math.random() * 34;
-      const x = size + Math.random() * (SCREEN_W - size * 2);
-      const y = size + Math.random() * (SCREEN_H - BTN_H - size * 2);
+      const x = size + Math.random() * (this.W - size * 2);
+      const y = size + Math.random() * (this.H - BTN_H - size * 2);
       // keep a clear patch behind the logo
-      if (Math.abs(x - SCREEN_W / 2) < 230 && Math.abs(y - 205) < 130) continue;
+      if (Math.abs(x - this.W / 2) < 230 && Math.abs(y - this.logoY()) < 130) continue;
       if (chips.some((c) => Math.hypot(c.x - x, c.y - y) < (c.size + size) * 0.75)) continue;
       chips.push({ x, y, size, tilt: (Math.random() * 12 - 6) * (Math.PI / 180), frame: Math.floor(Math.random() * 6), p: 1 });
     }
@@ -226,16 +264,16 @@ export class TitleScene implements Scene {
   private showMain(): void {
     this.menu = "main";
     const lg = this.ctx.sprites.logo_sprite;
-    const logoW = BTN_W * (this.ctx.palette.name === "blocky" ? 2.1 : 1.5);
+    const logoW = Math.min(this.W - 40, BTN_W * (this.ctx.palette.name === "blocky" ? 2.1 : 1.5) * (this.ctx.view.portrait ? 1.2 : 1));
     const logo = this.generated
-      ? this.button("logo", "logo_sprite", SCREEN_W / 2, 205, logoW, (logoW * lg.height) / lg.width, () => this.showModes(), 1)
-      : this.button("logo", "logo_sprite", SCREEN_W / 2, SCREEN_H - BTN_W, BTN_W, BTN_W, () => this.showModes(), 1);
+      ? this.button("logo", "logo_sprite", this.W / 2, this.logoY(), logoW, (logoW * lg.height) / lg.width, () => this.showModes(), 1)
+      : this.button("logo", "logo_sprite", this.W / 2, this.H - BTN_W, BTN_W, BTN_W, () => this.showModes(), 1);
     this.buttons = [
       logo,
-      this.button("info", "info_button_sprite", BTN_H / 2, SCREEN_H - BTN_H / 2, BTN_H, BTN_H, () => {
+      this.button("info", "info_button_sprite", BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => {
         this.menu = "credits";
       }),
-      this.button("settings", "settings_button_sprite", SCREEN_W - BTN_H / 2, SCREEN_H - BTN_H / 2, BTN_H, BTN_H, () => {
+      this.button("settings", "settings_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => {
         this.menu = "settings";
         this.buttons = [];
       }),
@@ -244,13 +282,16 @@ export class TitleScene implements Scene {
 
   private showModes(): void {
     this.menu = "mode";
-    const y = SCREEN_H - BTN_W;
+    const stacked = this.ctx.view.portrait || this.W < BTN_W * 3 + 16;
+    const y = stacked ? this.H / 2 : this.H - BTN_W;
     const gap = this.generated ? BTN_W * 0.97 : BTN_W;
+    const vGap = BTN_H * 1.22;
+    const at = (i: number): [number, number] => (stacked ? [this.W / 2, y + (i - 1) * vGap] : [this.W / 2 + (i - 1) * gap, y]);
     this.buttons = [
-      this.button("puzzle", "puzzle_button_sprite", SCREEN_W / 2 - gap, y, BTN_W, BTN_H, () => this.showWorlds("puzzle")),
-      this.button("normal", "normal_button_sprite", SCREEN_W / 2, y, BTN_W, BTN_H, () => this.showWorlds("normal")),
-      this.button("zen", "zen_button_sprite", SCREEN_W / 2 + gap, y, BTN_W, BTN_H, () => this.showWorlds("zen")),
-      this.button("back", "back_button_sprite", SCREEN_W - BTN_H / 2, SCREEN_H - BTN_H / 2, BTN_H, BTN_H, () => this.showMain()),
+      this.button("puzzle", "puzzle_button_sprite", ...at(0), BTN_W, BTN_H, () => this.showWorlds("puzzle")),
+      this.button("normal", "normal_button_sprite", ...at(1), BTN_W, BTN_H, () => this.showWorlds("normal")),
+      this.button("zen", "zen_button_sprite", ...at(2), BTN_W, BTN_H, () => this.showWorlds("zen")),
+      this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showMain()),
     ];
   }
 
@@ -259,18 +300,19 @@ export class TitleScene implements Scene {
     this.pendingType = type;
     this.buttons = [];
     const modern = this.generated;
-    const size = modern ? BTN_H * 0.84 : BTN_H;
+    const pitch = Math.min(BTN_H, (this.W - 40) / 4);
+    const size = modern ? pitch * 0.84 : pitch;
     for (let w = 0; w <= MAX_WORLD; w++) {
       const col = w % 4;
       const row = Math.floor(w / 4);
-      const cx = BTN_H * (col + 2) - BTN_H / 2;
-      const cy = SCREEN_H / 2 + (row === 0 ? -BTN_H / 2 : BTN_H / 2) + (modern ? 18 : 0);
+      const cx = this.W / 2 + (col - 1.5) * pitch;
+      const cy = this.H / 2 + (row === 0 ? -pitch / 2 : pitch / 2) + (modern ? 18 : 0);
       this.buttons.push(
         this.button(`world${w}`, `world${w}_sprite` as SpriteName, cx, cy, size, size, () => this.launch(w)),
       );
     }
     this.buttons.push(
-      this.button("back", "back_button_sprite", SCREEN_W - BTN_H / 2, SCREEN_H - BTN_H / 2, BTN_H, BTN_H, () => this.showModes()),
+      this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showModes()),
     );
   }
 
@@ -292,6 +334,7 @@ export class TitleScene implements Scene {
   update(): void {
     const inp = this.ctx.input;
     this.time++;
+    if (this.sizeKey !== `${Math.round(this.W)}x${Math.round(this.H)}`) this.relayout();
     this.updateWall();
 
     if (this.menu === "launch") {
@@ -322,6 +365,13 @@ export class TitleScene implements Scene {
       this.resetWall();
       this.resetBubbles();
       this.showMain();
+      return;
+    }
+
+    const fs = this.fullscreenToggle;
+    if (this.menu === "main" && this.ctx.fullscreen.supported && inp.released && inp.inCentered(fs.cx, fs.cy, fs.w, fs.h)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.ctx.fullscreen.toggle();
       return;
     }
 
@@ -383,12 +433,12 @@ export class TitleScene implements Scene {
 
   /** Sound card geometry: card rect, toggle pill and the two slider tracks. */
   private settingsLayout(): { x: number; y: number; w: number; h: number; toggle: PillButton; sliders: Array<{ id: "music" | "sfx"; label: string; x: number; y: number; w: number }> } {
-    const w = 420;
+    const w = Math.min(420, this.W - 16);
     const h = 270;
-    const x = SCREEN_W / 2 - w / 2;
-    const y = SCREEN_H / 2 - h / 2;
+    const x = this.W / 2 - w / 2;
+    const y = this.H / 2 - h / 2;
     const muted = this.ctx.audio.muted;
-    const toggle: PillButton = { id: "mute", label: muted ? "Sound off" : "Sound on", cx: SCREEN_W / 2, cy: y + 92, w: 170, h: 42, primary: !muted };
+    const toggle: PillButton = { id: "mute", label: muted ? "Sound off" : "Sound on", cx: this.W / 2, cy: y + 92, w: 170, h: 42, primary: !muted };
     const sx = x + 140;
     const sw = w - 230;
     return {
@@ -449,10 +499,9 @@ export class TitleScene implements Scene {
     const pal = this.ctx.palette;
     const inp = this.ctx.input;
     const L = this.settingsLayout();
-    g.fillStyle = pal.ui.dim;
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    fillScreen(g, pal.ui.dim);
     drawCard(g, pal.ui, L.x, L.y, L.w, L.h, 20);
-    drawText(g, "Sound", SCREEN_W / 2, L.y + 42, { size: 28, color: pal.overlayText, weight: 600, font: pal.display });
+    drawText(g, "Sound", this.W / 2, L.y + 42, { size: 28, color: pal.overlayText, weight: 600, font: pal.display });
     const hover = inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h);
     L.toggle.scale = this.feel.scale("settings:mute", hover, hover && inp.down);
     drawPillButton(g, pal.ui, L.toggle, hover, hover && inp.down, pal.font);
@@ -469,7 +518,7 @@ export class TitleScene implements Scene {
       g.globalAlpha = 1;
       drawText(g, `${Math.round(v * 100)}%`, sl.x + sl.w + 16, sl.y, { size: 13, color: pal.hudMuted, weight: 600, tabular: true, align: "left" });
     }
-    drawText(g, "In game, the speaker button toggles sound  ·  M mutes", SCREEN_W / 2, L.y + L.h - 24, { size: 12, color: pal.hudMuted, weight: 500 });
+    drawText(g, "In game, the speaker button toggles sound  ·  M mutes", this.W / 2, L.y + L.h - 24, { size: 12, color: pal.hudMuted, weight: 500 });
   }
 
   /** Icon pill that switches the theme; the label only appears on hover. */
@@ -505,6 +554,41 @@ export class TitleScene implements Scene {
     }
   }
 
+  private renderFullscreenToggle(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const t = this.fullscreenToggle;
+    const active = this.ctx.fullscreen.active;
+    const hover = inp.inCentered(t.cx, t.cy, t.w, t.h);
+    const scale = this.feel.scale("fullscreen", hover, hover && inp.down);
+    const w = t.w * scale;
+    const h = t.h * scale;
+    fillRoundRect(g, t.cx - w / 2, t.cy - h / 2, w, h, h / 2, hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+    // Four corner brackets: at the corners to enter, pulled inward to exit.
+    const r = h * 0.3;
+    const a = r * 0.55;
+    g.save();
+    g.translate(t.cx, t.cy);
+    g.scale(scale, scale);
+    g.lineWidth = 2;
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    g.strokeStyle = pal.titleText;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      const c = active ? a * 0.8 : r;
+      const arm = active ? r : r - a;
+      g.beginPath();
+      g.moveTo(sx * c, sy * arm);
+      g.lineTo(sx * c, sy * c);
+      g.lineTo(sx * arm, sy * c);
+      g.stroke();
+    }
+    g.restore();
+    if (hover) {
+      drawText(g, active ? "Exit fullscreen (F)" : "Fullscreen (F)", t.cx, t.cy + h / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600 });
+    }
+  }
+
   private renderScatter(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites.brick_noicon_sprite;
     for (const c of this.chips) {
@@ -530,42 +614,38 @@ export class TitleScene implements Scene {
     const modern = this.generated;
     const subMenu = this.menu !== "main" && this.menu !== "launch";
 
-    g.fillStyle = pal.background;
-    g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    fillScreen(g, pal.background);
 
     if (pal.name === "pigment") {
       drawPaper(g, this.ctx.clock.t);
       this.renderScatter(g);
       if (subMenu) {
         // Push the chips back so the menu reads as the foreground.
-        g.fillStyle = "rgba(243,238,228,0.72)";
-        g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+        fillScreen(g, "rgba(243,238,228,0.72)");
       }
     } else if (pal.name === "spectra") {
       drawSpectraBackdrop(g, this.ctx.clock.t);
       this.renderBubbles(g);
       if (subMenu) {
-        g.fillStyle = "rgba(7,7,12,0.7)";
-        g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+        fillScreen(g, "rgba(7,7,12,0.7)");
       }
     } else if (pal.name === "blocky") {
       drawBlockyBackdrop(g, this.ctx.clock.t);
       // Staggered wall of toy bricks, every other row shifted half a brick.
       const wallSprite = sp.brick_noicon_sprite;
       for (const b of this.wall) {
-        const row = Math.round((SCREEN_H - WALL_SIZE / 2 - b.cy) / WALL_SIZE);
+        const row = Math.round((this.H - WALL_SIZE / 2 - b.cy) / WALL_SIZE);
         const ox = row % 2 === 1 ? -WALL_SIZE / 2 : 0;
-        if (ox === 0 && b.cx > SCREEN_W) continue;
+        if (ox === 0 && b.cx > this.W) continue;
         drawSprite(g, wallSprite, b.frame, b.cx + ox - WALL_SIZE / 2, b.cy - WALL_SIZE / 2 - 10 * b.hop, WALL_SIZE, WALL_SIZE);
       }
       if (subMenu) {
-        g.fillStyle = "rgba(18,24,38,0.72)";
-        g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+        fillScreen(g, "rgba(18,24,38,0.72)");
       }
     } else {
       const wallSprite = sp.brick_noicon_sprite;
       for (const b of this.wall) {
-        if (b.cx > SCREEN_W) continue;
+        if (b.cx > this.W) continue;
         let xs = 1;
         if (b.flip > 0) {
           const t = b.flip / FLIP_FRAMES;
@@ -577,57 +657,65 @@ export class TitleScene implements Scene {
     }
 
     if (this.menu === "main") {
-      drawSprite(g, sp.menu_frame_sprite, 0, 0, SCREEN_H - BTN_H, SCREEN_W, BTN_H);
-      const barY = SCREEN_H - BTN_H / 2;
       if (modern) {
-        drawText(g, "HIGH SCORE", SCREEN_W / 2, barY - 20, { size: 12, color: pal.titleMuted, weight: 700 });
-        drawText(g, String(this.ctx.save.hiscore), SCREEN_W / 2, barY + 10, { size: 34, color: pal.titleText, weight: 600, font: pal.display, tabular: true });
+        // Generated bands are uniform, so they can run out to the screen edge.
+        const sr = screenRect();
+        drawSprite(g, sp.menu_frame_sprite, 0, sr.x, this.H - BTN_H, sr.w, BTN_H);
       } else {
-        drawText(g, `High Score: ${this.ctx.save.hiscore}`, SCREEN_W / 2, barY, { size: 18, color: pal.titleText, tabular: true });
+        drawSprite(g, sp.menu_frame_sprite, 0, 0, this.H - BTN_H, this.W, BTN_H);
+      }
+      const barY = this.H - BTN_H / 2;
+      if (modern) {
+        drawText(g, "HIGH SCORE", this.W / 2, barY - 20, { size: 12, color: pal.titleMuted, weight: 700 });
+        drawText(g, String(this.ctx.save.hiscore), this.W / 2, barY + 10, { size: 34, color: pal.titleText, weight: 600, font: pal.display, tabular: true });
+      } else {
+        drawText(g, `High Score: ${this.ctx.save.hiscore}`, this.W / 2, barY, { size: 18, color: pal.titleText, tabular: true });
       }
       if (this.ctx.audio.muted) {
-        drawText(g, "muted", SCREEN_W - BTN_H / 2, SCREEN_H - BTN_H - 12, { size: 12, color: pal.titleMuted, weight: 500 });
+        drawText(g, "muted", this.W - BTN_H / 2, this.H - BTN_H - 12, { size: 12, color: pal.titleMuted, weight: 500 });
       }
       this.renderThemeToggle(g);
+      if (this.ctx.fullscreen.supported) this.renderFullscreenToggle(g);
     }
 
     if (this.menu === "world") {
       if (modern) {
-        const w = 520;
+        const w = Math.min(520, this.W - 16);
         const h = 360;
-        const x = SCREEN_W / 2 - w / 2;
-        const y = SCREEN_H / 2 - 180;
+        const x = this.W / 2 - w / 2;
+        const y = this.H / 2 - 180;
         drawCard(g, pal.ui, x, y, w, h, 24);
-        drawText(g, "Select a world", SCREEN_W / 2, y + 32, { size: 22, color: pal.titleText, weight: 600, font: pal.display });
+        drawText(g, "Select a world", this.W / 2, y + 32, { size: 22, color: pal.titleText, weight: 600, font: pal.display });
         const chip = `${this.pendingType[0].toUpperCase()}${this.pendingType.slice(1)} mode`;
-        fillRoundRect(g, SCREEN_W / 2 - 60, y + 50, 120, 24, 12, pal.ui.secondary, pal.ui.secondaryEdge, 1);
-        drawText(g, chip, SCREEN_W / 2, y + 63, { size: 12, color: pal.titleText, weight: 700 });
-        drawText(g, "Tutorial teaches the colour rules in a minute", SCREEN_W / 2, y + h - 24, { size: 12, color: pal.titleMuted, weight: 500 });
+        fillRoundRect(g, this.W / 2 - 60, y + 50, 120, 24, 12, pal.ui.secondary, pal.ui.secondaryEdge, 1);
+        drawText(g, chip, this.W / 2, y + 63, { size: 12, color: pal.titleText, weight: 700 });
+        drawText(g, "Tutorial teaches the colour rules in a minute", this.W / 2, y + h - 24, { size: 12, color: pal.titleMuted, weight: 500 });
       } else {
         const bg = sp.level_select_sprite;
         const w = 5 * BTN_H;
         const h = ((WALL_ROWS - 2) * BTN_H) / 2;
-        drawSprite(g, bg, 0, SCREEN_W / 2 - w / 2, SCREEN_H - (BTN_H / 2) * (WALL_ROWS / 2) - h / 2, w, h);
-        drawText(g, `Select a world (${this.pendingType})`, SCREEN_W / 2, SCREEN_H / 2 - BTN_H - 12, { size: 18, color: pal.titleText });
-        drawText(g, "World 0 is the tutorial", SCREEN_W / 2, SCREEN_H / 2 + BTN_H + 12, { size: 14, color: pal.titleMuted, bold: false });
+        drawSprite(g, bg, 0, this.W / 2 - w / 2, this.H - (BTN_H / 2) * (WALL_ROWS / 2) - h / 2, w, h);
+        drawText(g, `Select a world (${this.pendingType})`, this.W / 2, this.H / 2 - BTN_H - 12, { size: 18, color: pal.titleText });
+        drawText(g, "World 0 is the tutorial", this.W / 2, this.H / 2 + BTN_H + 12, { size: 14, color: pal.titleMuted, bold: false });
       }
     }
 
     if (this.menu === "mode") {
-      const y = SCREEN_H - BTN_W;
+      const modes = this.buttons.filter((b) => b.id !== "back");
+      const top = Math.min(...modes.map((b) => b.cy));
       if (modern) {
-        drawText(g, "Choose a mode", SCREEN_W / 2, y - BTN_H / 2 - 34, { size: 26, color: pal.titleText, weight: 600, font: pal.display });
-        const gap = BTN_W * 0.97;
-        const descriptions: Array<[number, string]> = [
-          [SCREEN_W / 2 - gap, "Clear the whole board"],
-          [SCREEN_W / 2, "Pop the target number of groups"],
-          [SCREEN_W / 2 + gap, "Like Normal, but you can't lose"],
-        ];
-        for (const [cx, d] of descriptions) {
-          drawText(g, d, cx, y + BTN_H / 2 + 18, { size: 12, color: pal.titleMuted, weight: 500 });
+        drawText(g, "Choose a mode", this.W / 2, top - BTN_H / 2 - 34, { size: 26, color: pal.titleText, weight: 600, font: pal.display });
+        const descriptions: Record<string, string> = {
+          puzzle: "Clear the whole board",
+          normal: "Pop the target number of groups",
+          zen: "Like Normal, but you can't lose",
+        };
+        for (const b of modes) {
+          const d = descriptions[b.id];
+          if (d) drawText(g, d, b.cx, b.cy + BTN_H / 2 + 18, { size: 12, color: pal.titleMuted, weight: 500 });
         }
       } else {
-        drawText(g, "Choose a game mode", SCREEN_W / 2, y - BTN_H, { size: 20, color: pal.overlayText, shadow: "#000" });
+        drawText(g, "Choose a game mode", this.W / 2, top - BTN_H, { size: 20, color: pal.overlayText, shadow: "#000" });
       }
     }
 
@@ -641,9 +729,11 @@ export class TitleScene implements Scene {
     }
 
     if (this.menu === "credits") {
-      g.fillStyle = pal.ui.dim;
-      g.fillRect(0, 0, SCREEN_W, SCREEN_H);
-      drawSprite(g, sp.credits_sprite, 0, BTN_H, BTN_H, SCREEN_W - BTN_H * 2, SCREEN_H - BTN_H * 2);
+      fillScreen(g, pal.ui.dim);
+      const cs = sp.credits_sprite;
+      const m = Math.min(BTN_H, this.W * 0.06, this.H * 0.06);
+      const k = Math.min((this.W - m * 2) / cs.width, (this.H - m * 2) / cs.height);
+      drawSprite(g, cs, 0, this.W / 2 - (cs.width * k) / 2, this.H / 2 - (cs.height * k) / 2, cs.width * k, cs.height * k);
     }
     if (this.menu === "settings") this.renderSettings(g);
 
@@ -651,14 +741,12 @@ export class TitleScene implements Scene {
     const e = this.ctx.clock.t - this.enterT0;
     if (e < FADE_MS) {
       g.globalAlpha = 1 - clamp01(e / FADE_MS);
-      g.fillStyle = pal.background;
-      g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+      fillScreen(g, pal.background);
       g.globalAlpha = 1;
     }
     if (this.menu === "launch") {
       g.globalAlpha = clamp01((this.ctx.clock.t - this.launchT0) / FADE_MS);
-      g.fillStyle = pal.background;
-      g.fillRect(0, 0, SCREEN_W, SCREEN_H);
+      fillScreen(g, pal.background);
       g.globalAlpha = 1;
     }
   }
