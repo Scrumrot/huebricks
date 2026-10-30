@@ -244,6 +244,29 @@ multiplier colour breathes in at the screen edges, a brick dragged across
 the board trails a ribbon in its colour, and a level clear pops whatever is
 left in a wave from the last pop before the fountain.
 
+Sound runs through one small mixer (`src/engine/audio.ts`): effects on one
+bus, music on its own bus behind a lowpass, both into a master limiter,
+with a short echo the synthesised sounds can send into. Big pops and a
+level clear duck the music for a moment, the pause card dulls and quietens
+it, tracks crossfade instead of cutting, and a sound asked for twice in the
+same instant plays once.
+
+Classic plays the original recordings. Every modern theme plays no samples
+at all: scenes ask for game events (select, combine, pop, push, rotate,
+landing, tap, toast, star and so on, `src/engine/soundProfile.ts`) and the
+synthesiser (`src/engine/synth.ts`) plays them on the theme's material. The
+colour theory is in the notes (`src/engine/colorNotes.ts`): red, yellow and
+blue are the root, third and fifth of a major triad, each secondary is the
+interval of its two parents, black is the chord an octave down. A combine
+plays the old notes resolving into the new ones (a subtract drops an
+octave), a pop plays the popped colour's chord lifted up the scale by the
+chain, a level clear is the arpeggio, a loss the same notes falling. The
+materials are paint (Pigment, Delicious), glass (Crystals, Stained Glass),
+paper (Origami), wood (Nature, Vintage), haunted wood (Halloween), gel
+(Gooey), toy plastic (Blocky), synth (Spectra), bells (Lantern, Christmas)
+and snow (Winter). The effects lab (`?fx`) has Sample, Event, Cue and Duck
+buttons for auditioning each theme.
+
 The theme is remembered in `localStorage` together with the high score, the
 furthest world reached, the mute setting and the two volume levels.
 
@@ -284,6 +307,9 @@ src/
     buttonFeel.ts press / hover scale for buttons
     soundControls.ts speaker toggle + music / effects sliders shared by settings and the pause card
     icons.ts        the shared icon family every theme's buttons draw
+    soundProfile.ts game sound events, the per-theme materials and Classic's sample map
+    colorNotes.ts   the colour theory as pitch
+    synth.ts        procedural cues and the event synthesiser
     hudLayout.ts    pure HUD and control geometry (landscape rails, portrait bands, left-handed mirror)
     themePicker.ts   theme swatches: strip, grid and drawing
     keycaps.ts       keyboard hint row

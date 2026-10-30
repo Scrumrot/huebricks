@@ -441,7 +441,7 @@ export class TitleScene implements Scene {
     const sw = swatchAt(this.themeSwatches, inp.x, inp.y);
     if (sw) {
       if (sw.name !== this.ctx.palette.name) {
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
         this.ctx.setTheme(sw.name);
         this.resetWall();
         this.resetBubbles();
@@ -449,7 +449,7 @@ export class TitleScene implements Scene {
       return;
     }
     if (inp.inCentered(L.done.cx, L.done.cy, L.done.w, L.done.h) || !inp.inRect(L.x, L.y, L.w, L.h)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.showMain();
     }
   }
@@ -582,7 +582,7 @@ export class TitleScene implements Scene {
     }
 
     if (this.menu === "main" && inp.released && inp.inCentered(this.themeToggle.cx, this.themeToggle.cy, this.themeToggle.w, this.themeToggle.h)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       if (this.generated) {
         this.showThemes();
         return;
@@ -597,14 +597,15 @@ export class TitleScene implements Scene {
     const so = this.soundToggle;
     if (this.menu === "main" && this.generated && inp.released && inp.inCentered(so.cx, so.cy, so.w, so.h)) {
       this.ctx.save.muted = this.ctx.audio.toggleMute();
+      if (!this.ctx.save.muted) this.ctx.audio.event("toggleOn");
       this.ctx.persist();
-      if (!this.ctx.audio.muted) this.ctx.audio.play("menuselect_snd");
+      if (!this.ctx.audio.muted) this.ctx.audio.event("tap");
       return;
     }
 
     const fs = this.fullscreenToggle;
     if (this.menu === "main" && this.ctx.fullscreen.supported && inp.released && inp.inCentered(fs.cx, fs.cy, fs.w, fs.h)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.ctx.fullscreen.toggle();
       return;
     }
@@ -628,13 +629,13 @@ export class TitleScene implements Scene {
       this.heldTile = null;
       this.heldPill = null;
       if (target && inp.inCentered(target.cx, target.cy, target.w, target.h)) {
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
         target.onPress();
       } else if (pill && inp.inCentered(pill.cx, pill.cy, pill.w, pill.h)) {
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
         this.pressPill(pill.id);
       } else if (tile && inp.inRect(tile.x, tile.y, tile.w, tile.h)) {
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
         this.launchArcade(tile.info.id);
       }
     }
@@ -747,13 +748,13 @@ export class TitleScene implements Scene {
       this.ctx.save.reduceMotion = !this.ctx.save.reduceMotion;
       setReducedMotion(this.ctx.save.reduceMotion);
       this.ctx.persist();
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       return;
     }
     if (inp.inCentered(L.hands.cx, L.hands.cy, L.hands.w, L.hands.h)) {
       this.ctx.save.leftHanded = !this.ctx.save.leftHanded;
       this.ctx.persist();
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       return;
     }
     if (!inp.inRect(L.x, L.y, L.w, L.h)) this.showMain();
@@ -1133,7 +1134,7 @@ export class TitleScene implements Scene {
       w.nextFrame = frame;
       w.rippleAt = this.time + Math.hypot(w.cx - x, w.cy - y) * RIPPLE_FRAMES_PER_UNIT;
     }
-    this.ctx.audio.play("BlocksSelection_snd");
+    this.ctx.audio.event("select");
     const pal = this.ctx.palette;
     const { colors, o } = debrisFor(pal, (frame + 1) as Color, 44);
     this.particles.spawn(x, y, 7, colors, { ...o, speed: [o.speed[0] * 0.6, o.speed[1] * 0.7] });

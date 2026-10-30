@@ -341,10 +341,11 @@ export abstract class ArcadeScene implements Scene {
       if (inp.released || inp.keysPressed.has("Enter") || inp.keysPressed.has(" ")) {
         this.state = "play";
         this.cardT0 = -1;
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
       }
       return;
     }
+    this.ctx.audio.setPaused(this.state === "menu");
     if (this.state === "menu" || this.state === "lost" || this.state === "won") {
       this.lostTimer++;
       this.updateOverlay();
@@ -373,7 +374,7 @@ export abstract class ArcadeScene implements Scene {
           const muted = this.ctx.audio.toggleMute();
           this.ctx.save.muted = muted;
           this.ctx.persist();
-          if (!muted) this.ctx.audio.play("menuselect_snd");
+          if (!muted) this.ctx.audio.event("toggleOn");
         }
         return;
       }
@@ -425,7 +426,7 @@ export abstract class ArcadeScene implements Scene {
     this.state = "menu";
     this.press = null;
     this.cardT0 = this.ctx.clock.t;
-    this.ctx.audio.play("menuselect_snd");
+    this.ctx.audio.event("tap");
   }
 
   private updateOverlay(): void {
@@ -438,7 +439,7 @@ export abstract class ArcadeScene implements Scene {
     }
     if (this.lostTimer < 8) return;
     if ((this.state === "lost" || this.state === "won") && (inp.keysPressed.has("Enter") || inp.keysPressed.has(" "))) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.restart();
       return;
     }
@@ -447,7 +448,7 @@ export abstract class ArcadeScene implements Scene {
     const off = this.cardOffset();
     const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy + off, b.w, b.h));
     if (!hit) return;
-    this.ctx.audio.play("menuselect_snd");
+    this.ctx.audio.event("tap");
     if (hit.id === "resume") this.state = "play";
     else if (hit.id === "menu") this.quitToTitle();
     else if (hit.id === "theme") this.ctx.setTheme(nextTheme(this.ctx.save.theme));
@@ -506,7 +507,7 @@ export abstract class ArcadeScene implements Scene {
     this.cardT0 = this.ctx.clock.t + 250;
     this.tweens.to(this.lostFx, { desat: 1 }, 400);
     this.effects.vignette(0.6, 1600);
-    this.ctx.audio.play("tryagain_snd");
+    this.ctx.audio.event("lose");
     this.recordBest();
   }
 
@@ -516,7 +517,7 @@ export abstract class ArcadeScene implements Scene {
     this.press = null;
     this.lostTimer = 0;
     this.cardT0 = this.ctx.clock.t + 700;
-    this.ctx.audio.play("achievment_snd");
+    this.ctx.audio.event("achieve");
     this.celebrate();
     this.recordBest();
   }

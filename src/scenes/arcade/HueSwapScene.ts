@@ -171,7 +171,7 @@ export class HueSwapScene extends ArcadeScene {
     }
     if (!sel || !adjacent(sel, cell)) {
       this.selected = cell;
-      this.ctx.audio.play("BlocksSelection_snd", 0.35, 1.3);
+      this.ctx.audio.event("select", { volume: 0.35, rate: 1.3 });
       return;
     }
     this.act(moveFor(sel, cell));
@@ -192,7 +192,7 @@ export class HueSwapScene extends ArcadeScene {
       f.wipeT0 = this.ctx.clock.t;
       f.s = 1.12;
       this.tweens.to(f, { s: 1 }, 200, easeOutBack);
-      this.ctx.audio.play("BlocksCombine_snd");
+      this.ctx.audio.event("combine");
       this.ring(to.x, to.y, L.cell * 0.3, L.cell * 0.9, this.colorOf(m.result), 3);
       this.effects.mixSplash(to.x, to.y, L.cell, [this.colorOf(m.from.color), this.colorOf(m.result)], Math.atan2(to.y - from.y, to.x - from.x));
       this.effects.mixArc(to.x, to.y, L.cell, was, m.result);
@@ -211,7 +211,7 @@ export class HueSwapScene extends ArcadeScene {
         f.dy = oy - c.y;
         this.tweens.to(f, { dx: 0, dy: 0 }, SWAP_MS, easeOutCubic);
       }
-      this.ctx.audio.play("BlocksLanding_snd", 0.5, 1.15);
+      this.ctx.audio.event("landing", { volume: 0.5, rate: 1.15 });
     }
     this.phase = "resolve";
     this.resolveTimer = steps(SWAP_MS);
@@ -239,7 +239,7 @@ export class HueSwapScene extends ArcadeScene {
           },
         });
       }
-      this.ctx.audio.play("block_fall_snd", 0.6);
+      this.ctx.audio.event("fall", { volume: 0.6 });
       this.resolveTimer = steps(FALL_MS);
       return;
     }
@@ -302,9 +302,9 @@ export class HueSwapScene extends ArcadeScene {
     if (level > this.level) {
       this.level = level;
       this.callout(`Level ${level}`, L.x + L.w / 2, L.y + L.h * 0.45, pal.overlayAccent, 24, true, 1300);
-      this.ctx.audio.play("achievment_snd", 0.6);
+      this.ctx.audio.event("achieve", { volume: 0.6 });
     }
-    this.ctx.audio.play("BlocksPopping_snd", 1, 1 + (this.chain - 1) * 0.08);
+    this.ctx.audio.event("pop", { rate: 1 + (this.chain - 1) * 0.08, chain: this.chain });
     this.impact(k, mx / groups.length, my / groups.length, groups[0]?.[0]?.color);
   }
 

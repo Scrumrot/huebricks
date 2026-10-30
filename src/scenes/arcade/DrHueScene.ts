@@ -174,7 +174,7 @@ export class DrHueScene extends ArcadeScene {
     const m = p && moved(this.well, p, dir);
     if (!p || !m) return;
     p.x = m.x;
-    this.ctx.audio.play("BlocksSelection_snd", 0.35, 1.3);
+    this.ctx.audio.event("select", { volume: 0.35, rate: 1.3 });
   }
 
   /** Quarter turn around the pivot with a wall kick; vertical at the top row nudges down. */
@@ -183,13 +183,13 @@ export class DrHueScene extends ArcadeScene {
     if (!p) return;
     const r = rotated(this.well, p, dir);
     if (!r) {
-      this.ctx.audio.play("BlocksIncorrect_snd", 0.4);
+      this.ctx.audio.event("noadd", { volume: 0.4 });
       return;
     }
     p.x = r.x;
     p.y = r.y;
     p.rot = r.rot;
-    this.ctx.audio.play("BoardRotation_snd", 0.5, 1.4);
+    this.ctx.audio.event("rotate", { volume: 0.5, rate: 1.4 });
   }
 
   private hardDrop(): void {
@@ -257,8 +257,8 @@ export class DrHueScene extends ArcadeScene {
         }
       }
     }
-    if (mixed) this.ctx.audio.play("BlocksCombine_snd");
-    else this.ctx.audio.play("BlocksLanding_snd", 0.8);
+    if (mixed) this.ctx.audio.event("combine");
+    else this.ctx.audio.event("landing", { volume: 0.8 });
     this.chain = 0;
     this.phase = "resolve";
     this.resolveTimer = fell ? Math.round(FALL_MS / (1000 / 30)) + 1 : 2;
@@ -283,7 +283,7 @@ export class DrHueScene extends ArcadeScene {
           },
         });
       }
-      this.ctx.audio.play("block_fall_snd", 0.6);
+      this.ctx.audio.event("fall", { volume: 0.6 });
       this.resolveTimer = Math.round(FALL_MS / (1000 / 30)) + 1;
       return;
     }
@@ -342,7 +342,7 @@ export class DrHueScene extends ArcadeScene {
         900,
       );
     }
-    this.ctx.audio.play("BlocksPopping_snd", 1, 1 + (this.chain - 1) * 0.08);
+    this.ctx.audio.event("pop", { rate: 1 + (this.chain - 1) * 0.08, chain: this.chain });
     this.impact(k, sx / cells.length, sy / cells.length, cells[0]?.color);
   }
 

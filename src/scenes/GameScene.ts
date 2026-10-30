@@ -356,6 +356,9 @@ export class GameScene implements Scene {
   private readonly tally = { pops: 0, chain: 0, subtract: 0 };
   private bestChain = 1;
   private toasts: Toast[] = [];
+  private chargeBlipT = -1e9;
+  /** How many level-card stars have chimed so far. */
+  private starsSounded = 0;
   private hiToasted = false;
   private subtractDone = 0;
   private goalAwarded = false;
@@ -683,6 +686,8 @@ export class GameScene implements Scene {
       }
     }
 
+    this.ctx.audio.setPaused(this.state === "menu");
+
     if (this.buttonsTheme !== this.layoutKey()) {
       this.board.setEnv(spacingFor(this.ctx.palette.kind), viewportFor(this.ctx.view, this.ctx.palette.kind));
       for (const b of this.board.allBricks()) b.settle();
@@ -753,7 +758,7 @@ export class GameScene implements Scene {
         } else if (this.replenishLine > this.replenishTimer) {
           if (this.replenishNum < n) {
             block = this.spawnReplenishBrick();
-            this.ctx.audio.play("BlocksFillRepLine_snd");
+            this.ctx.audio.event("fill");
           }
           this.replenishLine = 0;
         }
@@ -814,12 +819,13 @@ export class GameScene implements Scene {
     this.levelCompleteDelay = LEVEL_CARD_FRAMES + CARD_HOLD_FRAMES;
     this.cardT0 = this.ctx.clock.t + D((CARD_HOLD_FRAMES * 1000) / FPS);
     this.flareT0 = this.ctx.clock.t;
+    if (this.ctx.palette.kind === "generated") this.ctx.audio.duck(0.5, 1800);
     const wave = this.ctx.palette.fx.clearWave ? this.startClearWave() : 0;
     if (wave > 0) this.effects.later(wave, () => this.celebrate());
     else this.celebrate();
     if (!this.levelCompleteSounded) {
       this.levelCompleteSounded = true;
-      this.ctx.audio.play("achievment_snd");
+      this.ctx.audio.event("achieve");
     }
   }
 
@@ -845,7 +851,7 @@ export class GameScene implements Scene {
     // The pushed line is on the board now: undo any selection dim it carried.
     for (const b of this.board.bricks()) this.tweens.to(this.fxOf(b), { dim: 1 }, D(DIM_MS));
     this.barFlashT0 = this.ctx.clock.t;
-    this.ctx.audio.play("BlocksRepMoveUp_snd");
+    this.ctx.audio.event("push");
     if (result.overflow && this.ctx.session.gameType === "normal") {
       this.lose();
     }
@@ -868,34 +874,34 @@ export class GameScene implements Scene {
     const sw = swatchAt(L.strip, inp.x, inp.y);
     if (sw) {
       if (sw.name !== this.ctx.palette.name) {
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
         this.ctx.setTheme(sw.name);
       }
       return;
     }
     if (hit(L.resume)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.state = "rest";
       this.confirmQuit = false;
     } else if (this.confirmQuit && hit(L.quit)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.quitToTitle();
     } else if (this.confirmQuit && hit(L.keep)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.confirmQuit = false;
     } else if (!this.confirmQuit && hit(L.quit)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.confirmQuit = true;
     } else if (!this.confirmQuit && hit(L.restart)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.restartLevel();
     } else if (hit(L.all)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.menuPage = "themes";
       const T = this.themesPageLayout();
       this.themeSwatches = layoutGrid(THEME_ORDER, T.x + 24, T.y + 62, T.w - 48, T.size, T.gap, T.rowGap);
     } else if (hit({ cx: L.help.cx, cy: L.help.cy, w: L.help.d, h: L.help.d })) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.menuPage = "help";
       this.helpSlide = 0;
     }
@@ -912,13 +918,13 @@ export class GameScene implements Scene {
     const sw = swatchAt(this.themeSwatches, inp.x, inp.y);
     if (sw) {
       if (sw.name !== this.ctx.palette.name) {
-        this.ctx.audio.play("menuselect_snd");
+        this.ctx.audio.event("tap");
         this.ctx.setTheme(sw.name);
       }
       return;
     }
     if (inp.inCentered(T.back.cx, T.back.cy, T.back.w, T.back.h) || !inp.inRect(T.x, T.y, T.w, T.h)) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.menuPage = "main";
     }
   }
@@ -931,11 +937,11 @@ export class GameScene implements Scene {
     const next = inp.keysPressed.has("ArrowRight") || inp.keysPressed.has("Enter") || (inp.pressed && inp.x > sx + w - h / 5 && inp.y > sy + h * 0.8);
     const back = inp.keysPressed.has("ArrowLeft") || (inp.pressed && inp.x < sx + h * 0.2 && inp.y > sy + h * 0.8);
     if (next) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       if (this.helpSlide < slides.frames.length - 1) this.helpSlide++;
       else this.menuPage = "main";
     } else if (back) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       if (this.helpSlide > 0) this.helpSlide--;
       else this.menuPage = "main";
     }
@@ -1038,6 +1044,7 @@ export class GameScene implements Scene {
   private toast(text: string, color: string): void {
     if (this.ctx.palette.kind !== "generated") return;
     this.toasts.push({ text, color, t0: this.ctx.clock.t });
+    this.ctx.audio.event("toast");
   }
 
   /** Start this level over with the score it began with. */
@@ -1058,7 +1065,7 @@ export class GameScene implements Scene {
     this.cardT0 = this.ctx.clock.t + D(250);
     this.tweens.to(this.lostFx, { desat: 1 }, D(DESAT_MS));
     this.effects.vignette(0.6, 1600);
-    this.ctx.audio.play("tryagain_snd");
+    this.ctx.audio.event("lose");
     this.recordHighScore();
   }
 
@@ -1091,7 +1098,7 @@ export class GameScene implements Scene {
       case "fall":
         if (count((b) => b.fall) === 0) {
           this.state = "rest";
-          this.ctx.audio.play("BlocksLanding_snd");
+          this.ctx.audio.event("landing");
         }
         break;
       case "rotate":
@@ -1100,14 +1107,14 @@ export class GameScene implements Scene {
           this.rotateT0 = -1;
           this.animation = "fall";
           this.board.resetBlockPositions();
-          if (this.board.resettle()) this.ctx.audio.play("block_fall_snd");
+          if (this.board.resettle()) this.ctx.audio.event("fall");
         }
         break;
       case "pop":
         if (this.dieAnims.length === 0) {
           if (this.board.resettle()) {
             this.animation = "fall";
-            this.ctx.audio.play("block_fall_snd");
+            this.ctx.audio.event("fall");
           } else {
             this.state = "rest";
           }
@@ -1262,7 +1269,7 @@ export class GameScene implements Scene {
         gained += GOAL_BONUS;
         this.tally.subtract += GOAL_BONUS;
         this.toast("Subtract goal done", pal.goalAccent);
-        this.ctx.audio.play("achievment_snd");
+        this.ctx.audio.event("achieve");
         this.addCallout(`SUBTRACT GOAL +${GOAL_BONUS}`, l.boardX + l.boardW / 2, l.boardY + l.boardH * 0.4, {
           delay: 300,
           size: 24,
@@ -1284,10 +1291,11 @@ export class GameScene implements Scene {
   private popImpact(p: PopImpact): void {
     const pal = this.ctx.palette;
     const generated = pal.kind === "generated";
-    this.ctx.audio.play("BlocksPopping_snd", 1, 1.0595 ** p.semitones);
+    this.ctx.audio.event("pop", { rate: 1.0595 ** p.semitones, color: p.color, chain: p.mult });
     const sc = popScale(p.k);
     this.effects.impact(p.k, p.mult >= 3 ? sc.freezeMs + 30 : sc.freezeMs);
     if (p.mult >= 4 || p.k >= 0.85) this.effects.impactFrame(pal.brickColors[p.color]);
+    if (generated && p.k >= 0.35) this.ctx.audio.duck(0.25 + 0.35 * p.k, 500 + 400 * p.k);
     if (p.mult >= 2) this.effects.flash(pal.flashFromBrick ? pal.brickColors[p.color] : pal.flash, 30, generated ? sc.flash : 1);
     if (generated) {
       if (this.chain >= 2 || p.k > 0.25) this.effects.shake(sc.shake, p.dir);
@@ -1385,6 +1393,12 @@ export class GameScene implements Scene {
     const speeding = speed.pressed || inp.keysDown.has(" ") || inp.keysDown.has("ArrowDown");
     if (speeding && this.state === "rest") {
       this.accel = Math.min(4, this.accel * 1.1);
+      // a rising blip every few frames while the charge builds
+      const t = this.ctx.clock.t;
+      if (t - this.chargeBlipT > D(110)) {
+        this.chargeBlipT = t;
+        this.ctx.audio.event("charge", { rate: 1 + (this.accel - 1) / 3, volume: 0.6 });
+      }
     } else {
       this.accel = 1;
     }
@@ -1402,7 +1416,7 @@ export class GameScene implements Scene {
           this.animFrame = 0;
           this.rotateT0 = this.ctx.clock.t;
           this.rotateDir = kind === "cw" ? 1 : -1;
-          this.ctx.audio.play("BoardRotation_snd");
+          this.ctx.audio.event("rotate");
         }
         break;
       case "pause":
@@ -1411,8 +1425,10 @@ export class GameScene implements Scene {
           this.menuPage = "main";
           this.confirmQuit = false;
           this.cardT0 = this.ctx.clock.t;
+          this.ctx.audio.event("cardIn");
         } else if (this.state === "menu") {
           this.state = "rest";
+          this.ctx.audio.event("cardOut");
         }
         break;
       case "speed":
@@ -1421,7 +1437,7 @@ export class GameScene implements Scene {
         const muted = this.ctx.audio.toggleMute();
         this.ctx.save.muted = muted;
         this.ctx.persist();
-        if (!muted) this.ctx.audio.play("menuselect_snd");
+        if (!muted) this.ctx.audio.event("toggleOn");
         break;
       }
     }
@@ -1451,7 +1467,7 @@ export class GameScene implements Scene {
         if (inRepZone) {
           this.selected = gx;
           this.repDown = true;
-          this.ctx.audio.play("BlocksSelection_snd");
+          this.ctx.audio.event("select");
         } else if (onBoard) {
           this.boardDown = true;
           this.cx = gx;
@@ -1565,10 +1581,10 @@ export class GameScene implements Scene {
       this.replenishNum = list.length;
       if (this.replenishNum < this.board.cellNum) this.readyToPush = false;
       this.deselect();
-      this.ctx.audio.play("BlocksSelection_snd");
+      this.ctx.audio.event("select");
     } else if (this.held) {
       this.selected = this.selected === HOLD ? this.board.cellNum : HOLD;
-      this.ctx.audio.play("BlocksSelection_snd");
+      this.ctx.audio.event("select");
     }
   }
 
@@ -1621,7 +1637,7 @@ export class GameScene implements Scene {
         this.state = "animation";
         this.animation = "noadd";
         this.animFrame = 0;
-        this.ctx.audio.play("BlocksIncorrect_snd");
+        this.ctx.audio.event("noadd");
         this.selFlashT0 = t;
         for (const b of this.board.allBricks()) {
           if (b.noadd) this.fxOf(b).noaddT0 = t;
@@ -1637,7 +1653,7 @@ export class GameScene implements Scene {
         this.state = "animation";
         this.animation = "combine";
         this.animFrame = 0;
-        this.ctx.audio.play("BlocksCombine_snd");
+        this.ctx.audio.event("combine", dest ? { from: dest.spriteColor, to: dest.color } : {});
         if (dest) {
           const f = this.fxOf(dest);
           f.wipeT0 = t;
@@ -1821,7 +1837,7 @@ export class GameScene implements Scene {
     const back = inp.keysPressed.has("ArrowLeft") || (inp.pressed && inp.x < sx + h * 0.2 && inp.y > sy + h * 0.8);
 
     if (next) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       if (this.tutorialState < slides.frames.length - 1) {
         this.tutorialState++;
       } else if (this.tutorialPhase === "intro") {
@@ -1834,7 +1850,7 @@ export class GameScene implements Scene {
         this.ctx.setScene(new TitleScene(this.ctx));
       }
     } else if (back && this.tutorialState > 0) {
-      this.ctx.audio.play("menuselect_snd");
+      this.ctx.audio.event("tap");
       this.tutorialState--;
     }
   }
@@ -3249,6 +3265,10 @@ export class GameScene implements Scene {
       const earned = i < stars;
       const pop = easeOutBack(clamp01((e - D(300 + i * 160)) / D(260)));
       if (pop <= 0) continue;
+      if (earned && i >= this.starsSounded) {
+        this.starsSounded = i + 1;
+        this.ctx.audio.event("star", { rate: 1 + i * 0.25 });
+      }
       g.save();
       g.strokeStyle = earned ? pal.goalAccent : pal.hudMuted;
       g.fillStyle = earned ? pal.goalAccent : "rgba(0,0,0,0)";

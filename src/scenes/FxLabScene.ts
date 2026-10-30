@@ -6,6 +6,9 @@ import { easeOutBack } from "../engine/easing";
 import { Effects } from "../engine/effects";
 import { DEFAULT_TUNING, intensityFor, popScale, resetTuning, TUNING, type FxTuning } from "../engine/fxTuning";
 import { nextTheme, THEME_LABELS } from "../engine/theme";
+import { SOUND_NAMES } from "../engine/assets";
+import { CUE_NAMES } from "../engine/synth";
+import { SOUND_EVENTS } from "../engine/soundProfile";
 import { drawTile } from "../engine/tiles";
 import { Tweens } from "../engine/tween";
 import { fillScreen } from "../engine/view";
@@ -58,6 +61,9 @@ export class FxLabScene implements Scene {
   private readonly feel: ButtonFeel;
   private readonly effects: Effects;
   private tiles: Array<Tile | null> = [];
+  private sampleIndex = 0;
+  private eventIndex = 0;
+  private cueIndex = 0;
   private dying: Array<Dying & { k: number }> = [];
   private refills: Array<{ i: number; at: number }> = [];
   private chain = 1;
@@ -124,6 +130,10 @@ export class FxLabScene implements Scene {
       ["theme", "Theme ▸"],
       ["reset", "Reset tuning"],
       ["low", "Low power"],
+      ["sample", "Sample ▸"],
+      ["event", "Event ▸"],
+      ["cue", "Cue ▸"],
+      ["duck", "Duck music"],
     ];
     this.buttons = actions.map(([id, label, primary], i) => ({
       id,
@@ -179,24 +189,50 @@ export class FxLabScene implements Scene {
         const { x, y, cell } = this.grid;
         const xs = Array.from({ length: N }, (_, i) => x + (i + 0.5) * cell);
         this.effects.celebrate(xs, y + N * cell, cell, (i) => ((i % 6) + 1) as Color);
-        this.ctx.audio.play("achievment_snd");
+        this.ctx.audio.event("achieve");
         break;
       }
       case "lose":
         this.effects.vignette(0.6, 1600);
         this.effects.shake(4, [0, 1]);
-        this.ctx.audio.play("tryagain_snd");
+        this.ctx.audio.event("lose");
         break;
       case "drop": {
         const { x, y, cell } = this.grid;
         const col = Math.floor(Math.random() * N);
         const color = this.tiles[col]?.color ?? 1;
         this.effects.streak(x + (col + 0.5) * cell, y - cell * 2.5, y + N * cell, cell, this.ctx.palette.brickColors[color]);
-        this.ctx.audio.play("BlocksLanding_snd");
+        this.ctx.audio.event("landing");
         break;
       }
       case "wash":
         this.effects.wash(this.ctx.palette.brickColors[randomSpawnColor()], 600);
+        break;
+      case "sample": {
+        const name = SOUND_NAMES[this.sampleIndex % SOUND_NAMES.length];
+        this.sampleIndex += 1;
+        this.ctx.audio.play(name);
+        this.say(`sample · ${name}`);
+        break;
+      }
+      case "event": {
+        const name = SOUND_EVENTS[this.eventIndex % SOUND_EVENTS.length];
+        this.eventIndex += 1;
+        const color = randomSpawnColor();
+        this.ctx.audio.event(name, { color, from: 1, to: 5, chain: this.chain });
+        this.say(`event · ${name}`);
+        break;
+      }
+      case "cue": {
+        const name = CUE_NAMES[this.cueIndex % CUE_NAMES.length];
+        this.cueIndex += 1;
+        this.ctx.audio.cue(name);
+        this.say(`cue · ${name}`);
+        break;
+      }
+      case "duck":
+        this.ctx.audio.duck(0.6, 900);
+        this.say("music ducked");
         break;
       case "low":
         this.effects.lowPower = !this.effects.lowPower;
@@ -274,7 +310,7 @@ export class FxLabScene implements Scene {
   private impact(p: { k: number; dir: [number, number] }): void {
     const pal = this.ctx.palette;
     const sc = popScale(p.k);
-    this.ctx.audio.play("BlocksPopping_snd", 1, 1.0595 ** Math.min(7, this.chain - 1));
+    this.ctx.audio.event("pop", { rate: 1.0595 ** Math.min(7, this.chain - 1), chain: this.chain, color: this.dying[0]?.color });
     this.effects.impact(p.k);
     if (this.chain >= 2 || p.k > 0.25) this.effects.shake(sc.shake, p.dir);
     if (this.chain >= 2) this.effects.flash(pal.flashFromBrick ? pal.brickColors[this.dying[0]?.color ?? 1] : pal.flash, 30, sc.flash);
@@ -299,7 +335,7 @@ export class FxLabScene implements Scene {
     this.effects.ring(cx, cy, cell * 0.5, cell * 0.8, pal.ring, 3, 220);
     this.effects.mixSplash(cx, cy, cell, [pal.brickColors[tile.fx.wipeFrom], pal.brickColors[next]], -Math.PI / 2);
     this.effects.mixArc(cx, cy, cell, tile.fx.wipeFrom, next);
-    this.ctx.audio.play("BlocksCombine_snd");
+    this.ctx.audio.event("combine", { from: tile.fx.wipeFrom as Color, to: next });
   }
 
   // ---------------------------------------------------------------------------

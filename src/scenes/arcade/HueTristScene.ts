@@ -135,7 +135,7 @@ export class HueTristScene extends ArcadeScene {
     if (!p) return;
     if (this.well.isFree(p.x + dir, p.y)) {
       p.x += dir;
-      this.ctx.audio.play("BlocksSelection_snd", 0.35, 1.3);
+      this.ctx.audio.event("select", { volume: 0.35, rate: 1.3 });
     }
   }
 
@@ -171,7 +171,7 @@ export class HueTristScene extends ArcadeScene {
       f.wipeT0 = this.ctx.clock.t;
       below.refined = l.refined;
       below.color = l.result;
-      this.ctx.audio.play("BlocksCombine_snd");
+      this.ctx.audio.event("combine");
       const c = this.cellPos(below.x, below.y);
       this.ring(c.x + L.cell / 2, c.y + L.cell / 2, L.cell * 0.3, L.cell * 0.9, this.colorOf(l.result), 3);
       this.effects.mixSplash(c.x + L.cell / 2, c.y + L.cell / 2, L.cell, [this.colorOf(f.wipeFrom as Color), this.colorOf(l.result)], -Math.PI / 2);
@@ -183,7 +183,7 @@ export class HueTristScene extends ArcadeScene {
       const f = this.fxOf(cell);
       f.sy = 0.86;
       this.tweens.to(f, { sy: 1 }, 180, easeOutBack);
-      this.ctx.audio.play("BlocksLanding_snd", 0.8);
+      this.ctx.audio.event("landing", { volume: 0.8 });
     }
     this.chain = 0;
     this.phase = "resolve";
@@ -211,7 +211,7 @@ export class HueTristScene extends ArcadeScene {
           },
         });
       }
-      this.ctx.audio.play("block_fall_snd", 0.6);
+      this.ctx.audio.event("fall", { volume: 0.6 });
       this.resolveTimer = Math.round(FALL_MS / (1000 / 30)) + 1;
       return;
     }
@@ -273,7 +273,7 @@ export class HueTristScene extends ArcadeScene {
       );
     }
     this.addScore(total);
-    this.ctx.audio.play("BlocksPopping_snd", 1, 1 + (this.chain - 1) * 0.08);
+    this.ctx.audio.event("pop", { rate: 1 + (this.chain - 1) * 0.08, chain: this.chain });
     this.impact(k, mx / groups.length, my / groups.length, groups[0]?.[0]?.color);
   }
 

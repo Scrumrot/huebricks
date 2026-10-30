@@ -246,6 +246,7 @@ async function boot(): Promise<void> {
       if (theme !== "classic") skins[theme] ??= builders[theme](classicSprites);
       ctx.sprites = skins[theme]!;
       ctx.palette = PALETTES[theme];
+      audio.setProfile(ctx.palette.sound);
       setDefaultFont(ctx.palette.font);
       applyPageTheme(theme);
       save.theme = theme;

@@ -1,6 +1,7 @@
 import type { ArcadeMode } from "../core/arcade";
 import { SPRITE_FRAMES, type MusicName, type SoundName, type Sprite, type SpriteMap, type SpriteName } from "../engine/assets";
 import type { AudioPort } from "../engine/audio";
+import type { EventOptions, SoundEvent, SoundProfile } from "../engine/soundProfile";
 import type { CueName } from "../engine/synth";
 import { Clock } from "../engine/clock";
 import type { InputState } from "../engine/input";
@@ -94,11 +95,28 @@ export class SilentAudio implements AudioPort {
   cue(name: CueName): void {
     this.cues.push(name);
   }
+  readonly events: { name: SoundEvent; opts: EventOptions }[] = [];
+  profile: SoundProfile | null = null;
+  event(name: SoundEvent, opts: EventOptions = {}): void {
+    this.events.push({ name, opts });
+  }
+  setProfile(profile: SoundProfile | null): void {
+    this.profile = profile;
+  }
   playMusic(name: MusicName): void {
     this.music = name;
   }
   stopMusic(): void {
     this.music = null;
+  }
+  /** Ducks and pause toggles, in order, for assertions. */
+  readonly ducks: number[] = [];
+  paused = false;
+  duck(amount: number): void {
+    this.ducks.push(amount);
+  }
+  setPaused(on: boolean): void {
+    this.paused = on;
   }
   toggleMute(): boolean {
     this.muted = !this.muted;

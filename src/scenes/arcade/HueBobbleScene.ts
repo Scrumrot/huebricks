@@ -203,7 +203,7 @@ export class HueBobbleScene extends ArcadeScene {
     this.loaded = this.next;
     this.next = this.pick();
     this.shots++;
-    this.ctx.audio.play("BlocksRepMoveUp_snd", 0.8, 1.2);
+    this.ctx.audio.event("push", { volume: 0.8, rate: 1.2 });
   }
 
   private stepShot(): void {
@@ -219,7 +219,7 @@ export class HueBobbleScene extends ArcadeScene {
     s.vx = step.shot.vx;
     s.vy = step.shot.vy;
     if (this.ctx.palette.kind === "generated") this.effects.trail(s.px, s.py, s.vx * FPS, s.vy * FPS, this.colorOf(s.color), L.cell);
-    if (step.bounces) this.ctx.audio.play("BlocksSelection_snd", 0.3, 0.8);
+    if (step.bounces) this.ctx.audio.event("select", { volume: 0.3, rate: 0.8 });
     if (step.landed) this.stick(s, step.landed.hit);
   }
 
@@ -241,12 +241,12 @@ export class HueBobbleScene extends ArcadeScene {
       this.ring(c.x, c.y, r * 0.6, r * 2.2, this.colorOf(result), 3);
       this.effects.mixSplash(c.x, c.y, L.cell, [this.colorOf(f.wipeFrom as Color), this.colorOf(result)], Math.atan2(s.vy, s.vx));
       this.effects.mixArc(c.x, c.y, L.cell, f.wipeFrom as Color, result);
-      this.ctx.audio.play("BlocksCombine_snd");
+      this.ctx.audio.event("combine");
       at = hit;
     } else {
       const cell = this.grid.snapCell(s.x - L.x, s.y - L.y, r);
       if (!cell) {
-        this.ctx.audio.play("BlocksIncorrect_snd", 0.5);
+        this.ctx.audio.event("noadd", { volume: 0.5 });
         this.afterSettle();
         return;
       }
@@ -254,7 +254,7 @@ export class HueBobbleScene extends ArcadeScene {
       const f = this.fxOf(at);
       f.s = 0.6;
       this.tweens.to(f, { s: 1 }, 220, backOut(2));
-      this.ctx.audio.play("BlocksLanding_snd", 0.7, 1.1);
+      this.ctx.audio.event("landing", { volume: 0.7, rate: 1.1 });
     }
     const group = this.grid.group(at.row, at.col);
     if (group.length >= POP_MIN) {
@@ -290,7 +290,7 @@ export class HueBobbleScene extends ArcadeScene {
     this.popped += group.length;
     this.addScore(pts);
     this.callout(`+${pts}`, sx / group.length, sy / group.length, this.ctx.palette.callout, 18);
-    this.ctx.audio.play("BlocksPopping_snd");
+    this.ctx.audio.event("pop");
     this.impact(k, sx / group.length, sy / group.length, group[0]?.color);
     // anything no longer hanging from the ceiling drops out
     const loose = this.grid.floating();
@@ -333,7 +333,7 @@ export class HueBobbleScene extends ArcadeScene {
       this.shotsLeft = shotsPerDrop(this.level);
       this.grid.drop++;
       this.tweens.to(this.dropFx, { v: this.grid.drop }, 260, backOut(1.1));
-      this.ctx.audio.play("BlocksRepMoveUp_snd", 0.9, 0.7);
+      this.ctx.audio.event("push", { volume: 0.9, rate: 0.7 });
       this.shake(3);
     }
     if (this.grid.bottomRow() + this.grid.drop >= ROWS) {

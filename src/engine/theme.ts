@@ -4,6 +4,7 @@
  * (text, lines, overlays, cards, buttons, brick shadows and extrusions).
  */
 import { CLASSIC_FX, fxProfile, type FxProfile } from "./fxProfile";
+import { MATERIALS, type SoundProfile } from "./soundProfile";
 import type { Color } from "../core/color";
 
 export type ThemeName =
@@ -181,6 +182,8 @@ export interface Palette {
   fuse: boolean;
   /** Which treatments the shared effects layer applies for this theme. */
   fx: FxProfile;
+  /** The material every game sound is synthesised on; null keeps the original recordings (Classic). */
+  sound: SoundProfile | null;
 }
 
 export const CLASSIC: Palette = {
@@ -248,6 +251,7 @@ export const CLASSIC: Palette = {
   stains: false,
   fuse: false,
   fx: CLASSIC_FX,
+  sound: null,
 };
 
 /** "Pigment": paint chips on warm paper. */
@@ -316,6 +320,7 @@ export const PIGMENT: Palette = {
   stains: true,
   fuse: false,
   fx: fxProfile({ fragments: false, vignette: "rgba(70,45,20,1)", signature: "splat" }),
+  sound: MATERIALS.paint,
 };
 
 /** "Blocky": soft 3D toy bricks, one light from the top-left, cel shaded. */
@@ -384,6 +389,7 @@ export const BLOCKY: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ shakeRot: false, mix: "wipe", vignette: "#000000", signature: "bounce" }),
+  sound: MATERIALS.toy,
 };
 
 /** "Spectra": glowing gel tiles on a deep dark field. */
@@ -452,6 +458,7 @@ export const SPECTRA: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, vignette: "#000000", signature: "flare" }),
+  sound: MATERIALS.synth,
 };
 
 /** "Delicious": frosted tarts on a gingham bakery counter. */
@@ -520,6 +527,7 @@ export const DELICIOUS: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ vignette: "rgba(90,50,30,1)", signature: "bounce" }),
+  sound: MATERIALS.paint,
 };
 
 /** "Crystals": cut gemstones in a dark cave; the tray sockets fill with light. */
@@ -588,6 +596,7 @@ export const CRYSTALS: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
+  sound: MATERIALS.glass,
 };
 
 /** "Halloween: candies under a harvest moon". */
@@ -656,6 +665,7 @@ export const HALLOWEEN: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#ffb347", bloom: true, vignette: "#000000", signature: "splat" }),
+  sound: MATERIALS.dark,
 };
 
 /** "Winter: ice cubes in the snow". */
@@ -724,6 +734,7 @@ export const WINTER: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", shakeRot: false, vignette: "rgba(40,70,110,1)", signature: "flare" }),
+  sound: MATERIALS.snow,
 };
 
 /** "Christmas: presents under the lights". */
@@ -792,6 +803,7 @@ export const CHRISTMAS: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ sparks: "#fff3b0", bloom: true, vignette: "#000000", signature: "bounce" }),
+  sound: MATERIALS.bells,
 };
 
 /** "Gooey: glossy slime in a dark lab". */
@@ -860,6 +872,7 @@ export const GOOEY: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ fragments: false, bloom: true, vignette: "#000000", signature: "ripple" }),
+  sound: MATERIALS.gel,
 };
 
 /** "Vintage: letterpress on aged paper". */
@@ -928,6 +941,7 @@ export const VINTAGE: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, mix: "wipe", vignette: "rgba(50,35,20,1)", signature: "bounce" }),
+  sound: MATERIALS.wood,
 };
 
 /** "Nature: river stones on wood in a meadow". */
@@ -996,6 +1010,7 @@ export const NATURE: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ vignette: "rgba(20,50,30,1)", signature: "bounce" }),
+  sound: MATERIALS.wood,
 };
 
 /** "Stained Glass": leaded panes in a dark stone chapel. */
@@ -1064,6 +1079,7 @@ export const STAINED_GLASS: Palette = {
   stains: false,
   fuse: true,
   fx: fxProfile({ sparks: "#FFF3D0", bloom: true, vignette: "#000000", signature: "splat" }),
+  sound: MATERIALS.glass,
 };
 
 /** "Lantern": paper lanterns at a night festival. */
@@ -1132,6 +1148,7 @@ export const LANTERN: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#FFE3A3", bloom: true, vignette: "#000000", signature: "float" }),
+  sound: MATERIALS.bells,
 };
 
 /** "Origami": folded paper squares on a kraft desk. */
@@ -1200,6 +1217,7 @@ export const ORIGAMI: Palette = {
   stains: false,
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "fold", vignette: "rgba(58,46,34,1)", signature: "crane" }),
+  sound: MATERIALS.paper,
 };
 
 export const PALETTES: Record<ThemeName, Palette> = {

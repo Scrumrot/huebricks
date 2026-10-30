@@ -87,7 +87,7 @@ export class SoundControls {
     }
     if (inp.released) {
       if (this.dragging) {
-        if (this.dragging === "sfx") audio.play("BlocksSelection_snd");
+        if (this.dragging === "sfx") audio.event("select");
         this.dragging = null;
         ctx.persist();
         return true;
@@ -95,7 +95,7 @@ export class SoundControls {
       if (inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.d, L.toggle.d)) {
         ctx.save.muted = audio.toggleMute();
         ctx.persist();
-        if (!audio.muted) audio.play("menuselect_snd");
+        if (!audio.muted) audio.event("toggleOn");
         return true;
       }
     }
