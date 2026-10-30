@@ -461,4 +461,3 @@ const SPEC: SkinSpec = {
 export function buildVintageSprites(classic: SpriteMap): SpriteMap {
   return buildSkin(classic, SPEC);
 }
-

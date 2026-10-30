@@ -36,7 +36,16 @@ export const SPECTRA_COLORS: Record<Color, string> = {
   7: "#2A2A36",
 };
 
-const NOICON_COLORS = [SPECTRA_COLORS[1], SPECTRA_COLORS[2], SPECTRA_COLORS[3], SPECTRA_COLORS[4], SPECTRA_COLORS[5], SPECTRA_COLORS[6], SPECTRA_COLORS[7], NEUTRAL];
+const NOICON_COLORS = [
+  SPECTRA_COLORS[1],
+  SPECTRA_COLORS[2],
+  SPECTRA_COLORS[3],
+  SPECTRA_COLORS[4],
+  SPECTRA_COLORS[5],
+  SPECTRA_COLORS[6],
+  SPECTRA_COLORS[7],
+  NEUTRAL,
+];
 
 /**
  * A gel tile: flat fill, soft inner glow in a lighter tint, a crisp 1.5 px

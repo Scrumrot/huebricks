@@ -13,7 +13,10 @@ npm install
 npm run dev      # starts Vite and opens the game in your browser
 npm run build    # type-checks and writes a static site to dist/
 npm run preview  # serves the production build
-npm test         # runs the core-logic unit tests (vitest)
+npm test         # runs the unit and scene tests (vitest)
+npm run lint     # eslint (typescript-eslint, prettier-compatible)
+npm run format   # prettier --write
+npm run check    # typecheck + lint + format check + tests, what CI runs
 ```
 
 The production `dist/` folder is fully static and can be dropped on any web
@@ -62,7 +65,7 @@ colours contain two primaries; "chromatic gray" (black) contains all three.
 - **Hold slot**: select a replenish brick and click the hold slot (or press
   `H`) to park it; click the slot again to pick it up. Only one brick can be
   held, and holding one swaps it with the brick already there.
-- **Subtract goal**: a brick whose colour was reached by *subtracting* gets a
+- **Subtract goal**: a brick whose colour was reached by _subtracting_ gets a
   star. Popping a group that contains one scores a bonus and counts toward
   the level's subtract goal; finishing the goal pays a further bonus.
 
@@ -95,7 +98,7 @@ touch controls, and its own best score. Three so far:
   Three or more of a colour pop, anything left hanging falls for a bonus,
   and the ceiling comes down a row every few shots. Clear the cluster to go
   up a level.
-- **Dr. Hue** (Dr. Mario): the well starts with locked *stains* in its lower
+- **Dr. Hue** (Dr. Mario): the well starts with locked _stains_ in its lower
   half. Dominoes fall from the top (`←`/`→` move, `↑`/`Z`/`X` or tap rotate,
   `↓` soft drop, `Space` or a swipe down hard drops). A half that lands on a
   stain mixes into it, which is how an unreachable orange stain becomes a red
@@ -184,7 +187,9 @@ src/
     layout.ts    board geometry
     arcade.ts    arcade mode catalogue (names, rules)
     well.ts      tall well of cells for Dr. Hue / Hue Trist (lines, groups, gravity)
-    bobble.ts    hex-packed bubble grid for Hue Bobble
+    drhue.ts     Dr. Hue rules: domino moves, kicks, settling and mixing, scoring
+    trist.ts     Hue Trist rules: landing, levels, scoring
+    bobble.ts    hex-packed bubble grid plus shot physics, aim and scoring for Hue Bobble
     stains.ts    seeded Dr. Hue stain layouts
   engine/      browser plumbing
     assets.ts    sprite/audio manifest and loader
@@ -194,8 +199,14 @@ src/
     theme.ts     palettes, including card / button colours per theme
     easing.ts    easing vocabulary
     tween.ts     real-time tween manager
-    particles.ts pooled particle system
-    clock.ts     frame clock with hit-stop and sim interpolation
+    particles.ts pooled particle system (colour over life, velocity stretch, sparks)
+    fragments.ts chunks of a popped tile that keep its own art
+    effects.ts   shared effects layer: pop choreography, rings, shake, flash, vignette, bloom
+    fxProfile.ts which treatments each theme turns on (Classic: none)
+    fxTuning.ts  intensity from chain and size, plus the live numbers the lab edits
+    mixFx.ts     the soft "swirl" colour mix with a highlight sweep
+    colorUtil.ts parse / mix / shade colours, memoised colour ramps
+    clock.ts     frame clock with hit-stop, slow motion and sim interpolation
     buttonFeel.ts press / hover scale for buttons
     modernSkin.ts  generated "Pigment" sprite set and shared drawing helpers
     blockySkin.ts  generated "Blocky" sprite set
@@ -212,11 +223,37 @@ src/
   scenes/
     TitleScene.ts  logo -> mode -> world menus, credits, theme toggle
     GameScene.ts   gameplay state machine, replenish line, tutorial, pause
+    FxLabScene.ts  effects lab behind `?fx`: fire each effect on demand, edit tuning live
     arcade/
       ArcadeScene.ts   shared well layout, HUD, cards, controls and effects
       HueBobbleScene.ts, DrHueScene.ts, HueTristScene.ts
+      arcade.test.ts   state-machine and input regressions, driven through the harness
+  test/
+    harness.ts   a GameContext for tests: scripted input, hand-advanced clock, silent audio
   main.ts      canvas scaling and the fixed 30 Hz loop
 ```
+
+## Code conventions
+
+- **Rules live in `core/` as pure functions.** They take the current state (a
+  `Well`, a `BubbleGrid`, a piece) and return a result; they never mutate their
+  inputs, play a sound or read the clock. The scene applies the result and owns
+  the animation. Dr. Hue's `settleDomino` is the model: landing and the ghost
+  preview call the same function, so they cannot disagree.
+- **Scenes are thin shells** over those functions plus the shared feel layer
+  (`easing`, `tween`, `particles`, `clock`). New behaviour goes in a rule
+  function with a test first, then a scene hook that calls it.
+- **Behaviour is tested through the public surface.** Core modules get plain
+  unit tests. Scene behaviour (state machines, input handling) is tested with
+  `src/test/harness.ts`, which drives `update()` with scripted input and a
+  clock you advance by hand; `internals()` reaches private state when an
+  assertion needs it.
+- **Effects go through `engine/effects.ts`.** A scene asks for a pop, a mix
+  splash, a ring or a shake and the layer decides what that looks like from
+  the theme's `fx` profile and the intensity of the moment. Classic's profile
+  turns every new treatment off, so the faithful port is unaffected. Tune
+  numbers in the lab (`?fx` on the URL), then write them into `fxTuning.ts`.
+- `npm run check` is what CI runs; keep it green.
 
 ## Differences from the GameMaker version
 

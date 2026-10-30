@@ -1,10 +1,9 @@
-import type { ArcadeMode } from "../core/arcade";
 import type { GameType } from "../core/constants";
 import type { FullscreenControl, View } from "../engine/view";
 import type { SpriteMap } from "../engine/assets";
-import type { AudioSystem } from "../engine/audio";
+import type { AudioPort } from "../engine/audio";
 import type { Clock } from "../engine/clock";
-import type { Input } from "../engine/input";
+import type { InputState } from "../engine/input";
 import type { SaveData } from "../engine/save";
 import type { Palette, ThemeName } from "../engine/theme";
 
@@ -16,8 +15,6 @@ export interface Session {
   /** 0..5 within a world. */
   level: number;
   score: number;
-  /** The arcade mode being played, or null in the main game. */
-  arcade: ArcadeMode | null;
 }
 
 export interface GameContext {
@@ -25,8 +22,8 @@ export interface GameContext {
   sprites: SpriteMap;
   /** Colours and fonts for everything drawn directly by the scenes. */
   palette: Palette;
-  audio: AudioSystem;
-  input: Input;
+  audio: AudioPort;
+  input: InputState;
   /** Frame clock: wall time, game time (pauses in hit-stop) and sim interpolation. */
   clock: Clock;
   /** Logical viewport size and scale for the current window. */

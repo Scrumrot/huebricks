@@ -2,16 +2,7 @@ import type { Sprite } from "./assets";
 import type { UiPalette } from "./theme";
 
 /** `draw_sprite_stretched` */
-export function drawSprite(
-  ctx: CanvasRenderingContext2D,
-  sprite: Sprite,
-  frame: number,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  alpha = 1,
-): void {
+export function drawSprite(ctx: CanvasRenderingContext2D, sprite: Sprite, frame: number, x: number, y: number, w: number, h: number, alpha = 1): void {
   const img = sprite.frames[Math.max(0, Math.min(sprite.frames.length - 1, Math.floor(frame)))];
   if (alpha !== 1) {
     const prev = ctx.globalAlpha;

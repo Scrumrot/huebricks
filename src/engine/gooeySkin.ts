@@ -424,4 +424,3 @@ const SPEC: SkinSpec = {
 export function buildGooeySprites(classic: SpriteMap): SpriteMap {
   return buildSkin(classic, SPEC);
 }
-

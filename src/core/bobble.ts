@@ -156,10 +156,11 @@ export class BubbleGrid {
   floating(): Bubble[] {
     const anchored = new Set<Bubble>();
     const stack: Bubble[] = [];
-    for (const b of this.grid[0]) if (b) {
-      anchored.add(b);
-      stack.push(b);
-    }
+    for (const b of this.grid[0])
+      if (b) {
+        anchored.add(b);
+        stack.push(b);
+      }
     while (stack.length) {
       const b = stack.pop()!;
       for (const [nr, nc] of this.neighbors(b.row, b.col)) {
@@ -193,4 +194,100 @@ export class BubbleGrid {
   toString(): string {
     return this.grid.map((row, i) => (i % 2 ? " " : "") + row.map((b) => (b ? String(b.color) : ".")).join(" ")).join("\n");
   }
+}
+
+// -----------------------------------------------------------------------------
+// Shot physics and level rules, pure
+// -----------------------------------------------------------------------------
+
+/** A bubble in flight, in playfield units (origin at the playfield's top-left). */
+export interface Shot {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+}
+
+export interface ShotStep {
+  shot: Shot;
+  /** Side-wall bounces during this step. */
+  bounces: number;
+  /** Set when the shot arrived: the bubble it touched, or null at the bare ceiling. */
+  landed: { hit: Bubble | null } | null;
+}
+
+/** A shot touches a bubble inside this many radii (a little under two, so it can thread a gap). */
+export const HIT_RADII = 1.8;
+/** A ceiling arrival still counts as hitting a bubble within this many radii. */
+export const NEAR_RADII = 2.1;
+
+/**
+ * Move a shot for one sim step inside a playfield `w` wide, bouncing off
+ * the side walls and stopping at the ceiling or the first bubble it touches.
+ */
+export function advanceShot(grid: BubbleGrid, shot: Shot, r: number, w: number, substeps = 4): ShotStep {
+  const ceilingY = grid.drop * 2 * r * ROW_PITCH;
+  const bubbles = grid.bubbles().map((b) => ({ b, c: grid.center(b.row, b.col, r) }));
+  let { x, y, vx } = shot;
+  const { vy } = shot;
+  let bounces = 0;
+  for (let k = 0; k < substeps; k++) {
+    x += vx / substeps;
+    y += vy / substeps;
+    if (x - r < 0) {
+      x = r + (r - x);
+      vx = -vx;
+      bounces++;
+    } else if (x + r > w) {
+      x = w - r - (x + r - w);
+      vx = -vx;
+      bounces++;
+    }
+    const nearest = bubbles.reduce<{ b: Bubble | null; d: number }>(
+      (best, { b, c }) => {
+        const d = Math.hypot(c.x - x, c.y - y);
+        return d < best.d ? { b, d } : best;
+      },
+      { b: null, d: Infinity },
+    );
+    if (y - r <= ceilingY || nearest.d < r * HIT_RADII) {
+      return { shot: { x, y, vx, vy }, bounces, landed: { hit: nearest.d < r * NEAR_RADII ? nearest.b : null } };
+    }
+  }
+  return { shot: { x, y, vx, vy }, bounces, landed: null };
+}
+
+/** Launch angle toward a point, clamped to `max` either side of straight up. */
+export function aimToward(dx: number, dy: number, max: number): number {
+  return Math.max(-max, Math.min(max, Math.atan2(dx, -dy)));
+}
+
+export const LEVEL_COLORS = (level: number): Color[] =>
+  [1, 2, 4, ...(level >= 2 ? [6] : []), ...(level >= 3 ? [5] : []), ...(level >= 5 ? [3] : [])] as Color[];
+
+/** Rows filled at the start of a level. */
+export function fillRows(level: number): number {
+  return Math.min(7, 3 + Math.floor((level - 1) / 2));
+}
+
+/** Shots between ceiling drops. */
+export function shotsPerDrop(level: number): number {
+  return Math.max(5, 9 - Math.floor(level / 3));
+}
+
+/** Shot colours: what is in the cluster, weighted double, plus the primaries so mixes stay possible. */
+export function shotPool(present: readonly Color[]): Color[] {
+  return [...present, ...present, 1, 2, 4];
+}
+
+export function popPoints(size: number, min: number): number {
+  return size * 30 + Math.max(0, size - min) * 30;
+}
+
+export function dropBonus(loose: number): number {
+  return 20 * loose * (loose + 1);
+}
+
+export function clearBonus(level: number): number {
+  return 300 + level * 100;
 }

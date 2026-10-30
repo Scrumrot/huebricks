@@ -95,17 +95,7 @@ export function roundRect(g: Ctx, x: number, y: number, w: number, h: number, r:
   g.roundRect(x, y, w, h, rr);
 }
 
-export function text(
-  g: Ctx,
-  s: string,
-  x: number,
-  y: number,
-  size: number,
-  color = INK,
-  weight = 700,
-  align: CanvasTextAlign = "center",
-  font = FONT,
-): void {
+export function text(g: Ctx, s: string, x: number, y: number, size: number, color = INK, weight = 700, align: CanvasTextAlign = "center", font = FONT): void {
   g.font = `${weight} ${size}px ${font}`;
   g.textAlign = align;
   g.textBaseline = "middle";
@@ -144,67 +134,40 @@ export function chipPath(g: Ctx, x: number, y: number, w: number, h: number, r: 
   const arc = (Math.PI / 2) * rr;
   const perim = 2 * straightW + 2 * straightH + 4 * arc;
   const steps = 72;
+  // the perimeter as straight runs and quarter arcs, clockwise from the end of the top-left corner
+  type Pt = { px: number; py: number; nx: number; ny: number };
+  const corner =
+    (cx: number, cy: number, a0: number) =>
+    (s: number): Pt => {
+      const a = a0 + (s / arc) * (Math.PI / 2);
+      return { px: cx + Math.cos(a) * rr, py: cy + Math.sin(a) * rr, nx: Math.cos(a), ny: Math.sin(a) };
+    };
+  const segments: Array<[number, (s: number) => Pt]> = [
+    [straightW, (s) => ({ px: x + rr + s, py: y, nx: 0, ny: -1 })],
+    [arc, corner(x + w - rr, y + rr, -Math.PI / 2)],
+    [straightH, (s) => ({ px: x + w, py: y + rr + s, nx: 1, ny: 0 })],
+    [arc, corner(x + w - rr, y + h - rr, 0)],
+    [straightW, (s) => ({ px: x + w - rr - s, py: y + h, nx: 0, ny: 1 })],
+    [arc, corner(x + rr, y + h - rr, Math.PI / 2)],
+    [straightH, (s) => ({ px: x, py: y + h - rr - s, nx: -1, ny: 0 })],
+    [arc, corner(x + rr, y + rr, Math.PI)],
+  ];
+  const pointAt = (d: number): Pt => {
+    let s = d;
+    for (const [len, at] of segments) {
+      if (s < len) return at(s);
+      s -= len;
+    }
+    return segments[segments.length - 1][1](arc);
+  };
   g.beginPath();
   for (let i = 0; i <= steps; i++) {
     const d = (i / steps) * perim;
-    // point along the perimeter, clockwise from the top-left corner's end
-    let px: number;
-    let py: number;
-    let nx: number;
-    let ny: number;
-    let s = d;
-    if (s < straightW) {
-      px = x + rr + s;
-      py = y;
-      nx = 0;
-      ny = -1;
-    } else if ((s -= straightW) < arc) {
-      const a = -Math.PI / 2 + (s / arc) * (Math.PI / 2);
-      px = x + w - rr + Math.cos(a) * rr;
-      py = y + rr + Math.sin(a) * rr;
-      nx = Math.cos(a);
-      ny = Math.sin(a);
-    } else if ((s -= arc) < straightH) {
-      px = x + w;
-      py = y + rr + s;
-      nx = 1;
-      ny = 0;
-    } else if ((s -= straightH) < arc) {
-      const a = (s / arc) * (Math.PI / 2);
-      px = x + w - rr + Math.cos(a) * rr;
-      py = y + h - rr + Math.sin(a) * rr;
-      nx = Math.cos(a);
-      ny = Math.sin(a);
-    } else if ((s -= arc) < straightW) {
-      px = x + w - rr - s;
-      py = y + h;
-      nx = 0;
-      ny = 1;
-    } else if ((s -= straightW) < arc) {
-      const a = Math.PI / 2 + (s / arc) * (Math.PI / 2);
-      px = x + rr + Math.cos(a) * rr;
-      py = y + h - rr + Math.sin(a) * rr;
-      nx = Math.cos(a);
-      ny = Math.sin(a);
-    } else if ((s -= arc) < straightH) {
-      px = x;
-      py = y + h - rr - s;
-      nx = -1;
-      ny = 0;
-    } else {
-      s -= straightH;
-      const a = Math.PI + (s / arc) * (Math.PI / 2);
-      px = x + rr + Math.cos(a) * rr;
-      py = y + rr + Math.sin(a) * rr;
-      nx = Math.cos(a);
-      ny = Math.sin(a);
-    }
+    const { px, py, nx, ny } = pointAt(d);
     const u = (d / perim) * Math.PI * 2;
     const wob = (Math.sin(u * 6 + phases[0]) * 0.5 + Math.sin(u * 3 + phases[1]) * 0.35 + Math.sin(u * 11 + phases[2]) * 0.15) * amp;
-    px += nx * wob;
-    py += ny * wob;
-    if (i === 0) g.moveTo(px, py);
-    else g.lineTo(px, py);
+    if (i === 0) g.moveTo(px + nx * wob, py + ny * wob);
+    else g.lineTo(px + nx * wob, py + ny * wob);
   }
   g.closePath();
 }
@@ -878,7 +841,12 @@ function buildModeButton(name: SpriteName, label: string, base: string, glyph: G
   return sprite(name, 512, 256, (g, i, w, h) => {
     const pad = h * 0.1;
     const pressed = i === 1;
-    chip(g, pad, pad + (pressed ? 6 : 0), w - pad * 2, h - pad * 2 - 10, pressed ? shade(base, -0.12) : base, { radius: h * 0.22, wobble: 2.5, seed: 70 + label.length, shadow: pressed ? 0 : 10 });
+    chip(g, pad, pad + (pressed ? 6 : 0), w - pad * 2, h - pad * 2 - 10, pressed ? shade(base, -0.12) : base, {
+      radius: h * 0.22,
+      wobble: 2.5,
+      seed: 70 + label.length,
+      shadow: pressed ? 0 : 10,
+    });
     const ink = inkOn(base);
     modeGlyph(g, glyph, w * 0.2, h / 2 - 4 + (pressed ? 6 : 0), h * 0.15, GLYPH_INK);
     display(g, label, w * 0.61, h / 2 - 2 + (pressed ? 6 : 0), h * 0.29, ink);
@@ -892,7 +860,12 @@ function buildWorldButton(world: number): Sprite {
   return sprite(name, S, S, (g, i, w, h) => {
     const pad = w * 0.07;
     const pressed = i === 1;
-    chip(g, pad, pad + (pressed ? 5 : 0), w - pad * 2, h - pad * 2 - 8, pressed ? shade(base, -0.12) : base, { radius: w * 0.2, wobble: 2, seed: 120 + world, shadow: pressed ? 0 : 8 });
+    chip(g, pad, pad + (pressed ? 5 : 0), w - pad * 2, h - pad * 2 - 8, pressed ? shade(base, -0.12) : base, {
+      radius: w * 0.2,
+      wobble: 2,
+      seed: 120 + world,
+      shadow: pressed ? 0 : 8,
+    });
     const ink = inkOn(base);
     const dy = pressed ? 5 : 0;
     if (world === 0) {

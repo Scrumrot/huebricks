@@ -428,4 +428,3 @@ const SPEC: SkinSpec = {
 export function buildHalloweenSprites(classic: SpriteMap): SpriteMap {
   return buildSkin(classic, SPEC);
 }
-

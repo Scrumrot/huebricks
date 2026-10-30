@@ -4,12 +4,12 @@ import { FPS } from "../../core/constants";
 import type { MusicName, SpriteName } from "../../engine/assets";
 import { BACKDROPS } from "../../engine/backdrops";
 import { ButtonFeel } from "../../engine/buttonFeel";
-import { debrisFor } from "../../engine/debris";
+import { Effects } from "../../engine/effects";
 import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton, type TextStyle } from "../../engine/draw";
-import { backOut, clamp01, easeOutBack, easeOutCubic, lerp } from "../../engine/easing";
+import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
 import { rgba } from "../../engine/modernSkin";
-import { drawTile, type TileOptions } from "../../engine/tiles";
-import { Particles } from "../../engine/particles";
+import { popScale } from "../../engine/fxTuning";
+import { drawTile, type TileOptions, type TileShape } from "../../engine/tiles";
 import { nextTheme, THEME_LABELS } from "../../engine/theme";
 import { Tweens } from "../../engine/tween";
 import { fillScreen } from "../../engine/view";
@@ -59,17 +59,6 @@ interface Callout {
   display: boolean;
 }
 
-interface Ring {
-  x: number;
-  y: number;
-  t0: number;
-  dur: number;
-  r0: number;
-  r1: number;
-  color: string;
-  width: number;
-}
-
 /** On-screen control drawn by the base: a round pill with an icon. */
 export interface Control {
   id: string;
@@ -96,7 +85,6 @@ export type ArcadeState = "play" | "menu" | "lost" | "won" | "intro";
 const FADE_MS = 180;
 const CARD_MS = 420;
 const CARD_EASE = backOut(1.2);
-const SHAKE_MS = 180;
 const COUNT_MS = 500;
 const WIPE_MS = 160;
 
@@ -135,16 +123,11 @@ export abstract class ArcadeScene implements Scene {
   protected level = 1;
 
   protected readonly tweens = new Tweens();
-  protected readonly particles = new Particles(500);
+  protected readonly effects: Effects;
   protected readonly feel: ButtonFeel;
   private callouts: Callout[] = [];
-  private rings: Ring[] = [];
   private fadeT0 = 0;
   private cardT0 = -1;
-  private shakeT0 = -1e9;
-  private shakeAmp = 0;
-  private flashUntil = -1;
-  private flashColor = "#fff";
   private readonly scoreFx = { v: 0 };
   private scoreShown = 0;
   private readonly lostFx = { desat: 0 };
@@ -161,6 +144,7 @@ export abstract class ArcadeScene implements Scene {
   constructor(ctx: GameContext) {
     this.ctx = ctx;
     this.feel = new ButtonFeel(this.tweens);
+    this.effects = new Effects(ctx, 500);
   }
 
   // ---------------------------------------------------------------------------
@@ -292,10 +276,21 @@ export abstract class ArcadeScene implements Scene {
   private layoutButtons(): void {
     const L = this.L;
     const spec = this.controlSpec();
-    const mk = (kind: SpriteButton["kind"], sprite: SpriteName, cx: number, cy: number, d: number): SpriteButton => ({ kind, sprite, cx, cy, d, hilite: false, pressed: false });
+    const mk = (kind: SpriteButton["kind"], sprite: SpriteName, cx: number, cy: number, d: number): SpriteButton => ({
+      kind,
+      sprite,
+      cx,
+      cy,
+      d,
+      hilite: false,
+      pressed: false,
+    });
     if (L.portrait) {
       const d = Math.min(48, L.left.h * 0.6);
-      this.spriteButtons = [mk("pause", "pause_button_sprite", L.vw - 16 - d / 2, L.left.h / 2, d), mk("sound", "sound_button_sprite", 16 + d * 0.3, L.left.h / 2, d * 0.6)];
+      this.spriteButtons = [
+        mk("pause", "pause_button_sprite", L.vw - 16 - d / 2, L.left.h / 2, d),
+        mk("sound", "sound_button_sprite", 16 + d * 0.3, L.left.h / 2, d * 0.6),
+      ];
       const cd = Math.min(56, (L.vw - 32) / Math.max(1, spec.length) - 10, L.right.h - 16);
       const gap = Math.min(18, (L.vw - 32 - cd * spec.length) / Math.max(1, spec.length));
       const total = cd * spec.length + gap * (spec.length - 1);
@@ -317,7 +312,15 @@ export abstract class ArcadeScene implements Scene {
       const c = i % cols;
       const rowCount = Math.min(cols, spec.length - r * cols);
       const rowW = rowCount * cd + (rowCount - 1) * gap;
-      return { id: s.id, icon: s.icon, cx: cx - rowW / 2 + cd / 2 + c * (cd + gap), cy: bottom - cd / 2 - (rowsN - 1 - r) * (cd + gap), d: cd, hilite: false, pressed: false };
+      return {
+        id: s.id,
+        icon: s.icon,
+        cx: cx - rowW / 2 + cd / 2 + c * (cd + gap),
+        cy: bottom - cd / 2 - (rowsN - 1 - r) * (cd + gap),
+        d: cd,
+        hilite: false,
+        pressed: false,
+      };
     });
   }
 
@@ -457,9 +460,8 @@ export abstract class ArcadeScene implements Scene {
     }
     this.lostFx.desat = 0;
     this.tweens.clear();
-    this.particles.clear();
+    this.effects.clear();
     this.callouts = [];
-    this.rings = [];
     this.press = null;
     this.state = "play";
     this.cardT0 = -1;
@@ -499,6 +501,7 @@ export abstract class ArcadeScene implements Scene {
     this.lostTimer = 0;
     this.cardT0 = this.ctx.clock.t + 250;
     this.tweens.to(this.lostFx, { desat: 1 }, 400);
+    this.effects.vignette(0.6, 1600);
     this.ctx.audio.play("tryagain_snd");
     this.recordBest();
   }
@@ -544,35 +547,50 @@ export abstract class ArcadeScene implements Scene {
   }
 
   protected ring(x: number, y: number, r0: number, r1: number, color: string, width = 3, dur = 260): void {
-    this.rings.push({ x, y, t0: this.ctx.clock.t, dur, r0, r1, color, width });
+    this.effects.ring(x, y, r0, r1, color, width, dur);
   }
 
-  protected shake(amp: number): void {
-    this.shakeT0 = this.ctx.clock.t;
-    this.shakeAmp = amp;
+  protected shake(amp: number, dir?: [number, number]): void {
+    this.effects.shake(amp, dir);
   }
 
   protected flash(color: string, ms = 90): void {
-    this.flashColor = color;
-    this.flashUntil = this.ctx.clock.t + ms;
+    this.effects.flash(color, ms);
   }
 
-  /** Debris from a popped tile at its centre, in the theme's own style. */
-  protected burst(cx: number, cy: number, color: Color, count = 12): void {
-    const { colors, o } = debrisFor(this.ctx.palette, color, this.L.cell);
-    this.particles.spawn(cx, cy, count, colors, { ...o, jitter: 0.3 });
+  /** Ring, hit-stop, shake and flash for a pop of intensity `k` centred at (x, y). */
+  protected impact(k: number, x: number, y: number): void {
+    const sc = popScale(k);
+    const L = this.L;
+    this.effects.burstRing(x, y, L.cell, this.ctx.palette.callout, k, 60, 300);
+    if (k >= 0.1) this.effects.impact(k);
+    this.effects.shake(sc.shake, [x - (L.x + L.w / 2), y - (L.y + L.h / 2)]);
+    if (k >= 0.25) this.effects.flash(this.ctx.palette.flash, 90, sc.flash);
+  }
+
+  /** Debris, fragments and sparks from a popped tile centred at (cx, cy), in the theme's own style. */
+  protected burst(cx: number, cy: number, color: Color, o: { count?: number; k?: number; shape?: TileShape; seed?: number } = {}): void {
+    const cell = this.L.cell;
+    const sp = this.ctx.sprites;
+    const pal = this.ctx.palette;
+    const shape = o.shape ?? "square";
+    this.effects.pop({
+      x: cx - cell / 2,
+      y: cy - cell / 2,
+      w: cell,
+      h: cell,
+      color,
+      k: o.k ?? 0,
+      debris: o.count ?? 12,
+      draw: (g, w) => drawTile(g, sp, pal, color, -w / 2, -w / 2, w, { shape, seed: o.seed }),
+    });
   }
 
   /** Level clear: a fountain of debris from the bottom of the well. */
   protected celebrate(): void {
     const L = this.L;
-    const n = L.cols;
-    for (let x = 0; x < n; x++) {
-      const color = ((x % 6) + 1) as Color;
-      const { colors, o } = debrisFor(this.ctx.palette, color, L.cell);
-      const up = { ...o, dir: -Math.PI / 2, spread: 0.45, speed: [o.speed[0] * 1.6, o.speed[1] * 1.9] as [number, number], life: [o.life[0] * 1.6, o.life[1] * 1.8] as [number, number], jitter: 0.35 };
-      this.particles.spawn(L.x + (x + 0.5) * L.cell, L.y + L.h, 9, colors, up);
-    }
+    const xs = Array.from({ length: L.cols }, (_, x) => L.x + (x + 0.5) * L.cell);
+    this.effects.celebrate(xs, L.y + L.h, L.cell, (i) => ((i % 6) + 1) as Color);
   }
 
   /** Screen position of a grid cell's top-left corner. */
@@ -587,13 +605,12 @@ export abstract class ArcadeScene implements Scene {
   render(g: CanvasRenderingContext2D): void {
     const clock = this.ctx.clock;
     this.tweens.update(clock.t);
-    this.particles.update(clock.dt);
+    this.effects.update();
     const t = clock.t;
     if (this.score !== this.scoreShown) {
       this.scoreShown = this.score;
       this.tweens.to(this.scoreFx, { v: this.score }, COUNT_MS);
     }
-    this.rings = this.rings.filter((r) => t - r.t0 < r.dur);
     this.callouts = this.callouts.filter((c) => t - c.t0 < c.dur);
 
     const pal = this.ctx.palette;
@@ -601,11 +618,7 @@ export abstract class ArcadeScene implements Scene {
     if (pal.kind === "generated" && pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, t);
 
     g.save();
-    const shake = t - this.shakeT0;
-    if (shake < SHAKE_MS) {
-      const amp = this.shakeAmp * (1 - shake / SHAKE_MS);
-      g.translate((Math.random() * 2 - 1) * amp, (Math.random() * 2 - 1) * amp);
-    }
+    this.effects.applyShake(g, this.L.vw / 2, this.L.vh / 2);
     this.renderWellPanel(g);
     g.save();
     const desat = this.lostFx.desat;
@@ -613,23 +626,11 @@ export abstract class ArcadeScene implements Scene {
     this.renderWell(g);
     g.filter = "none";
     g.restore();
-    if (pal.particlesAdditive) {
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      this.particles.render(g);
-      g.restore();
-    } else {
-      this.particles.render(g);
-    }
-    this.renderRings(g);
-    if (t < this.flashUntil) {
-      g.fillStyle = this.flashColor;
-      g.globalAlpha = pal.flashAlpha;
-      g.fillRect(this.L.x, this.L.y, this.L.w, this.L.h);
-      g.globalAlpha = 1;
-    }
+    this.effects.renderWorld(g);
+    this.effects.renderFlash(g, this.L.x, this.L.y, this.L.w, this.L.h);
     this.renderCallouts(g);
     this.renderHud(g);
+    this.effects.renderVignette(g);
     g.restore();
 
     if (this.state === "intro") this.renderIntro(g);
@@ -702,26 +703,6 @@ export abstract class ArcadeScene implements Scene {
     return clamp01((this.ctx.clock.t - t0) / WIPE_MS);
   }
 
-  private renderRings(g: CanvasRenderingContext2D): void {
-    if (!this.rings.length) return;
-    const t = this.ctx.clock.t;
-    g.save();
-    if (this.ctx.palette.glow) {
-      g.shadowColor = "rgba(255,255,255,0.8)";
-      g.shadowBlur = 14;
-    }
-    for (const r of this.rings) {
-      const q = easeOutCubic(clamp01((t - r.t0) / r.dur));
-      g.globalAlpha = 0.9 * (1 - q);
-      g.lineWidth = r.width * (1 - q * 0.6);
-      g.strokeStyle = r.color;
-      g.beginPath();
-      g.arc(r.x, r.y, lerp(r.r0, r.r1, q), 0, Math.PI * 2);
-      g.stroke();
-    }
-    g.restore();
-  }
-
   private renderCallouts(g: CanvasRenderingContext2D): void {
     if (!this.callouts.length) return;
     const t = this.ctx.clock.t;
@@ -738,7 +719,14 @@ export abstract class ArcadeScene implements Scene {
       g.rotate(c.tilt);
       g.scale(scale, scale);
       g.globalAlpha = alpha;
-      drawText(g, c.text, 0, 0, { size: c.size, color: c.color, shadow: pal.calloutShadow, weight: c.display ? 600 : 800, font: c.display ? pal.display : pal.font, tabular: true });
+      drawText(g, c.text, 0, 0, {
+        size: c.size,
+        color: c.color,
+        shadow: pal.calloutShadow,
+        weight: c.display ? 600 : 800,
+        font: c.display ? pal.display : pal.font,
+        tabular: true,
+      });
       g.restore();
     }
   }

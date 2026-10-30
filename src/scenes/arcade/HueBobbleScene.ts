@@ -1,9 +1,23 @@
 import { arcadeInfo } from "../../core/arcade";
-import { BubbleGrid, ROW_PITCH, type Bubble } from "../../core/bobble";
-import { BLUE, combineColors, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../../core/color";
+import {
+  advanceShot,
+  aimToward,
+  BubbleGrid,
+  clearBonus,
+  dropBonus,
+  fillRows,
+  LEVEL_COLORS,
+  popPoints,
+  ROW_PITCH,
+  shotPool,
+  shotsPerDrop,
+  type Bubble,
+} from "../../core/bobble";
+import { BLUE, combineColors, RED, type Color } from "../../core/color";
 import type { MusicName } from "../../engine/assets";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
 import { ArcadeScene, STEP_MS } from "./ArcadeScene";
+import { intensityFor } from "../../engine/fxTuning";
 import { type Dying, dyingScale, DYING_MS, POP_BURST_MS } from "./shared";
 
 /**
@@ -85,33 +99,20 @@ export class HueBobbleScene extends ArcadeScene {
     return this.L.cell / 2;
   }
 
-  private levelColors(): Color[] {
-    const lv = this.level;
-    const c: Color[] = [RED, BLUE, YELLOW];
-    if (lv >= 2) c.push(GREEN);
-    if (lv >= 3) c.push(ORANGE);
-    if (lv >= 5) c.push(PURPLE);
-    return c;
-  }
-
-  private shotsPerDrop(): number {
-    return Math.max(5, 9 - Math.floor(this.level / 3));
-  }
-
   protected start(): void {
     if (this.levelUp) {
       this.level++;
       this.levelUp = false;
     }
     this.grid = new BubbleGrid(COLS, ROWS + 1);
-    this.grid.populate(Math.min(7, 3 + Math.floor((this.level - 1) / 2)), this.levelColors());
+    this.grid.populate(fillRows(this.level), LEVEL_COLORS(this.level));
     this.fx.clear();
     this.dying = [];
     this.falling = [];
     this.shot = null;
     this.shots = 0;
     this.popped = 0;
-    this.shotsLeft = this.shotsPerDrop();
+    this.shotsLeft = shotsPerDrop(this.level);
     this.dropFx.v = 0;
     this.aim = 0;
     this.loaded = this.pick();
@@ -134,10 +135,8 @@ export class HueBobbleScene extends ArcadeScene {
     ];
   }
 
-  /** Shot colours: what is in the cluster, weighted, plus the primaries so mixes stay possible. */
   private pick(): Color {
-    const present = this.grid.colorsPresent();
-    const pool: Color[] = [...present, ...present, RED, BLUE, YELLOW];
+    const pool = shotPool(this.grid.colorsPresent());
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
@@ -190,8 +189,7 @@ export class HueBobbleScene extends ArcadeScene {
 
   private aimAt(x: number, y: number): void {
     const l = this.launcher();
-    const a = Math.atan2(x - l.x, l.y - y);
-    this.aim = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, a));
+    this.aim = aimToward(x - l.x, y - l.y, MAX_ANGLE);
   }
 
   private fire(): void {
@@ -211,38 +209,16 @@ export class HueBobbleScene extends ArcadeScene {
     const s = this.shot;
     if (!s) return;
     const L = this.L;
-    const r = this.r;
     s.px = s.x;
     s.py = s.y;
-    const sub = 4;
-    for (let k = 0; k < sub; k++) {
-      s.x += s.vx / sub;
-      s.y += s.vy / sub;
-      if (s.x - r < L.x) {
-        s.x = L.x + r + (L.x - (s.x - r));
-        s.vx = -s.vx;
-        this.ctx.audio.play("BlocksSelection_snd", 0.3, 0.8);
-      } else if (s.x + r > L.x + L.w) {
-        s.x = L.x + L.w - r - (s.x + r - (L.x + L.w));
-        s.vx = -s.vx;
-        this.ctx.audio.play("BlocksSelection_snd", 0.3, 0.8);
-      }
-      const ceilingY = L.y + this.grid.drop * 2 * r * ROW_PITCH;
-      let hit: Bubble | null = null;
-      let hitD = Infinity;
-      for (const b of this.grid.bubbles()) {
-        const c = this.grid.center(b.row, b.col, r);
-        const d = Math.hypot(L.x + c.x - s.x, L.y + c.y - s.y);
-        if (d < hitD) {
-          hitD = d;
-          hit = b;
-        }
-      }
-      if (s.y - r <= ceilingY || (hit && hitD < 2 * r * 0.9)) {
-        this.stick(s, hit && hitD < 2 * r * 1.05 ? hit : null);
-        return;
-      }
-    }
+    // physics runs in playfield units; the scene keeps the shot in screen units for drawing
+    const step = advanceShot(this.grid, { x: s.x - L.x, y: s.y - L.y, vx: s.vx, vy: s.vy }, this.r, L.w);
+    s.x = step.shot.x + L.x;
+    s.y = step.shot.y + L.y;
+    s.vx = step.shot.vx;
+    s.vy = step.shot.vy;
+    if (step.bounces) this.ctx.audio.play("BlocksSelection_snd", 0.3, 0.8);
+    if (step.landed) this.stick(s, step.landed.hit);
   }
 
   /** The shot arrives: mix into the bubble it hit if the colours allow, otherwise snap in beside it. */
@@ -251,7 +227,7 @@ export class HueBobbleScene extends ArcadeScene {
     const r = this.r;
     this.shot = null;
     const result = hit ? combineColors(s.color, hit.color) : null;
-    let at: Bubble | null = null;
+    let at: Bubble;
     if (hit && result !== null) {
       const f = this.fxOf(hit);
       f.wipeFrom = hit.color;
@@ -261,6 +237,7 @@ export class HueBobbleScene extends ArcadeScene {
       hit.color = result;
       const c = this.center(hit.row, hit.col);
       this.ring(c.x, c.y, r * 0.6, r * 2.2, this.colorOf(result), 3);
+      this.effects.mixSplash(c.x, c.y, L.cell, [this.colorOf(f.wipeFrom as Color), this.colorOf(result)], Math.atan2(s.vy, s.vx));
       this.ctx.audio.play("BlocksCombine_snd");
       at = hit;
     } else {
@@ -287,23 +264,31 @@ export class HueBobbleScene extends ArcadeScene {
 
   private pop(group: Bubble[]): void {
     const r = this.r;
+    const k = intensityFor(1, group.length);
     let sx = 0;
     let sy = 0;
     group.forEach((b, i) => {
       const c = this.center(b.row, b.col);
       sx += c.x;
       sy += c.y;
-      this.dying.push({ x: c.x - r, y: c.y - r, color: b.color, t0: this.ctx.clock.t + Math.min(i, 8) * 18, burst: false, spin: Math.random() < 0.5 ? -1 : 1 });
+      this.dying.push({
+        x: c.x - r,
+        y: c.y - r,
+        color: b.color,
+        t0: this.ctx.clock.t + Math.min(i, 8) * 18,
+        burst: false,
+        spin: Math.random() < 0.5 ? -1 : 1,
+        k,
+      });
       this.grid.remove(b);
       this.fx.delete(b.id);
     });
-    const pts = group.length * 30 + Math.max(0, group.length - POP_MIN) * 30;
+    const pts = popPoints(group.length, POP_MIN);
     this.popped += group.length;
     this.addScore(pts);
     this.callout(`+${pts}`, sx / group.length, sy / group.length, this.ctx.palette.callout, 18);
     this.ctx.audio.play("BlocksPopping_snd");
-    this.shake(2 + group.length * 0.4);
-    if (group.length >= 5) this.ctx.clock.freeze(40);
+    this.impact(k, sx / group.length, sy / group.length);
     // anything no longer hanging from the ceiling drops out
     const loose = this.grid.floating();
     if (loose.length) {
@@ -313,11 +298,19 @@ export class HueBobbleScene extends ArcadeScene {
         const c = this.center(b.row, b.col);
         fx += c.x;
         fy += c.y;
-        this.falling.push({ x: c.x, y: c.y, vy: -this.L.cell * 0.12, vx: (Math.random() - 0.5) * this.L.cell * 0.08, color: b.color, spin: (Math.random() - 0.5) * 0.3, rot: 0 });
+        this.falling.push({
+          x: c.x,
+          y: c.y,
+          vy: -this.L.cell * 0.12,
+          vx: (Math.random() - 0.5) * this.L.cell * 0.08,
+          color: b.color,
+          spin: (Math.random() - 0.5) * 0.3,
+          rot: 0,
+        });
         this.grid.remove(b);
         this.fx.delete(b.id);
       }
-      const bonus = 20 * loose.length * (loose.length + 1);
+      const bonus = dropBonus(loose.length);
       this.addScore(bonus);
       this.callout(`Drop +${bonus}`, fx / loose.length, fy / loose.length + this.L.cell, this.ctx.palette.overlayAccent, 16, true, 1000);
     }
@@ -327,14 +320,14 @@ export class HueBobbleScene extends ArcadeScene {
   private afterSettle(): void {
     if (this.state !== "play") return;
     if (this.grid.count() === 0) {
-      const bonus = 300 + this.level * 100;
+      const bonus = clearBonus(this.level);
       this.addScore(bonus);
       this.callout(`Cleared +${bonus}`, this.L.x + this.L.w / 2, this.L.y + this.L.h * 0.4, this.ctx.palette.overlayAccent, 22, true, 1400);
       this.win();
       return;
     }
     if (--this.shotsLeft <= 0) {
-      this.shotsLeft = this.shotsPerDrop();
+      this.shotsLeft = shotsPerDrop(this.level);
       this.grid.drop++;
       this.tweens.to(this.dropFx, { v: this.grid.drop }, 260, backOut(1.1));
       this.ctx.audio.play("BlocksRepMoveUp_snd", 0.9, 0.7);
@@ -400,7 +393,7 @@ export class HueBobbleScene extends ArcadeScene {
     let x = l.x;
     let y = l.y;
     let vx = Math.sin(this.aim);
-    let vy = -Math.cos(this.aim);
+    const vy = -Math.cos(this.aim);
     const step = r * 0.55;
     const bubbles = this.grid.bubbles().map((b) => this.center(b.row, b.col));
     const ceilingY = L.y + this.dropFx.v * 2 * r * ROW_PITCH;
@@ -481,7 +474,11 @@ export class HueBobbleScene extends ArcadeScene {
     g.save();
     g.setLineDash([6, 6]);
     g.lineWidth = danger ? 2.5 : 1.5;
-    g.strokeStyle = danger ? this.rgba(pal.overlayAccent, 0.5 + 0.4 * Math.sin(t / 150)) : pal.kind === "classic" ? "rgba(255,255,255,0.25)" : this.rgba(pal.hudText, 0.22);
+    g.strokeStyle = danger
+      ? this.rgba(pal.overlayAccent, 0.5 + 0.4 * Math.sin(t / 150))
+      : pal.kind === "classic"
+        ? "rgba(255,255,255,0.25)"
+        : this.rgba(pal.hudText, 0.22);
     g.beginPath();
     g.moveTo(L.x, dl);
     g.lineTo(L.x + L.w, dl);
@@ -503,7 +500,7 @@ export class HueBobbleScene extends ArcadeScene {
       if (e < 0) continue;
       if (!d.burst && e >= POP_BURST_MS) {
         d.burst = true;
-        this.burst(d.x + r, d.y + r, d.color);
+        this.burst(d.x + r, d.y + r, d.color, { k: d.k ?? 0, shape: "round" });
       }
       const { s, rot, alpha: a } = dyingScale(e, d.spin);
       this.drawTile(g, d.color, d.x, d.y, L.cell, { s, rot, alpha: a, shape: "round" });

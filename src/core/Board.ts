@@ -155,7 +155,12 @@ export class Board {
           const [cx, cy] = stack.pop()!;
           const b = this.grid[cx][cy]!;
           group.push(b);
-          for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+          for (const [dx, dy] of [
+            [-1, 0],
+            [1, 0],
+            [0, -1],
+            [0, 1],
+          ] as const) {
             const nb = this.get(cx + dx, cy + dy);
             if (nb && nb.color === start.color && !seen.has(nb)) {
               seen.add(nb);
@@ -300,13 +305,7 @@ export class Board {
    * at (bx, by). On success the selected brick is consumed and the destination
    * takes the new colour (its animation is driven by `spriteColor !== color`).
    */
-  combine(
-    selected: Brick | null,
-    bx: number,
-    by: number,
-    canAdd = true,
-    canSubtract = true,
-  ): CombineResult {
+  combine(selected: Brick | null, bx: number, by: number, canAdd = true, canSubtract = true): CombineResult {
     const dest = this.get(bx, by);
     if (!dest || !selected) return "none";
 
@@ -352,7 +351,10 @@ export class Board {
 
   /** Build a board from the `toString()` format (for tests). */
   static fromString(text: string): Board {
-    const rows = text.trim().split("\n").map((r) => r.trim());
+    const rows = text
+      .trim()
+      .split("\n")
+      .map((r) => r.trim());
     const n = rows.length;
     const board = new Board(n);
     for (let y = 0; y < n; y++) {

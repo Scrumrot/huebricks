@@ -87,7 +87,15 @@ export function makeGlyphs(look: GlyphLook): (g: Ctx, color: Color, cx: number, 
   };
 }
 
-export type TileFn = (g: Ctx, x: number, y: number, w: number, h: number, base: string, opts?: { radius?: number; lift?: number; plain?: boolean; seed?: number }) => void;
+export type TileFn = (
+  g: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  base: string,
+  opts?: { radius?: number; lift?: number; plain?: boolean; seed?: number },
+) => void;
 export type IconFn = (g: Ctx, cx: number, cy: number, r: number) => void;
 export type ButtonFn = (g: Ctx, w: number, h: number, pressed: boolean, icon: IconFn) => void;
 
@@ -246,7 +254,9 @@ export function buildSkin(classic: SpriteMap, spec: SkinSpec): SpriteMap {
     }),
     worldbg_sprite: flat("worldbg_sprite", spec.bg),
     sidebar_sprite: flat("sidebar_sprite", spec.bg),
-    rotate_button_sprite: round("rotate_button_sprite", (g, i, w, h) => spec.button(g, w, h, i % 2 === 1, (gg, cx, cy, r) => rotateIcon(gg, cx, cy, r, i >= 2))),
+    rotate_button_sprite: round("rotate_button_sprite", (g, i, w, h) =>
+      spec.button(g, w, h, i % 2 === 1, (gg, cx, cy, r) => rotateIcon(gg, cx, cy, r, i >= 2)),
+    ),
     pause_button_sprite: round("pause_button_sprite", (g, _i, w, h) =>
       spec.button(g, w, h, false, (gg, cx, cy, r) => {
         const bw = r * 0.16;

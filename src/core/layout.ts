@@ -87,7 +87,25 @@ export function computeLayout(cellNum: number, spacing: LayoutSpacing = NO_SPACI
   const replenishYv = boardY + cellNum * cellH + (cellNum + 1) * cellSep + spacing.gap;
   const hudBottomY = replenishYv + cellH + cellSep + spacing.bottom;
   const railW = portrait ? 0 : Math.min(boardX, Math.max(150, vp.h * 0.315));
-  return { cellNum, cellSep, cellW, cellH, boardX, boardY, boardW, boardH: stackH, replenishY: replenishYv, vp, portrait, railW, hudTop, hudBottom, hudTopY, hudBottomY, stackY };
+  return {
+    cellNum,
+    cellSep,
+    cellW,
+    cellH,
+    boardX,
+    boardY,
+    boardW,
+    boardH: stackH,
+    replenishY: replenishYv,
+    vp,
+    portrait,
+    railW,
+    hudTop,
+    hudBottom,
+    hudTopY,
+    hudBottomY,
+    stackY,
+  };
 }
 
 /** Screen x of grid column `gx`. */

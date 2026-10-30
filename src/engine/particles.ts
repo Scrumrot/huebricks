@@ -3,8 +3,17 @@
  * storage, no allocation while running. Positions are in logical screen
  * units; velocities in units per second.
  */
-/** 0 fleck, 1 dot, 2 extruded cube, 3 paint splat, 4 sprinkle, 5 bat, 6 shard, 7 snowflake, 8 leaf. */
-export type ParticleShape = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+import { colorRamp } from "./colorUtil";
+
+/** 0 fleck, 1 dot, 2 extruded cube, 3 paint splat, 4 sprinkle, 5 bat, 6 shard, 7 snowflake, 8 leaf, 9 spark. */
+export type ParticleShape = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/** Ramp steps; the index for a particle at `k` of its life remaining (1 -> 0). */
+export const RAMP_STEPS = 8;
+export const rampIndex = (k: number): number => Math.min(RAMP_STEPS - 1, Math.max(0, Math.floor((1 - k) * RAMP_STEPS)));
+
+/** How long a stretched particle is drawn for its speed: 1 at rest, growing with `stretch`. */
+export const stretchFor = (speed: number, stretch: number): number => 1 + (stretch * speed) / 300;
 
 export interface SpawnOptions {
   /** Outward speed range (units/s). */
@@ -26,6 +35,12 @@ export interface SpawnOptions {
   jitter?: number;
   /** Side-face colours for cubes, parallel to `colors`. */
   sides?: readonly string[];
+  /** Start colour: particles spawn this hot and cool to their own colour, then darken as they die. */
+  hot?: string;
+  /** Elongate flecks, dots and sparks along their velocity (0 = none; 1 doubles the length at 300 units/s). */
+  stretch?: number;
+  /** Spawn anywhere in a box this wide and tall around the centre instead of at a point. */
+  area?: [number, number];
 }
 
 export class Particles {
@@ -43,8 +58,10 @@ export class Particles {
   private readonly grav: Float32Array;
   private readonly drag: Float32Array;
   private readonly shape: Uint8Array;
+  private readonly stretch: Float32Array;
   private readonly color: string[];
   private readonly side: string[];
+  private readonly ramp: Array<readonly string[] | null>;
 
   constructor(cap = 400) {
     this.cap = cap;
@@ -60,8 +77,10 @@ export class Particles {
     this.grav = new Float32Array(cap);
     this.drag = new Float32Array(cap);
     this.shape = new Uint8Array(cap);
+    this.stretch = new Float32Array(cap);
     this.color = new Array<string>(cap).fill("");
     this.side = new Array<string>(cap).fill("");
+    this.ramp = new Array<readonly string[] | null>(cap).fill(null);
   }
 
   get count(): number {
@@ -79,8 +98,8 @@ export class Particles {
       const i = this.n++;
       const a = o.dir === undefined ? Math.random() * Math.PI * 2 : o.dir + (Math.random() * 2 - 1) * (o.spread ?? Math.PI);
       const speed = (o.speed[0] + Math.random() * (o.speed[1] - o.speed[0])) * (1 + (Math.random() * 2 - 1) * jitter);
-      this.x[i] = cx;
-      this.y[i] = cy;
+      this.x[i] = cx + (o.area ? (Math.random() - 0.5) * o.area[0] : 0);
+      this.y[i] = cy + (o.area ? (Math.random() - 0.5) * o.area[1] : 0);
       this.vx[i] = Math.cos(a) * speed;
       this.vy[i] = Math.sin(a) * speed;
       this.max[i] = o.life[0] + Math.random() * (o.life[1] - o.life[0]);
@@ -91,9 +110,11 @@ export class Particles {
       this.grav[i] = o.gravity ?? 900;
       this.drag[i] = o.drag ?? 0.15;
       this.shape[i] = o.shape ?? 0;
+      this.stretch[i] = o.stretch ?? 0;
       const ci = Math.floor(Math.random() * colors.length);
       this.color[i] = colors[ci];
       this.side[i] = o.sides?.[ci] ?? colors[ci];
+      this.ramp[i] = o.hot ? colorRamp(o.hot, colors[ci], RAMP_STEPS) : null;
     }
   }
 
@@ -132,8 +153,10 @@ export class Particles {
     this.grav[i] = this.grav[last];
     this.drag[i] = this.drag[last];
     this.shape[i] = this.shape[last];
+    this.stretch[i] = this.stretch[last];
     this.color[i] = this.color[last];
     this.side[i] = this.side[last];
+    this.ramp[i] = this.ramp[last];
   }
 
   render(g: CanvasRenderingContext2D): void {
@@ -144,12 +167,27 @@ export class Particles {
       const fade = k < 0.4 ? k / 0.4 : 1;
       const s = this.size[i] * (0.35 + 0.65 * k);
       g.globalAlpha = fade;
-      g.fillStyle = this.color[i];
-      if (this.shape[i] === 1) {
+      const ramp = this.ramp[i];
+      g.fillStyle = ramp ? ramp[rampIndex(k)] : this.color[i];
+      const shape = this.shape[i];
+      const stretched = this.stretch[i] > 0 && (shape === 0 || shape === 1 || shape === 9);
+      if (shape === 9 || stretched) {
+        // Along the velocity: a capsule whose length grows with speed.
+        const speed = Math.hypot(this.vx[i], this.vy[i]);
+        const len = s * stretchFor(speed, this.stretch[i] || 1) * (shape === 9 ? 1.6 : 1);
+        const thick = shape === 9 ? s * 0.38 : shape === 1 ? s : s * 0.8;
+        g.save();
+        g.translate(this.x[i], this.y[i]);
+        g.rotate(Math.atan2(this.vy[i], this.vx[i]));
+        g.beginPath();
+        g.roundRect(-len / 2, -thick / 2, len, thick, thick / 2);
+        g.fill();
+        g.restore();
+      } else if (shape === 1) {
         g.beginPath();
         g.arc(this.x[i], this.y[i], s / 2, 0, Math.PI * 2);
         g.fill();
-      } else if (this.shape[i] === 3) {
+      } else if (shape === 3) {
         // three overlapping blobs, stretched along the direction of travel
         const a = Math.atan2(this.vy[i], this.vx[i]);
         g.save();

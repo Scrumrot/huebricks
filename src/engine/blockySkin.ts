@@ -631,4 +631,3 @@ export function buildBlockySprites(classic: SpriteMap): SpriteMap {
   skin.tutorial_outro_sprite = slides.outro;
   return { ...classic, ...skin } as SpriteMap;
 }
-

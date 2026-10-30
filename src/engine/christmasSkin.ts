@@ -447,4 +447,3 @@ const SPEC: SkinSpec = {
 export function buildChristmasSprites(classic: SpriteMap): SpriteMap {
   return buildSkin(classic, SPEC);
 }
-

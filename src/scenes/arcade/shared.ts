@@ -23,6 +23,8 @@ export interface Dying {
   spin: number;
   /** Drawn as a stain blob rather than a square. */
   blob?: boolean;
+  /** Moment size 0..1 for the burst. */
+  k?: number;
 }
 
 export const POP_GROW_MS = 70;

@@ -1,5 +1,5 @@
 import { BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "./color";
-import { Well } from "./well";
+import { type Well } from "./well";
 
 /**
  * Dr. Hue level layouts. There is no hand-authored puzzle file in this
@@ -32,7 +32,14 @@ export function stainLayout(level: number, cols: number, rows: number): StainLay
   const lv = Math.max(1, Math.min(DRHUE_LEVELS, level));
   const depth = Math.min(rows - 5, 4 + Math.floor((lv - 1) / 4));
   const count = Math.min(Math.floor(cols * depth * 0.62), 6 + Math.round((lv - 1) * 1.2));
-  const colors: Color[] = lv < 3 ? [RED, BLUE, YELLOW] : lv < 8 ? [RED, BLUE, YELLOW, ORANGE] : lv < 15 ? [RED, BLUE, YELLOW, ORANGE, GREEN] : [RED, BLUE, YELLOW, ORANGE, GREEN, PURPLE];
+  const colors: Color[] =
+    lv < 3
+      ? [RED, BLUE, YELLOW]
+      : lv < 8
+        ? [RED, BLUE, YELLOW, ORANGE]
+        : lv < 15
+          ? [RED, BLUE, YELLOW, ORANGE, GREEN]
+          : [RED, BLUE, YELLOW, ORANGE, GREEN, PURPLE];
   return { depth, count, colors };
 }
 

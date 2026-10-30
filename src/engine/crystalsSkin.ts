@@ -38,7 +38,16 @@ export const CRYSTAL_COLORS: Record<Color, string> = {
   7: "#2A2F45",
 };
 
-const NOICON_COLORS = [CRYSTAL_COLORS[1], CRYSTAL_COLORS[2], CRYSTAL_COLORS[3], CRYSTAL_COLORS[4], CRYSTAL_COLORS[5], CRYSTAL_COLORS[6], CRYSTAL_COLORS[7], QUARTZ];
+const NOICON_COLORS = [
+  CRYSTAL_COLORS[1],
+  CRYSTAL_COLORS[2],
+  CRYSTAL_COLORS[3],
+  CRYSTAL_COLORS[4],
+  CRYSTAL_COLORS[5],
+  CRYSTAL_COLORS[6],
+  CRYSTAL_COLORS[7],
+  QUARTZ,
+];
 
 function seeded(seed: number): () => number {
   let s = (seed * 9301 + 49297) % 233280;
@@ -95,10 +104,42 @@ export function gem(g: Ctx, x: number, y: number, w: number, h: number, base: st
     g.fillStyle = color;
     g.fill();
   };
-  facet([[x, y], [x + w, y], [x + w - b, y + b], [x + b, y + b]], shade(core, 0.4));
-  facet([[x, y], [x + b, y + b], [x + b, y + h - b], [x, y + h]], shade(core, 0.08));
-  facet([[x + w, y], [x + w, y + h], [x + w - b, y + h - b], [x + w - b, y + b]], shade(core, -0.22));
-  facet([[x, y + h], [x + b, y + h - b], [x + w - b, y + h - b], [x + w, y + h]], shade(core, -0.45));
+  facet(
+    [
+      [x, y],
+      [x + w, y],
+      [x + w - b, y + b],
+      [x + b, y + b],
+    ],
+    shade(core, 0.4),
+  );
+  facet(
+    [
+      [x, y],
+      [x + b, y + b],
+      [x + b, y + h - b],
+      [x, y + h],
+    ],
+    shade(core, 0.08),
+  );
+  facet(
+    [
+      [x + w, y],
+      [x + w, y + h],
+      [x + w - b, y + h - b],
+      [x + w - b, y + b],
+    ],
+    shade(core, -0.22),
+  );
+  facet(
+    [
+      [x, y + h],
+      [x + b, y + h - b],
+      [x + w - b, y + h - b],
+      [x + w, y + h],
+    ],
+    shade(core, -0.45),
+  );
   // table
   const tx = x + b;
   const ty = y + b;

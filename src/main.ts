@@ -20,6 +20,7 @@ import { loadGame, saveGame } from "./engine/save";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
 import type { GameContext, Scene } from "./scenes/Scene";
 import { TitleScene } from "./scenes/TitleScene";
+import { FxLabScene } from "./scenes/FxLabScene";
 import { fillScreen, PORTRAIT_W, view, type FullscreenControl } from "./engine/view";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
@@ -229,7 +230,7 @@ async function boot(): Promise<void> {
     view,
     fullscreen,
     save,
-    session: { gameType: "normal", world: 1, level: 0, score: 0, arcade: null },
+    session: { gameType: "normal", world: 1, level: 0, score: 0 },
     setScene(next: Scene) {
       scene = next;
       next.enter?.();
@@ -248,7 +249,8 @@ async function boot(): Promise<void> {
     },
   };
   ctx.setTheme(save.theme);
-  scene = new TitleScene(ctx);
+  // `?fx` opens the effects lab instead of the title screen.
+  scene = new URLSearchParams(location.search).has("fx") ? new FxLabScene(ctx) : new TitleScene(ctx);
   scene.enter?.();
 
   if (import.meta.env.DEV) {
@@ -275,14 +277,11 @@ async function boot(): Promise<void> {
   // every animation frame and interpolates sim-driven motion with
   // `clock.alpha`; the feel layer (tweens, particles) runs on game time.
   const STEP = 1000 / FPS;
-  let last = performance.now();
   let acc = 0;
   let lastCursor = "";
   function frame(now: number): void {
     clock.advance(now);
-    const wallDt = Math.min(250, now - last);
-    last = now;
-    if (!clock.frozen) acc += wallDt;
+    acc += clock.dt;
     let steps = 0;
     while (acc >= STEP && steps < 5) {
       input.beginFrame();

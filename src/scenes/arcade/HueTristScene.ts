@@ -1,9 +1,11 @@
 import { arcadeInfo } from "../../core/arcade";
-import { combineColors, randomSpawnColor, type Color } from "../../core/color";
+import { randomSpawnColor, type Color } from "../../core/color";
+import { COLS, fallInterval, landing, levelFor, popPoints, PREVIEW, restingRow, ROWS, SPAWN_X } from "../../core/trist";
 import { Well, type Cell } from "../../core/well";
 import type { MusicName } from "../../engine/assets";
 import { easeOutBack, easeOutCubic } from "../../engine/easing";
 import { ArcadeScene, type Control } from "./ArcadeScene";
+import { intensityFor } from "../../engine/fxTuning";
 import { Repeater, type CellFx, type Dying, dyingScale, DYING_MS, FALL_MS, POP_BURST_MS } from "./shared";
 
 /**
@@ -11,15 +13,6 @@ import { Repeater, type CellFx, type Dying, dyingScale, DYING_MS, FALL_MS, POP_B
  * brick it can mix with and the two become one; land anywhere else and it
  * stacks. Four or more touching of a colour pop and the stack cascades.
  */
-
-const COLS = 7;
-const ROWS = 11;
-const SPAWN_X = 3;
-const PREVIEW = 3;
-/** Sim steps between drops at level 1, and the floor as levels climb. */
-const BASE_INTERVAL = 20;
-const MIN_INTERVAL = 4;
-const LANDS_PER_LEVEL = 12;
 
 interface Piece {
   color: Color;
@@ -83,10 +76,6 @@ export class HueTristScene extends ArcadeScene {
     ];
   }
 
-  private interval(): number {
-    return Math.max(MIN_INTERVAL, BASE_INTERVAL - (this.level - 1) * 2);
-  }
-
   private fxOf(c: Cell): CellFx {
     let f = this.fx.get(c.id);
     if (!f) {
@@ -132,8 +121,9 @@ export class HueTristScene extends ArcadeScene {
       this.hardDrop();
       return;
     }
-    p.drop += down ? Math.max(1, this.interval() / 4) : 1;
-    if (p.drop >= this.interval()) {
+    const interval = fallInterval(this.level);
+    p.drop += down ? Math.max(1, interval / 4) : 1;
+    if (p.drop >= interval) {
       p.drop = 0;
       if (this.well.isFree(p.x, p.y + 1)) p.y++;
       else this.land();
@@ -152,8 +142,7 @@ export class HueTristScene extends ArcadeScene {
   private hardDrop(): void {
     const p = this.piece;
     if (!p) return;
-    let y = p.y;
-    while (this.well.isFree(p.x, y + 1)) y++;
+    const y = restingRow(this.well, p.x, p.y);
     const fell = y - p.y;
     p.y = y;
     p.dy = y - Math.min(1.5, fell * 0.4);
@@ -165,24 +154,25 @@ export class HueTristScene extends ArcadeScene {
     const p = this.piece;
     if (!p) return;
     const L = this.L;
-    const below = this.well.get(p.x, p.y + 1);
-    const result = below ? combineColors(p.color, below.color) : null;
+    const l = landing(this.well, p.x, p.y, p.color);
     this.piece = null;
     this.landed++;
-    this.level = 1 + Math.floor(this.landed / LANDS_PER_LEVEL);
-    if (below && result !== null) {
+    this.level = levelFor(this.landed);
+    if (l.kind === "mix") {
+      const below = l.into;
       const f = this.fxOf(below);
       f.wipeFrom = below.color;
       f.wipeT0 = this.ctx.clock.t;
-      below.refined = result !== (p.color | below.color);
-      below.color = result;
+      below.refined = l.refined;
+      below.color = l.result;
       this.ctx.audio.play("BlocksCombine_snd");
       const c = this.cellPos(below.x, below.y);
-      this.ring(c.x + L.cell / 2, c.y + L.cell / 2, L.cell * 0.3, L.cell * 0.9, this.colorOf(result), 3);
+      this.ring(c.x + L.cell / 2, c.y + L.cell / 2, L.cell * 0.3, L.cell * 0.9, this.colorOf(l.result), 3);
+      this.effects.mixSplash(c.x + L.cell / 2, c.y + L.cell / 2, L.cell, [this.colorOf(f.wipeFrom as Color), this.colorOf(l.result)], -Math.PI / 2);
       f.s = 1.12;
       this.tweens.to(f, { s: 1 }, 200, easeOutBack);
     } else {
-      const cell = this.well.add(p.x, p.y, p.color);
+      const cell = this.well.add(l.x, l.y, p.color);
       const f = this.fxOf(cell);
       f.sy = 0.86;
       this.tweens.to(f, { sy: 1 }, 180, easeOutBack);
@@ -225,9 +215,14 @@ export class HueTristScene extends ArcadeScene {
   private pop(groups: Cell[][]): void {
     const L = this.L;
     this.chain++;
-    const value = Math.min(50, 20 + (this.chain - 1) * 10);
+    const k = intensityFor(
+      this.chain,
+      groups.reduce((n, g) => n + g.length, 0),
+    );
     let total = 0;
     let i = 0;
+    let mx = 0;
+    let my = 0;
     for (const group of groups) {
       let sx = 0;
       let sy = 0;
@@ -236,14 +231,23 @@ export class HueTristScene extends ArcadeScene {
         const pos = this.cellPos(c.x, c.y);
         sx += pos.x + L.cell / 2;
         sy += pos.y + L.cell / 2;
-        this.dying.push({ x: pos.x, y: pos.y, color: c.color, t0: this.ctx.clock.t + Math.min(i, 8) * 20, burst: false, spin: Math.random() < 0.5 ? -1 : 1 });
+        this.dying.push({
+          x: pos.x,
+          y: pos.y,
+          color: c.color,
+          t0: this.ctx.clock.t + Math.min(i, 8) * 20,
+          burst: false,
+          spin: Math.random() < 0.5 ? -1 : 1,
+          k,
+        });
         this.well.remove(c);
         this.fx.delete(c.id);
         i++;
       }
-      let pts = value * group.length;
-      if (refined) pts += 100;
+      const pts = popPoints(group.length, this.chain, refined);
       total += pts;
+      mx += sx / group.length;
+      my += sy / group.length;
       this.popped += group.length;
       const cx = sx / group.length;
       const cy = sy / group.length;
@@ -251,13 +255,19 @@ export class HueTristScene extends ArcadeScene {
       if (refined) this.callout("Refined +100", cx, cy + 16, this.ctx.palette.goalAccent, 13);
     }
     if (this.chain >= 2) {
-      this.callout(`Chain x${this.chain}`, L.x + L.w / 2, L.y + L.h * 0.3, this.ctx.palette.multColors[Math.min(5, this.chain)] || this.ctx.palette.overlayAccent, 22, true, 900);
-      this.flash(this.ctx.palette.flash, 90);
+      this.callout(
+        `Chain x${this.chain}`,
+        L.x + L.w / 2,
+        L.y + L.h * 0.3,
+        this.ctx.palette.multColors[Math.min(5, this.chain)] || this.ctx.palette.overlayAccent,
+        22,
+        true,
+        900,
+      );
     }
     this.addScore(total);
     this.ctx.audio.play("BlocksPopping_snd", 1, 1 + (this.chain - 1) * 0.08);
-    this.shake(2 + this.chain);
-    if (this.chain >= 2 || groups.some((g) => g.length >= 6)) this.ctx.clock.freeze(40);
+    this.impact(k, mx / groups.length, my / groups.length);
   }
 
   // ---------------------------------------------------------------------------
@@ -303,7 +313,9 @@ export class HueTristScene extends ArcadeScene {
       this.next.forEach((c, i) => this.drawTile(g, c, x + (size - s) / 2 + (i - 1) * (s + 6), y + (size - s) / 2, s, { alpha: 1 - i * 0.3, s: 1 - i * 0.12 }));
       return;
     }
-    this.next.forEach((c, i) => this.drawTile(g, c, x + (size - size * (1 - i * 0.15)) / 2, y + i * (size * 0.72), size * (1 - i * 0.15), { alpha: 1 - i * 0.3 }));
+    this.next.forEach((c, i) =>
+      this.drawTile(g, c, x + (size - size * (1 - i * 0.15)) / 2, y + i * (size * 0.72), size * (1 - i * 0.15), { alpha: 1 - i * 0.3 }),
+    );
   }
 
   protected renderWell(g: CanvasRenderingContext2D): void {
@@ -332,7 +344,7 @@ export class HueTristScene extends ArcadeScene {
       if (e < 0) continue;
       if (!d.burst && e >= POP_BURST_MS) {
         d.burst = true;
-        this.burst(d.x + L.cell / 2, d.y + L.cell / 2, d.color);
+        this.burst(d.x + L.cell / 2, d.y + L.cell / 2, d.color, { k: d.k ?? 0 });
       }
       const { s, rot, alpha } = dyingScale(e, d.spin);
       this.drawTile(g, d.color, d.x, d.y, L.cell, { s, rot, alpha });
@@ -343,17 +355,15 @@ export class HueTristScene extends ArcadeScene {
     if (p && this.phase === "fall") {
       p.dx += (p.x - p.dx) * dtk;
       p.dy += (p.y - p.dy) * dtk;
-      let ly = p.y;
-      while (this.well.isFree(p.x, ly + 1)) ly++;
-      const below = this.well.get(p.x, ly + 1);
-      const result = below ? combineColors(p.color, below.color) : null;
-      if (below && result !== null) {
-        const bp = this.cellPos(below.x, below.y);
+      const ly = restingRow(this.well, p.x, p.y);
+      const l = landing(this.well, p.x, ly, p.color);
+      if (l.kind === "mix") {
+        const bp = this.cellPos(l.into.x, l.into.y);
         const pulse = 0.5 + 0.5 * Math.sin(t / 160);
-        this.drawTile(g, result, bp.x, bp.y, L.cell, { alpha: 0.35 + 0.25 * pulse, s: 0.92 });
+        this.drawTile(g, l.result, bp.x, bp.y, L.cell, { alpha: 0.35 + 0.25 * pulse, s: 0.92 });
         g.save();
         g.lineWidth = 2;
-        g.strokeStyle = this.colorOf(result);
+        g.strokeStyle = this.colorOf(l.result);
         g.globalAlpha = 0.6 + 0.3 * pulse;
         g.beginPath();
         g.roundRect(bp.x + 2, bp.y + 2, L.cell - 4, L.cell - 4, L.cell * 0.18);

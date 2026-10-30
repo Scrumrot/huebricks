@@ -315,7 +315,18 @@ export class TitleScene implements Scene {
       // keep a clear patch behind the logo
       if (Math.abs(x - this.W / 2) < 230 && Math.abs(y - this.logoY()) < 130) continue;
       if (chips.some((c) => Math.hypot(c.x - x, c.y - y) < (c.size + size) * 0.75)) continue;
-      chips.push({ x, y, size, tilt: (Math.random() * 12 - 6) * (Math.PI / 180), frame: Math.floor(Math.random() * 6), p: 1, hover: 0, flipT0: -1, nextFrame: 0, rippleAt: -1 });
+      chips.push({
+        x,
+        y,
+        size,
+        tilt: (Math.random() * 12 - 6) * (Math.PI / 180),
+        frame: Math.floor(Math.random() * 6),
+        p: 1,
+        hover: 0,
+        flipT0: -1,
+        nextFrame: 0,
+        rippleAt: -1,
+      });
     }
     this.chips = chips;
   }
@@ -324,16 +335,7 @@ export class TitleScene implements Scene {
   // Menu layouts
   // ---------------------------------------------------------------------------
 
-  private button(
-    id: string,
-    sprite: SpriteName,
-    cx: number,
-    cy: number,
-    w: number,
-    h: number,
-    onPress: () => void,
-    pressedFrame = 1,
-  ): MenuButton {
+  private button(id: string, sprite: SpriteName, cx: number, cy: number, w: number, h: number, onPress: () => void, pressedFrame = 1): MenuButton {
     return { id, sprite, cx, cy, w, h, pressedFrame, onPress };
   }
 
@@ -367,7 +369,8 @@ export class TitleScene implements Scene {
     const gap = this.generated ? BTN_W * 1.04 : BTN_W + 8;
     const cy = this.H / 2 + (stacked ? 0 : 12);
     // Four modes: a 2 x 2 grid sideways, one column upright.
-    const at = (i: number): [number, number] => (stacked ? [this.W / 2, cy + (i - 1.5) * vGap] : [this.W / 2 + ((i % 2) - 0.5) * gap, cy + (Math.floor(i / 2) - 0.5) * vGap]);
+    const at = (i: number): [number, number] =>
+      stacked ? [this.W / 2, cy + (i - 1.5) * vGap] : [this.W / 2 + ((i % 2) - 0.5) * gap, cy + (Math.floor(i / 2) - 0.5) * vGap];
     this.buttons = [
       this.button("puzzle", "puzzle_button_sprite", ...at(0), BTN_W, BTN_H, () => this.showWorlds("puzzle")),
       this.button("normal", "normal_button_sprite", ...at(1), BTN_W, BTN_H, () => this.showWorlds("normal")),
@@ -412,7 +415,6 @@ export class TitleScene implements Scene {
   }
 
   private launchArcade(mode: ArcadeMode): void {
-    this.ctx.session.arcade = mode;
     this.ctx.session.score = 0;
     this.pendingArcade = mode;
     this.menu = "launch";
@@ -432,13 +434,9 @@ export class TitleScene implements Scene {
       const row = Math.floor(w / 4);
       const cx = this.W / 2 + (col - 1.5) * pitch;
       const cy = this.H / 2 + (row === 0 ? -pitch / 2 : pitch / 2) + (modern ? 18 : 0);
-      this.buttons.push(
-        this.button(`world${w}`, `world${w}_sprite` as SpriteName, cx, cy, size, size, () => this.launch(w)),
-      );
+      this.buttons.push(this.button(`world${w}`, `world${w}_sprite` as SpriteName, cx, cy, size, size, () => this.launch(w)));
     }
-    this.buttons.push(
-      this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showModes()),
-    );
+    this.buttons.push(this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showModes()));
   }
 
   private launch(world: number): void {
@@ -447,7 +445,6 @@ export class TitleScene implements Scene {
     s.world = world;
     s.level = 0;
     s.score = 0;
-    s.arcade = null;
     this.pendingArcade = null;
     this.menu = "launch";
     this.buttons = [];
@@ -589,7 +586,14 @@ export class TitleScene implements Scene {
   // ---------------------------------------------------------------------------
 
   /** Sound card geometry: card rect, toggle pill and the two slider tracks. */
-  private settingsLayout(): { x: number; y: number; w: number; h: number; toggle: PillButton; sliders: Array<{ id: "music" | "sfx"; label: string; x: number; y: number; w: number }> } {
+  private settingsLayout(): {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    toggle: PillButton;
+    sliders: Array<{ id: "music" | "sfx"; label: string; x: number; y: number; w: number }>;
+  } {
     const w = Math.min(420, this.W - 16);
     const h = 270;
     const x = this.W / 2 - w / 2;
@@ -688,7 +692,8 @@ export class TitleScene implements Scene {
     const pal = this.ctx.palette;
     const u = size / 4;
     const t = this.ctx.clock.t;
-    const tile = (c: Color, x: number, y: number, s: number, shape: "square" | "round" | "blob" = "square", seed = 1, lift = 0) => drawTile(g, sp, pal, c, cx + x - s / 2, cy + y - s / 2, s, { shape, seed, lift });
+    const tile = (c: Color, x: number, y: number, s: number, shape: "square" | "round" | "blob" = "square", seed = 1, lift = 0) =>
+      drawTile(g, sp, pal, c, cx + x - s / 2, cy + y - s / 2, s, { shape, seed, lift });
     if (mode === "bobble") {
       const d = u * 1.05;
       tile(1, -d, -u * 1.6, d, "round");
@@ -822,7 +827,12 @@ export class TitleScene implements Scene {
     g.lineCap = "round";
     g.lineJoin = "round";
     g.strokeStyle = pal.titleText;
-    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+    for (const [sx, sy] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ] as const) {
       const c = active ? a * 0.8 : r;
       const arm = active ? r : r - a;
       g.beginPath();
@@ -923,7 +933,8 @@ export class TitleScene implements Scene {
     this.taps.push({ x, y, t });
     while (this.taps.length > 6) this.taps.shift();
     // Pigment: the tap leaves a paint stain on the paper in the ripple's colour.
-    if (pal.stains) this.stains.push({ x, y, r: 26 + Math.random() * 14, t, seed: Math.floor(Math.random() * 1000), color: pal.brickColors[(frame + 1) as Color] });
+    if (pal.stains)
+      this.stains.push({ x, y, r: 26 + Math.random() * 14, t, seed: Math.floor(Math.random() * 1000), color: pal.brickColors[(frame + 1) as Color] });
   }
 
   /** Fading paint stains from taps (Pigment only). */

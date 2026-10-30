@@ -7,7 +7,18 @@ import { audioUrl, SOUND_NAMES, type MusicName, type SoundName } from "./assets"
  * Browsers block audio until the first user gesture, so `unlock()` is called
  * from the first pointer event.
  */
-export class AudioSystem {
+/** What scenes need from audio; `AudioSystem` is the browser implementation, tests use a silent one. */
+export interface AudioPort {
+  muted: boolean;
+  play(name: SoundName, volume?: number, rate?: number): void;
+  playMusic(name: MusicName): void;
+  stopMusic(): void;
+  toggleMute(): boolean;
+  setSfxVolume(v: number): void;
+  setMusicVolume(v: number): void;
+}
+
+export class AudioSystem implements AudioPort {
   private ctx: AudioContext | null = null;
   private buffers = new Map<SoundName, AudioBuffer>();
   private pending = new Map<SoundName, Promise<void>>();

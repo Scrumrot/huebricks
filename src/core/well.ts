@@ -107,7 +107,12 @@ export class Well {
       while (stack.length) {
         const c = stack.pop()!;
         group.push(c);
-        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        for (const [dx, dy] of [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ] as const) {
           const nb = this.get(c.x + dx, c.y + dy);
           if (nb && nb.color === start.color && !seen.has(nb)) {
             seen.add(nb);
@@ -160,10 +165,12 @@ export class Well {
   static flatten(sets: Cell[][]): Cell[] {
     const seen = new Set<Cell>();
     const out: Cell[] = [];
-    for (const s of sets) for (const c of s) if (!seen.has(c)) {
-      seen.add(c);
-      out.push(c);
-    }
+    for (const s of sets)
+      for (const c of s)
+        if (!seen.has(c)) {
+          seen.add(c);
+          out.push(c);
+        }
     return out;
   }
 
@@ -204,9 +211,9 @@ export class Well {
     return rows.join("\n");
   }
 
-  /** Build from the `toString()` format: digits are loose bricks, letters A..G locked ones. */
-  static fromString(text: string): Well {
-    const rows = text.trim().split("\n").map((r) => r.trim());
+  /** Build from the `toString()` format (one string, or one row per entry): digits are loose bricks, letters A..G locked ones. */
+  static fromString(text: string | readonly string[]): Well {
+    const rows = (typeof text === "string" ? text.trim().split("\n") : [...text]).map((r) => r.trim());
     const well = new Well(rows[0].length, rows.length);
     for (let y = 0; y < rows.length; y++) {
       for (let x = 0; x < rows[y].length; x++) {

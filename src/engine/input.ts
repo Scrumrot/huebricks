@@ -3,7 +3,24 @@
  * per-frame edge detection to mirror GameMaker's
  * `device_mouse_check_button_pressed/released`.
  */
-export class Input {
+/**
+ * What scenes read each step. `Input` fills it from browser events; tests
+ * fill it directly.
+ */
+export interface InputState {
+  x: number;
+  y: number;
+  down: boolean;
+  pressed: boolean;
+  released: boolean;
+  keysPressed: Set<string>;
+  keysDown: Set<string>;
+  minHit: number;
+  inRect(x: number, y: number, w: number, h: number): boolean;
+  inCentered(cx: number, cy: number, w: number, h: number): boolean;
+}
+
+export class Input implements InputState {
   x = -1;
   y = -1;
   /** Button currently held. */
@@ -24,11 +41,7 @@ export class Input {
   private toLogical: (cx: number, cy: number) => { x: number; y: number };
   private onFirstGesture: (() => void) | null;
 
-  constructor(
-    canvas: HTMLCanvasElement,
-    toLogical: (cx: number, cy: number) => { x: number; y: number },
-    onFirstGesture?: () => void,
-  ) {
+  constructor(canvas: HTMLCanvasElement, toLogical: (cx: number, cy: number) => { x: number; y: number }, onFirstGesture?: () => void) {
     this.toLogical = toLogical;
     this.onFirstGesture = onFirstGesture ?? null;
 

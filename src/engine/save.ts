@@ -32,9 +32,32 @@ const KEY = "huebricks.save.v1";
  */
 const SAVE_VERSION = 6;
 
-const DEFAULTS: SaveData = { hiscore: 0, worldProgress: 1, tutorialDone: false, muted: true, sfx: 0.6, music: 0.35, theme: "pigment", arcadeBest: {}, v: SAVE_VERSION };
+const DEFAULTS: SaveData = {
+  hiscore: 0,
+  worldProgress: 1,
+  tutorialDone: false,
+  muted: true,
+  sfx: 0.6,
+  music: 0.35,
+  theme: "pigment",
+  arcadeBest: {},
+  v: SAVE_VERSION,
+};
 
-const THEMES: readonly string[] = ["classic", "pigment", "delicious", "crystals", "halloween", "winter", "christmas", "gooey", "vintage", "nature", "blocky", "spectra"];
+const THEMES: readonly string[] = [
+  "classic",
+  "pigment",
+  "delicious",
+  "crystals",
+  "halloween",
+  "winter",
+  "christmas",
+  "gooey",
+  "vintage",
+  "nature",
+  "blocky",
+  "spectra",
+];
 
 export function loadGame(): SaveData {
   try {

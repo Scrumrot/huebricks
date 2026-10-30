@@ -58,12 +58,7 @@ export function colorFrame(c: Color): number {
  * - if they share no primaries, they are added
  * - if `dest` is contained in `sel`, `dest` is subtracted from `sel`
  */
-export function combineColors(
-  sel: Color,
-  dest: Color,
-  canAdd = true,
-  canSubtract = true,
-): Color | null {
+export function combineColors(sel: Color, dest: Color, canAdd = true, canSubtract = true): Color | null {
   if (sel === dest) return null;
   if ((sel & dest) === sel && canSubtract) return colorSubtract(sel, dest);
   if ((sel & dest) === 0 && canAdd) return colorAdd(sel, dest);
