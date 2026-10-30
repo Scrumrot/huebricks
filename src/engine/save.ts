@@ -39,7 +39,7 @@ const THEMES: readonly string[] = ["classic", "pigment", "delicious", "crystals"
 export function loadGame(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS };
+    if (!raw) return { ...DEFAULTS, arcadeBest: {} };
     const parsed = JSON.parse(raw) as Partial<SaveData>;
     const v = parsed.v ?? 1;
     if (v < 5) parsed.theme = DEFAULTS.theme;
@@ -51,7 +51,7 @@ export function loadGame(): SaveData {
     if (!THEMES.includes(parsed.theme as string)) parsed.theme = DEFAULTS.theme;
     return { ...DEFAULTS, ...parsed, arcadeBest: { ...(parsed.arcadeBest ?? {}) }, v: SAVE_VERSION };
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, arcadeBest: {} };
   }
 }
 

@@ -112,6 +112,8 @@ export class HueTristScene extends ArcadeScene {
   }
 
   protected stepPlay(): void {
+    // on-screen holds reported this step were marked before stepPlay; decay first so nothing lingers across resolve or a drop
+    this.holds.decay();
     if (this.phase === "resolve") {
       if (--this.resolveTimer <= 0) this.resolve();
       return;
@@ -136,7 +138,6 @@ export class HueTristScene extends ArcadeScene {
       if (this.well.isFree(p.x, p.y + 1)) p.y++;
       else this.land();
     }
-    this.holds.decay();
   }
 
   private move(dir: number): void {

@@ -94,7 +94,15 @@ export class Input {
     });
     window.addEventListener("keyup", (e) => {
       const key = e.key;
-      this.queue.push({ kind: "key", apply: () => this.keysDown.delete(key) });
+      // a letter held across a Shift change reports the other case on keyup; release both
+      this.queue.push({
+        kind: "key",
+        apply: () => {
+          this.keysDown.delete(key);
+          this.keysDown.delete(key.toLowerCase());
+          this.keysDown.delete(key.toUpperCase());
+        },
+      });
     });
     window.addEventListener("blur", () => {
       this.queue.push({

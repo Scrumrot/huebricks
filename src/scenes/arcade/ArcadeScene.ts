@@ -214,7 +214,8 @@ export abstract class ArcadeScene implements Scene {
   cursor(): string {
     const inp = this.ctx.input;
     if (this.state !== "play") {
-      return this.overlayButtons().some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ? "pointer" : "default";
+      const off = this.cardOffset();
+      return this.overlayButtons().some((b) => inp.inCentered(b.cx, b.cy + off, b.w, b.h)) ? "pointer" : "default";
     }
     if (this.spriteButtons.some((b) => b.hilite) || this.controls.some((c) => c.hilite)) return "pointer";
     return this.inWell(inp.x, inp.y) ? "crosshair" : "default";
@@ -329,7 +330,8 @@ export abstract class ArcadeScene implements Scene {
         this.quitToTitle();
         return;
       }
-      if (inp.released || inp.keysPressed.size > 0) {
+      // click, tap, Enter or Space start; other keys (theme, mute, fullscreen, movement) leave the card up
+      if (inp.released || inp.keysPressed.has("Enter") || inp.keysPressed.has(" ")) {
         this.state = "play";
         this.cardT0 = -1;
         this.ctx.audio.play("menuselect_snd");
@@ -414,6 +416,7 @@ export abstract class ArcadeScene implements Scene {
   protected pause(): void {
     if (this.state !== "play") return;
     this.state = "menu";
+    this.press = null;
     this.cardT0 = this.ctx.clock.t;
     this.ctx.audio.play("menuselect_snd");
   }
@@ -457,6 +460,7 @@ export abstract class ArcadeScene implements Scene {
     this.particles.clear();
     this.callouts = [];
     this.rings = [];
+    this.press = null;
     this.state = "play";
     this.cardT0 = -1;
     this.start();
@@ -491,6 +495,7 @@ export abstract class ArcadeScene implements Scene {
   protected lose(): void {
     if (this.state === "lost") return;
     this.state = "lost";
+    this.press = null;
     this.lostTimer = 0;
     this.cardT0 = this.ctx.clock.t + 250;
     this.tweens.to(this.lostFx, { desat: 1 }, 400);
@@ -501,6 +506,7 @@ export abstract class ArcadeScene implements Scene {
   protected win(): void {
     if (this.state === "won") return;
     this.state = "won";
+    this.press = null;
     this.lostTimer = 0;
     this.cardT0 = this.ctx.clock.t + 700;
     this.ctx.audio.play("achievment_snd");
@@ -887,9 +893,9 @@ export abstract class ArcadeScene implements Scene {
     if (footer) drawText(g, footer, vp.w / 2, y + h - 18, { size: 11, color: pal.hudMuted, weight: 500 });
     if (this.state === "lost" && this.lostTimer <= 20) return;
     for (const b of this.overlayButtons()) {
+      b.cy += off;
       const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
       const pressed = hover && inp.down;
-      b.cy += off;
       b.scale = this.feel.scale(`overlay:${b.id}`, hover, pressed);
       drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
     }
@@ -930,9 +936,9 @@ export abstract class ArcadeScene implements Scene {
     });
     drawText(g, this.info.keys, vp.w / 2, y + h - 78, { size: 11, color: pal.hudMuted, weight: 500 });
     for (const b of this.overlayButtons()) {
+      b.cy += off;
       const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
       const pressed = hover && inp.down;
-      b.cy += off;
       b.scale = this.feel.scale(`overlay:${b.id}`, hover, pressed);
       drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
     }

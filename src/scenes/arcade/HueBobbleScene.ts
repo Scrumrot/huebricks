@@ -3,7 +3,7 @@ import { BubbleGrid, ROW_PITCH, type Bubble } from "../../core/bobble";
 import { BLUE, combineColors, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../../core/color";
 import type { MusicName } from "../../engine/assets";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
-import { ArcadeScene } from "./ArcadeScene";
+import { ArcadeScene, STEP_MS } from "./ArcadeScene";
 import { type Dying, dyingScale, DYING_MS, POP_BURST_MS } from "./shared";
 
 /**
@@ -181,12 +181,11 @@ export class HueBobbleScene extends ArcadeScene {
     if (key("ArrowRight", "d", "D")) this.aim = Math.min(MAX_ANGLE, this.aim + KEY_TURN);
     const pointerMoved = inp.x !== this.lastPointer.x || inp.y !== this.lastPointer.y;
     this.lastPointer = { x: inp.x, y: inp.y };
-    if (pointerMoved && inp.x >= L.x - L.cell && inp.x <= L.x + L.w + L.cell && inp.y >= L.y && inp.y < this.launcher().y - L.cell * 0.4) this.aimAt(inp.x, inp.y);
+    if (pointerMoved && inp.x >= L.x - L.cell && inp.x <= L.x + L.w + L.cell && inp.y >= L.y && this.canAimAt(inp.y)) this.aimAt(inp.x, inp.y);
     if (inp.keysPressed.has(" ") || inp.keysPressed.has("ArrowUp")) this.fire();
 
     if (this.settleTimer > 0 && --this.settleTimer === 0) this.afterSettle();
     this.stepShot();
-    this.stepFalling();
   }
 
   private aimAt(x: number, y: number): void {
@@ -197,6 +196,8 @@ export class HueBobbleScene extends ArcadeScene {
 
   private fire(): void {
     if (this.shot || this.settleTimer > 0 || this.state !== "play") return;
+    // wait for the ceiling to finish coming down, so the shot meets the cluster where it is drawn
+    if (Math.abs(this.dropFx.v - this.grid.drop) > 0.02) return;
     const l = this.launcher();
     const speed = this.L.cell * 0.62;
     this.shot = { x: l.x, y: l.y, px: l.x, py: l.y, vx: Math.sin(this.aim) * speed, vy: -Math.cos(this.aim) * speed, color: this.loaded };
@@ -344,14 +345,17 @@ export class HueBobbleScene extends ArcadeScene {
     }
   }
 
+  /** Loose bubbles fall on render time (velocities are per sim step), so they keep falling behind the win and lose cards. */
   private stepFalling(): void {
+    if (!this.falling.length) return;
     const L = this.L;
+    const k = Math.min(2, this.ctx.clock.dt / STEP_MS);
     const g = L.cell * 0.045;
     for (const f of this.falling) {
-      f.vy += g;
-      f.y += f.vy;
-      f.x += f.vx;
-      f.rot += f.spin;
+      f.vy += g * k;
+      f.y += f.vy * k;
+      f.x += f.vx * k;
+      f.rot += f.spin * k;
     }
     this.falling = this.falling.filter((f) => f.y < L.y + L.h + L.cell);
   }
@@ -360,12 +364,22 @@ export class HueBobbleScene extends ArcadeScene {
   // Input hooks
   // ---------------------------------------------------------------------------
 
+  /** Pointer positions at or below the launcher pivot would aim backwards; ignore them. */
+  private canAimAt(y: number): boolean {
+    return y < this.launcher().y - this.L.cell * 0.4;
+  }
+
   protected override onWellDrag(x: number, y: number): void {
-    this.aimAt(x, y);
+    if (this.canAimAt(y)) this.aimAt(x, y);
+  }
+
+  /** A quick downward flick ends the press without a release hook; shoot where the drag left the aim. */
+  protected override onWellSwipeDown(): void {
+    this.fire();
   }
 
   protected override onWellRelease(x: number, y: number): void {
-    if (y < this.launcher().y - this.L.cell * 0.4) this.aimAt(x, y);
+    if (this.canAimAt(y)) this.aimAt(x, y);
     this.fire();
   }
 
@@ -495,6 +509,7 @@ export class HueBobbleScene extends ArcadeScene {
       this.drawTile(g, d.color, d.x, d.y, L.cell, { s, rot, alpha: a, shape: "round" });
     }
     this.dying = this.dying.filter((d) => t - d.t0 < DYING_MS);
+    this.stepFalling();
     for (const f of this.falling) {
       const fade = clamp01((L.y + L.h + L.cell - f.y) / (L.cell * 2));
       this.drawTile(g, f.color, f.x - r, f.y - r, L.cell, { shape: "round", rot: f.rot, alpha: easeOutCubic(fade) });

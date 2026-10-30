@@ -32,6 +32,17 @@ interface Domino {
   drop: number;
 }
 
+/** A domino half after landing: resting at (x, y), or mixed into the stain `into` giving `result`. */
+interface Placed {
+  x: number;
+  y: number;
+  /** Row the half was at when the domino stopped. */
+  fromY: number;
+  color: Color;
+  into: Cell | null;
+  result: Color;
+}
+
 const OFFSETS: Array<[number, number]> = [
   [1, 0],
   [0, -1],
@@ -98,8 +109,9 @@ export class DrHueScene extends ArcadeScene {
   protected override controlSpec(): Array<{ id: string; icon: Control["icon"] }> {
     return [
       { id: "left", icon: "left" },
-      { id: "rotate", icon: "rotate" },
+      { id: "down", icon: "down" },
       { id: "right", icon: "right" },
+      { id: "rotate", icon: "rotate" },
       { id: "drop", icon: "drop" },
     ];
   }
@@ -137,6 +149,35 @@ export class DrHueScene extends ArcadeScene {
     return this.cellsOf(p, x, y, rot).every(([cx, cy]) => this.well.isFree(cx, cy));
   }
 
+  /**
+   * Where each half ends up once the domino stops at (x, y): the halves
+   * come apart, each falls through any gap under it (the lower half first,
+   * so the upper one can land on it) and a half that comes to rest on a
+   * stain it can mix with soaks in. Used by landing and by the ghost, so the
+   * preview always matches the result.
+   */
+  private settle(p: Domino, x = p.x, y = p.y): Placed[] {
+    const halves = this.cellsOf(p, x, y).map(([hx, hy], i) => ({ x: hx, y: hy, color: i === 0 ? p.a : p.b }));
+    halves.sort((u, v) => v.y - u.y);
+    const taken = new Set<string>();
+    const recolored = new Map<Cell, Color>();
+    const out: Placed[] = [];
+    for (const h of halves) {
+      let ry = h.y;
+      while (this.well.isFree(h.x, ry + 1) && !taken.has(`${h.x},${ry + 1}`)) ry++;
+      const below = this.well.get(h.x, ry + 1);
+      const result = below && below.locked ? combineColors(h.color, recolored.get(below) ?? below.color) : null;
+      if (below && result !== null) {
+        recolored.set(below, result);
+        out.push({ x: h.x, y: ry, fromY: h.y, color: h.color, into: below, result });
+      } else {
+        taken.add(`${h.x},${ry}`);
+        out.push({ x: h.x, y: ry, fromY: h.y, color: h.color, into: null, result: h.color });
+      }
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------------------
   // Play
   // ---------------------------------------------------------------------------
@@ -154,6 +195,8 @@ export class DrHueScene extends ArcadeScene {
   }
 
   protected stepPlay(): void {
+    // on-screen holds reported this step were marked before stepPlay; decay first so nothing lingers across resolve or a drop
+    this.holds.decay();
     if (this.phase === "resolve") {
       if (--this.resolveTimer <= 0) this.resolve();
       return;
@@ -180,7 +223,6 @@ export class DrHueScene extends ArcadeScene {
       if (this.fits(p, p.x, p.y + 1, p.rot)) p.y++;
       else this.land();
     }
-    this.holds.decay();
   }
 
   private move(dir: number): void {
@@ -233,38 +275,45 @@ export class DrHueScene extends ArcadeScene {
     const L = this.L;
     this.piece = null;
     this.landed++;
-    const halves = this.cellsOf(p).map(([x, y], i) => ({ x, y, color: i === 0 ? p.a : p.b }));
     let mixed = false;
-    const stack: typeof halves = [];
-    for (const h of halves) {
-      const below = this.well.get(h.x, h.y + 1);
-      const result = below && below.locked ? combineColors(h.color, below.color) : null;
-      if (below && result !== null) {
+    let fell = false;
+    for (const h of this.settle(p)) {
+      const below = h.into;
+      if (below) {
         const f = this.fxOf(below);
         f.wipeFrom = below.color;
         f.wipeT0 = this.ctx.clock.t;
-        below.refined = result !== (h.color | below.color);
-        below.color = result;
+        below.refined = h.result !== (h.color | below.color);
+        below.color = h.result;
         f.s = 1.14;
         this.tweens.to(f, { s: 1 }, 220, easeOutBack);
         const c = this.cellPos(below.x, below.y);
-        this.ring(c.x + L.cell / 2, c.y + L.cell / 2, L.cell * 0.3, L.cell * 0.9, this.colorOf(result), 3);
+        this.ring(c.x + L.cell / 2, c.y + L.cell / 2, L.cell * 0.3, L.cell * 0.9, this.colorOf(h.result), 3);
         mixed = true;
       } else {
-        stack.push(h);
+        const cell = this.well.add(h.x, h.y, h.color);
+        const f = this.fxOf(cell);
+        if (h.y > h.fromY) {
+          // the half had nothing under it: it drops into place
+          fell = true;
+          f.dy = h.fromY - h.y;
+          this.tweens.to(f, { dy: 0 }, FALL_MS, easeOutCubic, {
+            onDone: () => {
+              f.sy = 0.9;
+              this.tweens.to(f, { sy: 1 }, 160, easeOutBack);
+            },
+          });
+        } else {
+          f.sy = 0.86;
+          this.tweens.to(f, { sy: 1 }, 180, easeOutBack);
+        }
       }
-    }
-    for (const h of stack) {
-      const cell = this.well.add(h.x, h.y, h.color);
-      const f = this.fxOf(cell);
-      f.sy = 0.86;
-      this.tweens.to(f, { sy: 1 }, 180, easeOutBack);
     }
     if (mixed) this.ctx.audio.play("BlocksCombine_snd");
     else this.ctx.audio.play("BlocksLanding_snd", 0.8);
     this.chain = 0;
     this.phase = "resolve";
-    this.resolveTimer = 2;
+    this.resolveTimer = fell ? Math.round(FALL_MS / (1000 / 30)) + 1 : 2;
   }
 
   private resolve(): void {
@@ -345,6 +394,10 @@ export class DrHueScene extends ArcadeScene {
     }
     if (id === "rotate") {
       if (!held) this.rotate(1);
+      return;
+    }
+    if (id === "down") {
+      this.holds.hold("down");
       return;
     }
     const dir = id === "left" ? -1 : 1;
@@ -436,14 +489,12 @@ export class DrHueScene extends ArcadeScene {
       // ghost at the landing spot, with the mixes it would make
       let ly = p.y;
       while (this.fits(p, p.x, ly + 1, p.rot)) ly++;
-      const halves = this.cellsOf(p, p.x, ly).map(([x, y], i) => ({ x, y, color: i === 0 ? p.a : p.b }));
       const pulse = 0.5 + 0.5 * Math.sin(t / 160);
-      for (const h of halves) {
-        const below = this.well.get(h.x, h.y + 1);
-        const result = below && below.locked ? combineColors(h.color, below.color) : null;
-        if (below && result !== null) {
+      for (const h of this.settle(p, p.x, ly)) {
+        const below = h.into;
+        if (below) {
           const bp = this.cellPos(below.x, below.y);
-          this.drawTile(g, result, bp.x, bp.y, L.cell, { alpha: 0.4 + 0.25 * pulse, s: 0.9, shape: "blob", seed: below.id * 7 + 3 });
+          this.drawTile(g, h.result, bp.x, bp.y, L.cell, { alpha: 0.4 + 0.25 * pulse, s: 0.9, shape: "blob", seed: below.id * 7 + 3 });
         } else {
           const gp = this.cellPos(h.x, h.y);
           this.drawTile(g, h.color, gp.x, gp.y, L.cell, { alpha: 0.2, s: 0.94 });
