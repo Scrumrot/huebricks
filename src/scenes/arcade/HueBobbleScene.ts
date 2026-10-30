@@ -52,7 +52,8 @@ export class HueBobbleScene extends ArcadeScene {
   readonly cols = COLS;
   readonly rows = ROWS;
 
-  private grid = new BubbleGrid(COLS, ROWS);
+  /** One overflow row past the lose line, so a shot that crosses it sticks (and loses) instead of vanishing. */
+  private grid = new BubbleGrid(COLS, ROWS + 1);
   private shot: Shot | null = null;
   private loaded: Color = RED;
   private next: Color = BLUE;
@@ -67,6 +68,8 @@ export class HueBobbleScene extends ArcadeScene {
   private readonly dropFx = { v: 0 };
   private levelUp = false;
   private settleTimer = 0;
+  /** Where the pointer was last step, so a resting pointer does not override keyboard aim. */
+  private lastPointer = { x: -1, y: -1 };
 
   constructor(ctx: ConstructorParameters<typeof ArcadeScene>[0]) {
     super(ctx);
@@ -100,7 +103,7 @@ export class HueBobbleScene extends ArcadeScene {
       this.level++;
       this.levelUp = false;
     }
-    this.grid = new BubbleGrid(COLS, ROWS);
+    this.grid = new BubbleGrid(COLS, ROWS + 1);
     this.grid.populate(Math.min(7, 3 + Math.floor((this.level - 1) / 2)), this.levelColors());
     this.fx.clear();
     this.dying = [];
@@ -176,7 +179,9 @@ export class HueBobbleScene extends ArcadeScene {
     const key = (...names: string[]) => names.some((k) => inp.keysDown.has(k) || inp.keysPressed.has(k));
     if (key("ArrowLeft", "a", "A")) this.aim = Math.max(-MAX_ANGLE, this.aim - KEY_TURN);
     if (key("ArrowRight", "d", "D")) this.aim = Math.min(MAX_ANGLE, this.aim + KEY_TURN);
-    if (inp.x >= L.x - L.cell && inp.x <= L.x + L.w + L.cell && inp.y >= L.y && inp.y < this.launcher().y - L.cell * 0.4) this.aimAt(inp.x, inp.y);
+    const pointerMoved = inp.x !== this.lastPointer.x || inp.y !== this.lastPointer.y;
+    this.lastPointer = { x: inp.x, y: inp.y };
+    if (pointerMoved && inp.x >= L.x - L.cell && inp.x <= L.x + L.w + L.cell && inp.y >= L.y && inp.y < this.launcher().y - L.cell * 0.4) this.aimAt(inp.x, inp.y);
     if (inp.keysPressed.has(" ") || inp.keysPressed.has("ArrowUp")) this.fire();
 
     if (this.settleTimer > 0 && --this.settleTimer === 0) this.afterSettle();
@@ -287,7 +292,7 @@ export class HueBobbleScene extends ArcadeScene {
       const c = this.center(b.row, b.col);
       sx += c.x;
       sy += c.y;
-      this.dying.push({ x: c.x - r, y: c.y - r, color: b.color, t0: this.ctx.clock.t + i * 18, burst: false, spin: Math.random() < 0.5 ? -1 : 1 });
+      this.dying.push({ x: c.x - r, y: c.y - r, color: b.color, t0: this.ctx.clock.t + Math.min(i, 8) * 18, burst: false, spin: Math.random() < 0.5 ? -1 : 1 });
       this.grid.remove(b);
       this.fx.delete(b.id);
     });

@@ -122,8 +122,8 @@ export class Well {
 
   /**
    * Straight runs (horizontal or vertical) of one colour with at least `min`
-   * cells. A cell in both a row and a column run is reported once, in the
-   * first run found; runs are returned as separate lists.
+   * cells. Runs are returned as separate lists, so a cell where a row run and
+   * a column run cross appears in both; use `flatten` for the distinct cells.
    */
   lines(min: number): Cell[][] {
     const out: Cell[][] = [];

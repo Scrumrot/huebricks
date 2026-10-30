@@ -313,7 +313,7 @@ export class DrHueScene extends ArcadeScene {
       sx += pos.x + L.cell / 2;
       sy += pos.y + L.cell / 2;
       if (c.locked) stains++;
-      this.dying.push({ x: pos.x, y: pos.y, color: c.color, t0: this.ctx.clock.t + i * 18, burst: false, spin: Math.random() < 0.5 ? -1 : 1, blob: c.locked });
+      this.dying.push({ x: pos.x, y: pos.y, color: c.color, t0: this.ctx.clock.t + Math.min(i, 8) * 18, burst: false, spin: Math.random() < 0.5 ? -1 : 1, blob: c.locked });
       this.well.remove(c);
       this.fx.delete(c.id);
     });

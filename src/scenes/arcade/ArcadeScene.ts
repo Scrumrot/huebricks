@@ -149,6 +149,8 @@ export abstract class ArcadeScene implements Scene {
   private scoreShown = 0;
   private readonly lostFx = { desat: 0 };
   private lostTimer = 0;
+  /** The saved best before this run's score was recorded, so "New best!" means beaten, not tied. */
+  private prevBest = 0;
   /** Height of the wrapped rule lines on the intro card, measured when drawn. */
   private introRulesHeight = 0;
   private spriteButtons: SpriteButton[] = [];
@@ -323,6 +325,10 @@ export abstract class ArcadeScene implements Scene {
     if (this.layoutKey !== this.key()) this.relayout();
 
     if (this.state === "intro") {
+      if (inp.keysPressed.has("Escape")) {
+        this.quitToTitle();
+        return;
+      }
       if (inp.released || inp.keysPressed.size > 0) {
         this.state = "play";
         this.cardT0 = -1;
@@ -426,7 +432,10 @@ export abstract class ArcadeScene implements Scene {
       this.restart();
       return;
     }
-    const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
+    // buttons are hit where they are drawn: offset while the card slides in, hidden early on the game-over card
+    if (this.state === "lost" && this.lostTimer <= 20) return;
+    const off = this.cardOffset();
+    const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy + off, b.w, b.h));
     if (!hit) return;
     this.ctx.audio.play("menuselect_snd");
     if (hit.id === "resume") this.state = "play";
@@ -502,6 +511,7 @@ export abstract class ArcadeScene implements Scene {
   protected recordBest(): void {
     const save = this.ctx.save;
     const best = save.arcadeBest[this.info.id] ?? 0;
+    this.prevBest = best;
     if (this.score > best) save.arcadeBest[this.info.id] = this.score;
     this.ctx.persist();
   }
@@ -619,7 +629,7 @@ export abstract class ArcadeScene implements Scene {
     if (this.state === "intro") this.renderIntro(g);
     if (this.state === "menu") this.renderCard(g, "Paused", [`${this.info.name}   ·   Score ${this.score}`], undefined, this.info.keys);
     if (this.state === "lost") {
-      const best = this.score >= this.best && this.score > 0;
+      const best = this.score > this.prevBest && this.score > 0;
       this.renderCard(g, "Game over", [`Score ${this.score}`, `Best ${this.best}`], best ? "New best!" : undefined);
     }
     if (this.state === "won") this.renderCard(g, "Level clear", this.wonLines(), undefined);

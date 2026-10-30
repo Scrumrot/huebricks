@@ -235,7 +235,7 @@ export class HueTristScene extends ArcadeScene {
         const pos = this.cellPos(c.x, c.y);
         sx += pos.x + L.cell / 2;
         sy += pos.y + L.cell / 2;
-        this.dying.push({ x: pos.x, y: pos.y, color: c.color, t0: this.ctx.clock.t + i * 20, burst: false, spin: Math.random() < 0.5 ? -1 : 1 });
+        this.dying.push({ x: pos.x, y: pos.y, color: c.color, t0: this.ctx.clock.t + Math.min(i, 8) * 20, burst: false, spin: Math.random() < 0.5 ? -1 : 1 });
         this.well.remove(c);
         this.fx.delete(c.id);
         i++;
@@ -299,7 +299,7 @@ export class HueTristScene extends ArcadeScene {
     if (L.portrait) {
       // a row of three ghosts
       const s = size * 0.8;
-      this.next.forEach((c, i) => this.drawTile(g, c, x + (i - 1) * (s + 6), y + (size - s) / 2, s, { alpha: 1 - i * 0.3, s: 1 - i * 0.12 }));
+      this.next.forEach((c, i) => this.drawTile(g, c, x + (size - s) / 2 + (i - 1) * (s + 6), y + (size - s) / 2, s, { alpha: 1 - i * 0.3, s: 1 - i * 0.12 }));
       return;
     }
     this.next.forEach((c, i) => this.drawTile(g, c, x + (size - size * (1 - i * 0.15)) / 2, y + i * (size * 0.72), size * (1 - i * 0.15), { alpha: 1 - i * 0.3 }));
