@@ -312,6 +312,7 @@ export class TitleScene implements Scene {
       if (this.sound.busy) return "grabbing";
       if (inp.inCentered(L.sound.toggle.cx, L.sound.toggle.cy, L.sound.toggle.d, L.sound.toggle.d)) return "pointer";
       if (inp.inCentered(L.motion.cx, L.motion.cy, L.motion.w, L.motion.h)) return "pointer";
+      if (inp.inCentered(L.hands.cx, L.hands.cy, L.hands.w, L.hands.h)) return "pointer";
       return L.sound.sliders.some((sl) => inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) ? "pointer" : "default";
     }
     if (this.menu === "themes") {
@@ -703,11 +704,11 @@ export class TitleScene implements Scene {
   // ---------------------------------------------------------------------------
 
   /** Settings card geometry: the sound controls and the reduce-motion toggle. */
-  private settingsLayout(): { x: number; y: number; w: number; h: number; sound: ReturnType<SoundControls["layout"]>; motion: PillButton } {
+  private settingsLayout(): { x: number; y: number; w: number; h: number; sound: ReturnType<SoundControls["layout"]>; motion: PillButton; hands: PillButton } {
     const w = Math.min(460, this.W - 16);
     const x = this.W / 2 - w / 2;
     const sound = this.sound.layout(x + 24, 0, w - 48);
-    const h = 70 + sound.h + 24 + 44 + 24 + 36;
+    const h = 70 + sound.h + 24 + 44 + 24 + 44 + 24 + 36;
     const y = this.H / 2 - h / 2;
     const soundL = this.sound.layout(x + 24, y + 70, w - 48);
     const reduce = this.ctx.save.reduceMotion;
@@ -720,7 +721,17 @@ export class TitleScene implements Scene {
       h: 42,
       primary: reduce,
     };
-    return { x, y, w, h, sound: soundL, motion };
+    const left = this.ctx.save.leftHanded;
+    const hands: PillButton = {
+      id: "hands",
+      label: left ? "Rails: left-handed" : "Rails: right-handed",
+      cx: this.W / 2,
+      cy: motion.cy + 44 + 24,
+      w: 230,
+      h: 42,
+      primary: left,
+    };
+    return { x, y, w, h, sound: soundL, motion, hands };
   }
 
   private updateSettings(): void {
@@ -735,6 +746,12 @@ export class TitleScene implements Scene {
     if (inp.inCentered(L.motion.cx, L.motion.cy, L.motion.w, L.motion.h)) {
       this.ctx.save.reduceMotion = !this.ctx.save.reduceMotion;
       setReducedMotion(this.ctx.save.reduceMotion);
+      this.ctx.persist();
+      this.ctx.audio.play("menuselect_snd");
+      return;
+    }
+    if (inp.inCentered(L.hands.cx, L.hands.cy, L.hands.w, L.hands.h)) {
+      this.ctx.save.leftHanded = !this.ctx.save.leftHanded;
       this.ctx.persist();
       this.ctx.audio.play("menuselect_snd");
       return;
@@ -860,6 +877,10 @@ export class TitleScene implements Scene {
     L.motion.scale = this.feel.scale("settings:motion", hover, hover && inp.down);
     drawPillButton(g, pal.ui, L.motion, hover, hover && inp.down, pal.font);
     drawText(g, "Halves shake and hit-stop, skips slow motion", this.W / 2, L.motion.cy + 34, { size: 11, color: pal.hudMuted, weight: 500 });
+    const handsHover = inp.inCentered(L.hands.cx, L.hands.cy, L.hands.w, L.hands.h);
+    L.hands.scale = this.feel.scale("settings:hands", handsHover, handsHover && inp.down);
+    drawPillButton(g, pal.ui, L.hands, handsHover, handsHover && inp.down, pal.font);
+    drawText(g, "Swaps the readouts and the controls for the other thumb", this.W / 2, L.hands.cy + 34, { size: 11, color: pal.hudMuted, weight: 500 });
     drawText(g, "M mutes in game  ·  T cycles themes", this.W / 2, L.y + L.h - 20, { size: 12, color: pal.hudMuted, weight: 500 });
   }
 

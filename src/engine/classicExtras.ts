@@ -7,7 +7,6 @@
  * in the same flat black as the other button icons.
  */
 import { type Sprite, type SpriteMap } from "./assets";
-import { speakerIcon } from "./modernSkin";
 
 /**
  * Paint out the pause bars: find the bounding box of the dark icon pixels and
@@ -119,7 +118,7 @@ export function buildClassicSoundButton(sprites: SpriteMap): Sprite {
     g.lineCap = "round";
     g.lineJoin = "round";
     g.lineWidth = w * 0.06;
-    speakerIcon(g, w / 2, h / 2, Math.min(w, h) * 0.44, muted);
+    classicSpeaker(g, w / 2, h / 2, Math.min(w, h) * 0.44, muted);
     if (muted) {
       g.strokeStyle = "#d1242f";
       g.lineWidth = w * 0.07;
@@ -131,4 +130,27 @@ export function buildClassicSoundButton(sprites: SpriteMap): Sprite {
     return c;
   });
   return { name: "sound_button_sprite", frames, width: w, height: h };
+}
+
+/** The speaker glyph the classic sound toggle has always used (the modern themes draw the shared family). */
+function classicSpeaker(g: CanvasRenderingContext2D, cx: number, cy: number, r: number, muted: boolean): void {
+  const bx = cx - r * 0.52;
+  const bw = r * 0.26;
+  const bh = r * 0.44;
+  g.beginPath();
+  g.moveTo(bx, cy - bh / 2);
+  g.lineTo(bx + bw, cy - bh / 2);
+  g.lineTo(bx + bw + r * 0.34, cy - r * 0.5);
+  g.lineTo(bx + bw + r * 0.34, cy + r * 0.5);
+  g.lineTo(bx + bw, cy + bh / 2);
+  g.lineTo(bx, cy + bh / 2);
+  g.closePath();
+  g.fill();
+  if (muted) return;
+  const ox = bx + bw + r * 0.3;
+  for (const k of [0.32, 0.56]) {
+    g.beginPath();
+    g.arc(ox, cy, r * k, -Math.PI * 0.24, Math.PI * 0.24);
+    g.stroke();
+  }
 }

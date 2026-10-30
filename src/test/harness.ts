@@ -118,6 +118,7 @@ export function freshSave(over: Partial<SaveData> = {}): SaveData {
     music: 0.35,
     theme: "pigment",
     reduceMotion: false,
+    leftHanded: false,
     arcadeBest: {},
     v: 99,
     ...over,

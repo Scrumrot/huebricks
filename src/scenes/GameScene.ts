@@ -3,8 +3,9 @@ import { groupIfPlaced } from "../core/preview";
 import { Brick } from "../core/Brick";
 import { BLUE, BLACK, colorFrame, COLOR_NAMES, GREEN, ORANGE, PURPLE, randomSpawnColor, RED, YELLOW, type Color } from "../core/color";
 import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD } from "../core/constants";
-import { cellX, cellY, gridBottom, NO_SPACING, replenishY, screenToGrid, type Layout, type LayoutSpacing, type Viewport } from "../core/layout";
+import { cellX, cellY, gridBottom, NO_SPACING, replenishY, screenToGrid, type LayoutSpacing, type Viewport } from "../core/layout";
 import { levelParams } from "../core/level";
+import { levelStars, MAX_STARS, thirdStarHint } from "../core/rating";
 import type { MusicName, Sprite, SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
 import {
@@ -30,6 +31,8 @@ import { drawModeGlyph, MODE_COLOR, modeLabel } from "../engine/modeGlyph";
 import { SoundControls, type SoundLayout } from "../engine/soundControls";
 import { drawSwatch, gridHeight, layoutGrid, layoutStrip, stripThemes, swatchAt, type Swatch } from "../engine/themePicker";
 import { Effects } from "../engine/effects";
+import { hudControls, hudRail, type ControlKind, type Controls, type HudRail } from "../engine/hudLayout";
+import { ICONS } from "../engine/icons";
 import { clearWave } from "../engine/clearWave";
 import { ageRibbon, drawRibbon, pushRibbon, type RibbonPoint } from "../engine/ribbon";
 import { intensityFor, popScale } from "../engine/fxTuning";
@@ -90,6 +93,8 @@ const IDLE_MS = 2600;
 const IDLE_AMP = 0.9;
 /** How long the backdrop and particles celebrate a level clear. */
 const FLARE_MS = 1800;
+/** How long a toast chip stays at the top of the board. */
+const TOAST_MS = 2000;
 /** Sim steps the level-complete card waits while the celebration plays. */
 const CARD_HOLD_FRAMES = 18;
 
@@ -196,7 +201,7 @@ interface PopImpact {
 }
 
 interface SideButton {
-  kind: "ccw" | "cw" | "speed" | "pause" | "sound";
+  kind: ControlKind;
   sprite: SpriteName;
   baseFrame: number;
   cx: number;
@@ -234,43 +239,29 @@ function viewportFor(v: { w: number; h: number; portrait: boolean }, kind: "clas
   return { w: v.w, h: v.h, portrait: v.portrait && kind === "generated" };
 }
 
-/** Diameter of the board buttons along the bottom band (portrait). */
-function portraitButton(l: Layout): number {
-  return Math.min(64, l.hudBottom * 0.55);
+/** A small chip that slides in at the top of the board for a moment: "Subtract goal done", "New high score". */
+interface Toast {
+  text: string;
+  color: string;
+  t0: number;
 }
 
-/** Space between the two rotate buttons (they read as one control) and between that pair and hurry. */
-const PAIR_GAP = 4;
-const GROUP_GAP = 18;
-
-/** Where the HUD pieces sit for the current layout (see `rail()`). */
-interface HudRail {
-  /** Hold slot centre x and the sound button beside it. */
-  cx: number;
-  holdLabelY: number;
-  holdY: number;
-  slot: number;
-  soundX: number;
-  soundY: number;
-  /** Score caption/number and the chain meter under them. */
-  scoreCx: number;
-  scoreCapY: number;
-  scoreY: number;
-  meterW: number;
-  chainY: number;
-  /** Level pill. */
-  pillCx: number;
-  pillW: number;
-  levelY: number;
-  /** Pops/bricks-left counter. */
-  popsCx: number;
-  popsCapY: number;
-  popsY: number;
-  /** Subtract-goal counter. */
-  goalX: number;
-  goalLabelY: number;
-  goalY: number;
-  textSize: number;
+/** Fields of the modern HUD geometry the classic column has no use for. */
+function classicHudExtras(
+  cx: number,
+): Pick<HudRail, "holdLabelX" | "holdLabelAlign" | "ring" | "goalCapX" | "goalCapY" | "goalAlign" | "starsX" | "starsY" | "starStep" | "side"> {
+  return {
+    holdLabelX: cx,
+    holdLabelAlign: "center",
+    ring: { cx, cy: 0, r: 0 },
+    goalCapX: cx,
+    goalCapY: 0,
+    goalAlign: "center",
+    starsX: cx,
+    starsY: 0,
+    starStep: 0,
+    side: 1,
+  };
 }
 
 /** Where everything on the pause card sits this frame (already shifted by the slide-in offset). */
@@ -332,6 +323,8 @@ export class GameScene implements Scene {
   // --- side buttons ---
   private buttons: SideButton[] = [];
   private buttonsTheme = "";
+  /** Control geometry for the generated themes (the rotate pill and labels). */
+  private controls: Controls | null = null;
   private accel = 1;
 
   // --- chain meter ---
@@ -356,6 +349,14 @@ export class GameScene implements Scene {
 
   // --- subtract goal ---
   private subtractGoal = 0;
+  /** What the goal ring fills toward: the level's pop quota, or the bricks a puzzle started with. */
+  private popsTotal = 0;
+  private bricksTotal = 0;
+  /** Where this level's points came from, for the level-complete breakdown. */
+  private readonly tally = { pops: 0, chain: 0, subtract: 0 };
+  private bestChain = 1;
+  private toasts: Toast[] = [];
+  private hiToasted = false;
   private subtractDone = 0;
   private goalAwarded = false;
 
@@ -454,6 +455,9 @@ export class GameScene implements Scene {
     if (this.state === "lost" || this.state === "menu") {
       return this.overlayButtons().some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ? "pointer" : "default";
     }
+    if (this.levelCardOpen()) {
+      return this.levelButtons().some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ? "pointer" : "default";
+    }
     if (this.state === "tutorial" && this.tutorialPhase !== "add") return "pointer";
     if (this.boardDown && this.selectedBrick) return "grabbing";
     if (this.selectedBrick) return "grab";
@@ -473,60 +477,35 @@ export class GameScene implements Scene {
   /** Theme plus viewport: when it changes, the board and HUD are measured again. */
   private layoutKey(): string {
     const v = this.ctx.view;
-    return `${this.ctx.palette.name}:${Math.round(v.w)}x${Math.round(v.h)}:${v.portrait}`;
+    return `${this.ctx.palette.name}:${Math.round(v.w)}x${Math.round(v.h)}:${v.portrait}:${this.ctx.save.leftHanded ? "L" : "R"}`;
   }
 
   private layoutButtons(): void {
     const l = this.board.layout;
-    const vp = l.vp;
     this.buttonsTheme = this.layoutKey();
     const cx = l.boardX + l.boardW + l.railW / 2;
 
     if (this.ctx.palette.kind === "generated") {
-      const mk = (kind: SideButton["kind"], sprite: SpriteName, baseFrame: number, bx: number, by: number, d: number): SideButton => ({
-        kind,
-        sprite,
-        baseFrame,
-        cx: bx,
-        cy: by,
-        w: d,
-        h: d,
+      const c = hudControls(l, this.ctx.save.leftHanded);
+      const art: Record<ControlKind, { sprite: SpriteName; frame: number }> = {
+        pause: { sprite: "pause_button_sprite", frame: 0 },
+        sound: { sprite: "sound_button_sprite", frame: 0 },
+        ccw: { sprite: "rotate_button_sprite", frame: 0 },
+        cw: { sprite: "rotate_button_sprite", frame: 2 },
+        speed: { sprite: "speedup_button_sprite", frame: 0 },
+      };
+      this.buttons = c.buttons.map((b) => ({
+        kind: b.kind,
+        sprite: art[b.kind].sprite,
+        baseFrame: art[b.kind].frame,
+        cx: b.cx,
+        cy: b.cy,
+        w: b.w,
+        h: b.h,
         hilite: false,
         pressed: false,
-      });
-      const r = this.rail();
-      if (l.portrait) {
-        // Pause in the top band; the board controls in a row along the bottom band.
-        // The rotate pair sits tight together, then a gap, then hurry at the
-        // edge: three controls that read as "turn, turn, hurry" under the thumb.
-        const d = portraitButton(l);
-        const yB = l.hudBottomY + l.hudBottom / 2;
-        const right = vp.w - 16 - d / 2;
-        this.buttons = [
-          mk("pause", "pause_button_sprite", 0, vp.w - 16 - d * 0.45, l.hudTopY + l.hudTop / 2, d * 0.9),
-          mk("ccw", "rotate_button_sprite", 0, right - d * 2 - PAIR_GAP - GROUP_GAP, yB, d),
-          mk("cw", "rotate_button_sprite", 2, right - d - GROUP_GAP, yB, d),
-          mk("speed", "speedup_button_sprite", 0, right, yB, d),
-          mk("sound", "sound_button_sprite", 0, r.soundX, r.soundY, d * 0.6),
-        ];
-        return;
-      }
-      // Pause alone at the top of the rail; the three board controls grouped at
-      // the bottom, where a thumb rests: the rotate pair touching, hurry below.
-      const d = Math.min(l.railW * 0.66, vp.h / 5.2);
-      const margin = 16;
-      const y0 = l.stackY;
-      const y1 = l.stackY + l.boardH;
-      const speedY = y1 - margin - d / 2;
-      const cwY = speedY - d - GROUP_GAP;
-      const ccwY = cwY - d - PAIR_GAP;
-      this.buttons = [
-        mk("pause", "pause_button_sprite", 0, cx, y0 + margin + d / 2, d),
-        mk("ccw", "rotate_button_sprite", 0, cx, ccwY, d),
-        mk("cw", "rotate_button_sprite", 2, cx, cwY, d),
-        mk("speed", "speedup_button_sprite", 0, cx, speedY, d),
-        mk("sound", "sound_button_sprite", 0, r.soundX, r.soundY, d * 0.6),
-      ];
+      }));
+      this.controls = c;
       return;
     }
 
@@ -560,42 +539,8 @@ export class GameScene implements Scene {
   /** HUD geometry: where the score column, hold slot, sound button and goal live for this layout. */
   private rail(): HudRail {
     const l = this.board.layout;
-    const vp = l.vp;
+    if (this.ctx.palette.kind === "generated") return hudRail(l, this.ctx.save.leftHanded);
     const h = l.cellH;
-    if (l.portrait) {
-      // Upright: score and chain top-left, level pill and pops top-centre,
-      // hold slot and sound bottom-left, the goal between them and the buttons.
-      const d = portraitButton(l);
-      const yT = l.hudTopY;
-      const yB = l.hudBottomY + l.hudBottom / 2;
-      const slot = Math.min(l.cellW * 0.8, l.hudBottom * 0.55);
-      const colW = 150;
-      const soundX = l.boardX + slot + 46;
-      const buttonsLeft = vp.w - 16 - (d + 10) * 2 - d;
-      return {
-        cx: l.boardX + slot / 2 + 4,
-        holdLabelY: yB - slot / 2 - 10,
-        holdY: yB + 6,
-        slot,
-        soundX,
-        soundY: yB + 6,
-        scoreCx: l.boardX + colW / 2,
-        scoreCapY: yT + 22,
-        scoreY: yT + 54,
-        meterW: colW - 16,
-        chainY: yT + 82,
-        pillCx: vp.w / 2 + 12,
-        pillW: 160,
-        levelY: yT + 30,
-        popsCx: vp.w / 2 + 12,
-        popsCapY: yT + 64,
-        popsY: yT + 90,
-        goalX: (soundX + 24 + buttonsLeft) / 2,
-        goalLabelY: yB - 10,
-        goalY: yB + 12,
-        textSize: Math.max(12, 160 * 0.13),
-      };
-    }
     // Sideways: everything in the column left of the board, as in the original.
     const cx = l.boardX - l.railW / 2;
     const textSize = Math.max(12, l.railW * 0.13);
@@ -614,22 +559,8 @@ export class GameScene implements Scene {
       popsCapY: y1 - h * 1.1,
       popsY: y1 - h * 0.45,
     };
-    if (this.ctx.palette.kind === "generated") {
-      return {
-        ...base,
-        scoreCapY: y0 + h * 0.55,
-        scoreY: y0 + h * 1.25,
-        chainY: y0 + h * 1.85,
-        levelY: y0 + h * 2.75,
-        holdLabelY: y0 + h * 3.5,
-        holdY: y0 + h * 4.1,
-        soundY: y0 + h * 5.4,
-        goalLabelY: y0 + h * 6.25,
-        goalY: y0 + h * 6.6,
-        slot: l.cellW * 0.8,
-      };
-    }
     return {
+      ...classicHudExtras(cx),
       ...base,
       scoreCapY: y0 + h,
       scoreY: y0 + h,
@@ -684,6 +615,8 @@ export class GameScene implements Scene {
     }
     this.replenishTimer = params.replenishTimer;
     this.comboRemaining = params.comboRemaining;
+    this.popsTotal = params.comboRemaining;
+    this.bricksTotal = params.brickCount;
     this.subtractGoal = params.subtractGoal;
 
     this.state = "animation";
@@ -776,6 +709,13 @@ export class GameScene implements Scene {
       this.updateButtons();
       this.updateMenu();
       return;
+    }
+
+    if (this.levelCardOpen()) {
+      const hit = this.levelButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
+      if (hit?.id === "next" || inp.keysPressed.has("Enter") || inp.keysPressed.has(" ")) this.nextLevel();
+      else if (hit?.id === "replay") this.restartLevel();
+      else if (hit?.id === "title") this.quitToTitle();
     }
 
     this.updateButtons();
@@ -1064,6 +1004,42 @@ export class GameScene implements Scene {
     ];
   }
 
+  /** The modern level-complete card is up and taking input. */
+  private levelCardOpen(): boolean {
+    return this.state === "animation" && this.animation === "fadeout" && this.ctx.palette.kind === "generated" && this.levelCompleteDelay < 0;
+  }
+
+  /** Geometry of the modern level-complete card: a column of rows with the three buttons along the bottom. */
+  private levelCardLayout(): { x: number; y: number; w: number; h: number; rows: number } {
+    const vp = this.ctx.view;
+    const rows = 2 + (this.subtractGoal > 0 || this.tally.subtract > 0 ? 1 : 0);
+    const w = Math.min(420, vp.w - 24);
+    const h = 128 + 22 + rows * 24 + 34 + 60 + 24;
+    return { x: vp.w / 2 - w / 2, y: Math.max(8, vp.h / 2 - h / 2), w, h, rows };
+  }
+
+  /** Next, Replay and Title, Next as the primary. */
+  private levelButtons(): PillButton[] {
+    const L = this.levelCardLayout();
+    const off = this.cardOffset();
+    const gap = 8;
+    const w = Math.min(120, (L.w - 48 - gap * 2) / 3);
+    const h = 42;
+    const y = L.y + L.h - 24 - h / 2 + off;
+    const cx = L.x + L.w / 2;
+    return [
+      { id: "next", label: "Next", cx: cx - w - gap, cy: y, w, h, primary: true },
+      { id: "replay", label: "Replay", cx, cy: y, w, h },
+      { id: "title", label: "Title", cx: cx + w + gap, cy: y, w, h },
+    ];
+  }
+
+  /** Queue a toast chip (modern themes only). */
+  private toast(text: string, color: string): void {
+    if (this.ctx.palette.kind !== "generated") return;
+    this.toasts.push({ text, color, t0: this.ctx.clock.t });
+  }
+
   /** Start this level over with the score it began with. */
   private restartLevel(): void {
     this.ctx.session.score = this.levelStartScore;
@@ -1097,7 +1073,8 @@ export class GameScene implements Scene {
     switch (this.animation) {
       case "fadeout":
         this.levelCompleteDelay--;
-        if (this.levelCompleteDelay < 0) this.nextLevel();
+        // Classic moves on by itself as the original did; the modern card waits for Next, Replay or Title.
+        if (this.levelCompleteDelay < 0 && this.ctx.palette.kind !== "generated") this.nextLevel();
         return;
       case "push":
         this.maxPercentage -= 1 / (this.board.cellNum * 5);
@@ -1236,6 +1213,9 @@ export class GameScene implements Scene {
     this.animation = "pop";
 
     let gained = res.score * mult;
+    this.tally.pops += res.score;
+    this.tally.chain += res.score * (mult - 1);
+    this.bestChain = Math.max(this.bestChain, mult);
     if (scoring) {
       this.comboRemaining -= 1;
       const c0 = this.groupCentre(res.groups[0]);
@@ -1259,6 +1239,7 @@ export class GameScene implements Scene {
       for (const g of refined) {
         const bonus = REFINED_BONUS * mult;
         gained += bonus;
+        this.tally.subtract += bonus;
         this.subtractDone += 1;
         const c = this.groupCentre(g);
         this.addCallout(`SUBTRACT +${bonus}`, c.x, c.y + l.cellH * 1.05, { delay: 220, size: 15, color: pal.goalAccent, dur: 900, rise: 34 });
@@ -1279,6 +1260,8 @@ export class GameScene implements Scene {
       if (this.subtractGoal > 0 && !this.goalAwarded && this.subtractDone >= this.subtractGoal) {
         this.goalAwarded = true;
         gained += GOAL_BONUS;
+        this.tally.subtract += GOAL_BONUS;
+        this.toast("Subtract goal done", pal.goalAccent);
         this.ctx.audio.play("achievment_snd");
         this.addCallout(`SUBTRACT GOAL +${GOAL_BONUS}`, l.boardX + l.boardW / 2, l.boardY + l.boardH * 0.4, {
           delay: 300,
@@ -1291,6 +1274,10 @@ export class GameScene implements Scene {
       }
     }
     this.ctx.session.score += gained;
+    if (!this.hiToasted && this.ctx.save.hiscore > 0 && this.ctx.session.score > this.ctx.save.hiscore) {
+      this.hiToasted = true;
+      this.toast("New high score", pal.overlayAccent);
+    }
   }
 
   /** Fire a pop's impact: on staged themes this lands on the first burst frame, otherwise when the pop is decided. */
@@ -1927,6 +1914,7 @@ export class GameScene implements Scene {
     }
     this.stains = this.stains.filter((s) => t - s.t0 < s.dur);
     this.callouts = this.callouts.filter((c) => t - c.t0 < c.dur);
+    this.toasts = this.toasts.filter((c) => t - c.t0 < D(TOAST_MS));
     const pal = this.ctx.palette;
     const mult = this.chainMultiplier();
     this.effects.setBleed(mult >= 3 && this.heat > 0 ? pal.multColors[mult] : null, this.heat);
@@ -2083,6 +2071,7 @@ export class GameScene implements Scene {
 
     this.renderSelector(g);
     this.renderCallouts(g);
+    this.renderToasts(g);
     if (world > 0 && this.state !== "tutorial") this.renderHud(g);
     this.effects.renderVignette(g);
     g.restore();
@@ -2468,15 +2457,28 @@ export class GameScene implements Scene {
     const y = r.holdY - r.slot / 2;
     const active = this.holdHover && (this.selectedBrick !== null || this.held !== null);
     if (pal.kind === "generated") {
-      fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, 1.5);
-      drawText(g, "HOLD", r.cx, r.holdLabelY, { size: Math.max(10, r.textSize * 0.62), color: pal.hudMuted, weight: 700 });
+      // Dashed while empty, so it reads as a place to put something.
+      g.save();
+      if (!this.held) g.setLineDash([6, 5]);
+      fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, this.held ? 1.5 : 2);
+      g.restore();
+      drawText(g, "HOLD", r.holdLabelX, r.holdLabelY, { size: Math.max(10, r.textSize * 0.62), color: pal.hudMuted, weight: 700, align: r.holdLabelAlign });
+      if (this.keyboardUsed && !l.portrait) this.drawKeycap(g, "H", r.holdLabelX + r.side * 11, r.holdLabelY - 22);
     } else {
       drawSprite(g, this.ctx.sprites.replenish_frame_sprite, 0, x - 2, y - 2, r.slot + 4, r.slot + 4);
       if (active) fillRoundRect(g, x, y, r.slot, r.slot, 4, "rgba(255,255,255,0.18)");
       drawText(g, "Hold", r.cx, r.holdLabelY, { size: 12, color: pal.hudMuted, bold: false });
     }
     if (!this.held) {
-      drawText(g, "H", r.cx, r.holdY, { size: r.slot * 0.4, color: pal.wellHint, bold: true });
+      if (pal.kind === "generated") {
+        g.save();
+        g.strokeStyle = pal.wellHint;
+        g.fillStyle = pal.wellHint;
+        ICONS.hold(g, r.cx, r.holdY, r.slot * 0.27);
+        g.restore();
+      } else {
+        drawText(g, "H", r.cx, r.holdY, { size: r.slot * 0.4, color: pal.wellHint, bold: true });
+      }
       return;
     }
     const b = this.held;
@@ -2772,15 +2774,60 @@ export class GameScene implements Scene {
   private renderButtons(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
     const pal = this.ctx.palette;
+    const generated = pal.kind === "generated";
+    if (generated && this.controls) this.renderRotatePill(g, this.controls.rotatePill);
     for (const btn of this.buttons) {
       if (btn.kind === "sound") btn.baseFrame = this.ctx.audio.muted ? 2 : 0;
+      if (generated && (btn.kind === "ccw" || btn.kind === "cw")) continue;
       const sprite = sp[btn.sprite];
       const maxFrame = sprite.frames.length - 1;
       const scale = this.feel.scale(btn.kind, btn.hilite, btn.pressed);
       const frame = btn.pressed ? Math.min(maxFrame, btn.baseFrame + 1) : btn.baseFrame;
       drawSprite(g, sprite, frame, btn.cx - (btn.w * scale) / 2, btn.cy - (btn.h * scale) / 2, btn.w * scale, btn.h * scale);
-      if (btn.kind === "speed" && pal.kind === "generated") this.renderHurryRing(g, btn, scale);
+      if (btn.kind === "speed" && generated) this.renderHurryRing(g, btn, scale);
     }
+    if (generated && this.controls) {
+      const size = Math.max(10, this.rail().textSize * 0.6);
+      for (const lb of this.controls.labels) drawText(g, lb.text, lb.x, lb.y, { size, color: pal.hudMuted, weight: 700 });
+    }
+  }
+
+  /** The rotate pair as one segmented control: turn left, the board, turn right. */
+  private renderRotatePill(g: CanvasRenderingContext2D, pill: { x: number; y: number; w: number; h: number }): void {
+    const ui = this.ctx.palette.ui;
+    const r = pill.h / 2;
+    fillRoundRect(g, pill.x, pill.y + 3, pill.w, pill.h, r, ui.cardShadow);
+    fillRoundRect(g, pill.x, pill.y, pill.w, pill.h, r, ui.card, ui.cardEdge, 1.5);
+    g.save();
+    g.beginPath();
+    g.roundRect(pill.x, pill.y, pill.w, pill.h, r);
+    g.clip();
+    for (const btn of this.buttons) {
+      if (btn.kind !== "ccw" && btn.kind !== "cw") continue;
+      if (btn.hilite || btn.pressed) {
+        g.fillStyle = btn.pressed ? ui.secondaryEdge : ui.secondary;
+        g.fillRect(btn.cx - btn.w / 2, pill.y, btn.w, pill.h);
+      }
+    }
+    g.restore();
+    g.fillStyle = ui.cardEdge;
+    g.fillRect(pill.x + pill.w / 2 - 0.5, pill.y + pill.h * 0.22, 1, pill.h * 0.56);
+    for (const btn of this.buttons) {
+      if (btn.kind !== "ccw" && btn.kind !== "cw") continue;
+      const scale = this.feel.scale(btn.kind, btn.hilite, btn.pressed);
+      g.save();
+      g.strokeStyle = ui.secondaryText;
+      g.fillStyle = ui.secondaryText;
+      ICONS[btn.kind === "cw" ? "rotateCw" : "rotateCcw"](g, btn.cx, btn.cy, pill.h * 0.25 * scale);
+      g.restore();
+    }
+  }
+
+  /** A small keycap, for the hold slot once a keyboard has been used. */
+  private drawKeycap(g: CanvasRenderingContext2D, key: string, cx: number, cy: number): void {
+    const ui = this.ctx.palette.ui;
+    fillRoundRect(g, cx - 11, cy - 9, 22, 18, 5, ui.card, ui.cardEdge, 1);
+    drawText(g, key, cx, cy + 1, { size: 11, color: this.ctx.palette.overlayText, weight: 700 });
   }
 
   /**
@@ -2811,6 +2858,50 @@ export class GameScene implements Scene {
     g.restore();
   }
 
+  /** Progress toward the level's goal as a ring, the remaining count inside. */
+  private renderGoalRing(g: CanvasRenderingContext2D, ring: { cx: number; cy: number; r: number }, frac: number, text: string): void {
+    const pal = this.ctx.palette;
+    const lw = Math.max(4, ring.r * 0.22);
+    const rr = ring.r - lw / 2;
+    g.save();
+    g.lineCap = "round";
+    g.lineWidth = lw;
+    g.strokeStyle = pal.track;
+    g.beginPath();
+    g.arc(ring.cx, ring.cy, rr, 0, Math.PI * 2);
+    g.stroke();
+    if (frac > 0.001) {
+      g.strokeStyle = pal.hudText;
+      g.beginPath();
+      g.arc(ring.cx, ring.cy, rr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, frac));
+      g.stroke();
+    }
+    g.restore();
+    drawText(g, text, ring.cx, ring.cy + 1, { size: ring.r * 0.95, color: pal.hudText, weight: 700, tabular: true });
+  }
+
+  /** One star per subtract pop the level asks for, filled as they are earned. */
+  private renderStars(g: CanvasRenderingContext2D, r: HudRail): void {
+    const pal = this.ctx.palette;
+    const n = this.subtractGoal;
+    const size = r.textSize * 0.42;
+    for (let i = 0; i < n; i++) {
+      const done = this.goalAwarded || i < this.subtractDone;
+      g.save();
+      g.strokeStyle = pal.goalAccent;
+      g.fillStyle = done ? pal.goalAccent : "rgba(0,0,0,0)";
+      ICONS.star(g, r.starsX + i * r.starStep, r.starsY, size);
+      g.restore();
+    }
+    const lx = r.starsX + (n - 0.5) * r.starStep + r.side * 8;
+    drawText(g, this.goalAwarded ? "SUBTRACT GOAL DONE" : "SUBTRACT GOAL", lx, r.starsY + 1, {
+      size: r.textSize * 0.5,
+      color: this.goalAwarded ? pal.goalAccent : pal.hudMuted,
+      weight: 700,
+      align: r.side > 0 ? "left" : "right",
+    });
+  }
+
   /** `Board` draw event: score, chain meter, level, goal counter and progress bar. */
   private renderHud(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
@@ -2829,7 +2920,8 @@ export class GameScene implements Scene {
     const mult = this.chainMultiplier();
 
     if (pal.kind === "generated") {
-      const caption = (txt: string, x: number, y: number) => drawText(g, txt.toUpperCase(), x, y, { size: textSize * 0.62, color: pal.hudMuted, weight: 700 });
+      const caption = (txt: string, x: number, y: number, align: CanvasTextAlign = "center") =>
+        drawText(g, txt.toUpperCase(), x, y, { size: textSize * 0.62, color: pal.hudMuted, weight: 700, align });
       const big = (txt: string, x: number, y: number) => drawText(g, txt, x, y, { size: textSize * 1.9, color: pal.hudText, weight: 700, tabular: true });
       caption("Score", r.scoreCx, r.scoreCapY);
       if (pal.glow) {
@@ -2898,29 +2990,33 @@ export class GameScene implements Scene {
       const pillY = r.levelY;
       fillRoundRect(g, r.pillCx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2, pal.pill, pal.pillEdge);
       {
-        // the mode's brick glyph before its name, matching the title and the pause card
-        const modeText = `${modeLabel(s.gameType)} ${s.world}-${s.level + 1}`;
+        // the mode's brick glyph before its name, matching the title and the pause card;
+        // the long form when the pill is wide enough for it
         const style = { size: textSize * 0.75, color: pal.hudText, weight: 700 };
         const gr = textSize * 0.3;
-        const tw = measureText(g, modeText, style);
+        let modeText = `${modeLabel(s.gameType)}  World ${s.world} · Level ${s.level + 1}`;
+        let tw = measureText(g, modeText, style);
+        if (gr * 2 + 6 + tw > pillW - textSize) {
+          modeText = `${modeLabel(s.gameType)} ${s.world}-${s.level + 1}`;
+          tw = measureText(g, modeText, style);
+        }
         const span = gr * 2 + 6 + tw;
         drawModeGlyph(g, s.gameType, r.pillCx - span / 2 + gr, pillY, gr, pal.brickColors[MODE_COLOR[s.gameType]], 2);
         drawText(g, modeText, r.pillCx + span / 2 - tw / 2, pillY, style);
       }
 
-      if (this.subtractGoal > 0) {
-        caption("Subtract pops", r.goalX, r.goalLabelY);
-        const done = this.goalAwarded;
-        drawText(g, done ? `${this.subtractGoal} / ${this.subtractGoal}  ✓` : `${this.subtractDone} / ${this.subtractGoal}`, r.goalX, r.goalY, {
-          size: textSize * 1.1,
-          color: done ? pal.goalAccent : pal.hudText,
-          weight: 700,
-          tabular: true,
-        });
-      }
-
-      caption(label, r.popsCx, r.popsCapY);
-      big(String(goal), r.popsCx, r.popsY);
+      // The goal ring fills toward the target; the count sits inside it.
+      const total = s.gameType === "puzzle" ? this.bricksTotal : this.popsTotal;
+      this.renderGoalRing(g, r.ring, total > 0 ? clamp01(1 - goal / total) : 0, String(goal));
+      caption(s.gameType === "puzzle" ? "Bricks left" : "Pops to go", r.goalCapX, r.goalCapY, r.goalAlign);
+      drawText(g, `${Math.max(0, total - goal)} of ${total}`, r.goalCapX, r.goalY, {
+        size: textSize * 0.8,
+        color: pal.hudText,
+        weight: 700,
+        tabular: true,
+        align: r.goalAlign,
+      });
+      if (this.subtractGoal > 0) this.renderStars(g, r);
     } else {
       drawText(g, `Score:\n${shown}`, cx, r.scoreY, { size: textSize, color: pal.hudText, tabular: true });
       const meterW = r.meterW;
@@ -3077,9 +3173,40 @@ export class GameScene implements Scene {
     g.restore();
   }
 
+  /** Toast chips sliding in over the top row of the board, newest lowest. */
+  private renderToasts(g: CanvasRenderingContext2D): void {
+    if (this.toasts.length === 0) return;
+    const l = this.board.layout;
+    const pal = this.ctx.palette;
+    const t = this.ctx.clock.t;
+    const style = { size: 13, weight: 700 as const };
+    this.toasts.forEach((c, i) => {
+      const e = t - c.t0;
+      const enter = easeOutBack(clamp01(e / D(220)));
+      const leave = clamp01((e - D(TOAST_MS - 260)) / D(260));
+      const alpha = (1 - leave) * clamp01(e / D(80));
+      if (alpha <= 0) return;
+      const tw = measureText(g, c.text, style);
+      const w = tw + 28;
+      const h = 26;
+      const cx = l.boardX + l.boardW / 2;
+      const cy = l.boardY + 16 + i * (h + 6) - (1 - enter) * 24;
+      g.save();
+      g.globalAlpha = alpha;
+      fillRoundRect(g, cx - w / 2, cy - h / 2 + 2, w, h, h / 2, pal.ui.cardShadow);
+      fillRoundRect(g, cx - w / 2, cy - h / 2, w, h, h / 2, pal.ui.card, c.color, 1.5);
+      drawText(g, c.text, cx, cy + 1, { ...style, color: c.color });
+      g.restore();
+    });
+  }
+
   private renderLevelComplete(g: CanvasRenderingContext2D): void {
     const s = this.ctx.session;
     const shown = Math.round(this.scoreFx.v);
+    if (this.ctx.palette.kind === "generated") {
+      this.renderLevelCard(g, shown);
+      return;
+    }
     this.renderOverlayCard(
       g,
       "Level complete",
@@ -3088,6 +3215,76 @@ export class GameScene implements Scene {
       undefined,
       false,
     );
+  }
+
+  /** The modern level-complete card: stars, where the points came from, and Next / Replay / Title. */
+  private renderLevelCard(g: CanvasRenderingContext2D, shown: number): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const s = this.ctx.session;
+    const vp = this.ctx.view;
+    const e = this.ctx.clock.t - this.cardT0;
+    g.globalAlpha = clamp01(e / D(200));
+    fillScreen(g, pal.ui.dim);
+    g.globalAlpha = 1;
+    const L = this.levelCardLayout();
+    const off = this.cardOffset();
+    const x = L.x;
+    const y = L.y + off;
+    const cx = vp.w / 2;
+    drawCard(g, pal.ui, x, y, L.w, L.h, 20);
+    drawText(g, "Level complete", cx, y + 40, { size: 28, color: pal.overlayText, weight: 600, font: pal.display });
+    {
+      const sub = `${modeLabel(s.gameType)} ${s.world}-${s.level + 1}`;
+      const subStyle = { size: 13, color: pal.hudMuted, weight: 500 };
+      const tw = measureText(g, sub, subStyle);
+      drawModeGlyph(g, s.gameType, cx - tw / 2 - 6, y + 64, 5, pal.brickColors[MODE_COLOR[s.gameType]], 1.8);
+      drawText(g, sub, cx + 6, y + 64, subStyle);
+    }
+    // stars, popping in one after another
+    const run = { bestChain: this.bestChain, subtractGoal: this.subtractGoal, goalDone: this.goalAwarded };
+    const stars = levelStars(run);
+    const starY = y + 102;
+    for (let i = 0; i < MAX_STARS; i++) {
+      const earned = i < stars;
+      const pop = easeOutBack(clamp01((e - D(300 + i * 160)) / D(260)));
+      if (pop <= 0) continue;
+      g.save();
+      g.strokeStyle = earned ? pal.goalAccent : pal.hudMuted;
+      g.fillStyle = earned ? pal.goalAccent : "rgba(0,0,0,0)";
+      ICONS.star(g, cx + (i - 1) * 40, starY, 15 * pop);
+      g.restore();
+    }
+    drawText(g, stars === MAX_STARS ? "Perfect" : thirdStarHint(run), cx, starY + 26, { size: 11, color: pal.hudMuted, weight: 600 });
+    // the breakdown
+    const rows: [string, number][] = [
+      ["Pops", this.tally.pops],
+      ["Chains", this.tally.chain],
+    ];
+    if (L.rows > 2) rows.push(["Subtract bonus", this.tally.subtract]);
+    const rowStyle = { size: 14, color: pal.hudMuted, weight: 500 as const };
+    const numStyle = { size: 14, color: pal.overlayText, weight: 700 as const, tabular: true };
+    const left = x + 40;
+    const right = x + L.w - 40;
+    let ry = y + 150;
+    for (const [label, value] of rows) {
+      drawText(g, label, left, ry, { ...rowStyle, align: "left" });
+      drawText(g, String(value), right, ry, { ...numStyle, align: "right" });
+      ry += 24;
+    }
+    g.fillStyle = pal.ui.cardEdge;
+    g.fillRect(left, ry - 6, right - left, 1);
+    ry += 10;
+    drawText(g, "Total", left, ry, { ...rowStyle, color: pal.overlayText, weight: 700, align: "left" });
+    drawText(g, String(shown), right, ry, { ...numStyle, size: 18, color: pal.overlayAccent, align: "right" });
+    if (this.levelCompleteDelay < 0) {
+      for (const b of this.levelButtons()) {
+        const hover = inp.inCentered(b.cx, b.cy, b.w, b.h) && inp.x >= 0;
+        const pressed = hover && inp.down;
+        b.scale = this.feel.scale(`level:${b.id}`, hover, pressed);
+        drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
+      }
+    }
   }
 
   /** Pause menu (`STATE_MENU`): resume, restart, quit, a theme strip, sound and the keyboard hints. */

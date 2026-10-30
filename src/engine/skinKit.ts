@@ -1,6 +1,7 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
 import { chevronUp, gearIcon, polygon, rgba, rotateIcon, roundRect, speakerIcon, sprite, text, type Ctx } from "./modernSkin";
+import { ICONS } from "./icons";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
 
 /**
@@ -257,33 +258,13 @@ export function buildSkin(classic: SpriteMap, spec: SkinSpec): SpriteMap {
     rotate_button_sprite: round("rotate_button_sprite", (g, i, w, h) =>
       spec.button(g, w, h, i % 2 === 1, (gg, cx, cy, r) => rotateIcon(gg, cx, cy, r, i >= 2)),
     ),
-    pause_button_sprite: round("pause_button_sprite", (g, _i, w, h) =>
-      spec.button(g, w, h, false, (gg, cx, cy, r) => {
-        const bw = r * 0.16;
-        const bh = r * 0.6;
-        roundRect(gg, cx - bw * 1.6, cy - bh / 2, bw, bh, bw / 3);
-        gg.fill();
-        roundRect(gg, cx + bw * 0.6, cy - bh / 2, bw, bh, bw / 3);
-        gg.fill();
-      }),
-    ),
+    pause_button_sprite: round("pause_button_sprite", (g, _i, w, h) => spec.button(g, w, h, false, ICONS.pause)),
     speedup_button_sprite: round("speedup_button_sprite", (g, i, w, h) => spec.button(g, w, h, i === 1, chevronUp)),
     sound_button_sprite: round("sound_button_sprite", (g, i, w, h) => {
       const muted = i >= 2;
       spec.button(g, w, h, i % 2 === 1, (gg, cx, cy, r) => {
-        if (muted) {
-          gg.globalAlpha = 0.5;
-        }
+        if (muted) gg.strokeStyle = spec.mute;
         speakerIcon(gg, cx, cy, r, muted);
-        if (muted) {
-          gg.globalAlpha = 1;
-          gg.strokeStyle = spec.mute;
-          gg.lineWidth = r * 0.16;
-          gg.beginPath();
-          gg.moveTo(cx - r * 0.5, cy - r * 0.5);
-          gg.lineTo(cx + r * 0.5, cy + r * 0.5);
-          gg.stroke();
-        }
       });
     }),
     settings_button_sprite: round("settings_button_sprite", (g, i, w, h) => spec.button(g, w, h, i === 1, gearIcon)),

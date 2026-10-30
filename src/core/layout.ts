@@ -19,8 +19,8 @@ export const DESIGN_VIEWPORT: Viewport = { w: SCREEN_W, h: SCREEN_H, portrait: f
 const RAIL_MIN = 104;
 /** Margin either side of the board, and the HUD bands above and below it (portrait). */
 const PORTRAIT_MARGIN = 18;
-const PORTRAIT_TOP = 112;
-const PORTRAIT_BOTTOM = 116;
+const PORTRAIT_TOP = 156;
+const PORTRAIT_BOTTOM = 128;
 
 export interface Layout {
   cellNum: number;
@@ -81,7 +81,8 @@ export function computeLayout(cellNum: number, spacing: LayoutSpacing = NO_SPACI
   const boardX = vp.w / 2 - boardW / 2;
   const stackH = cellH * (cellNum + 1) + cellSep * (cellNum + 2) + spacing.gap;
   const free = Math.max(0, vp.h - hudTop - hudBottom - spacing.top - spacing.bottom - stackH);
-  const hudTopY = free / 2;
+  // Upright, the stack sits low so the tray and bottom rows are under the thumb.
+  const hudTopY = portrait ? free * 0.7 : free / 2;
   const stackY = hudTopY + hudTop;
   const boardY = stackY + spacing.top;
   const replenishYv = boardY + cellNum * cellH + (cellNum + 1) * cellSep + spacing.gap;

@@ -86,8 +86,27 @@ On the modern title screen a Play pill opens the modes and a Continue chip
 resumes Normal at the furthest world reached; the bottom bar shows the high
 score, furthest world and arcade best; the top-right cluster is the theme
 pill (opens a picker of every theme), the speaker and fullscreen. The gear
-opens Settings: sound, plus a **Reduce motion** toggle that halves shake,
-hit-stop and debris and skips slow motion. Classic keeps the original title.
+opens Settings: sound, a **Reduce motion** toggle that halves shake,
+hit-stop and debris and skips slow motion, and a **Rails** toggle that
+mirrors the in-game HUD and controls for left-handed play. Classic keeps
+the original title.
+
+In game on the modern themes the readouts share one layout module and one
+icon family (`src/engine/icons.ts`: a 24-unit grid with a 2.2 stroke, the
+same glyph inside every theme's button). The score owns the chain meter
+with its multiplier badge; the level pill carries the mode glyph; pops (or
+bricks) to go is a ring that fills toward the target with the subtract goal
+as stars beneath it; the hold slot is dashed when empty with an into-the-
+tray icon, and shows its `H` keycap once a keyboard has been used; the
+rotate pair is one segmented pill; hurry is a round button with a charging
+ring and a "hold to hurry" label; pause and sound share the top corner.
+Sideways, readouts sit left of the board and controls right of it. Upright,
+a two-row band sits above a board that is pushed low toward the thumb, and
+a 64 px control bar (hold, rotate, hurry, labelled) runs under the tray.
+Level complete is a card with a three-star rating (cleared, a x3 chain, the
+subtract goal or a x5 chain), a breakdown of pops, chains and subtract
+bonus, and Next / Replay / Title; small toasts slide in over the board for
+"Subtract goal done" and "New high score".
 
 Smaller touches: resting bricks breathe on a slow stagger, a picked-up
 brick carries a pulsing halo in its colour, each theme pops into its own
@@ -264,6 +283,8 @@ src/
     clock.ts     frame clock with hit-stop, slow motion and sim interpolation
     buttonFeel.ts press / hover scale for buttons
     soundControls.ts speaker toggle + music / effects sliders shared by settings and the pause card
+    icons.ts        the shared icon family every theme's buttons draw
+    hudLayout.ts    pure HUD and control geometry (landscape rails, portrait bands, left-handed mirror)
     themePicker.ts   theme swatches: strip, grid and drawing
     keycaps.ts       keyboard hint row
     modeGlyph.ts     the brick glyph each game mode borrows

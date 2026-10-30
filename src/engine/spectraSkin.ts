@@ -370,15 +370,8 @@ function buildSound(): Sprite {
         gg.fillStyle = "rgba(242,242,247,0.45)";
         gg.strokeStyle = gg.fillStyle;
       }
+      if (muted) gg.strokeStyle = SPECTRA_COLORS[RED];
       speakerIcon(gg, cx, cy, r, muted);
-      if (muted) {
-        gg.strokeStyle = SPECTRA_COLORS[RED];
-        gg.lineWidth = r * 0.16;
-        gg.beginPath();
-        gg.moveTo(cx - r * 0.5, cy - r * 0.5);
-        gg.lineTo(cx + r * 0.5, cy + r * 0.5);
-        gg.stroke();
-      }
     });
   });
 }

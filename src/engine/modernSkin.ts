@@ -1,3 +1,4 @@
+import { ICONS } from "./icons";
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
 import { SPRITE_FRAMES, type Sprite, type SpriteMap, type SpriteName } from "./assets";
 import { buildTutorialSlides, type SlideStyle } from "./modernSlides";
@@ -324,105 +325,24 @@ export function chipButton(g: Ctx, w: number, h: number, pressed: boolean, icon:
 /** Kept for the slide builder. */
 export const circleButton = chipButton;
 
-/**
- * Rotate-the-board icon: a three-quarter arc with an arrowhead, wrapped
- * around a small filled square that stands for the board. The two
- * directions are mirror images, so the pair reads as left / right rather
- * than two refresh buttons.
- */
+/** Rotate-the-board icon from the shared family; `clockwise` picks the direction. */
 export function rotateIcon(g: Ctx, cx: number, cy: number, r: number, clockwise: boolean): void {
-  const rr = r * 0.56;
-  const dir = clockwise ? 1 : -1;
-  // The gap in the arc sits at the top, and the arrowhead points into it.
-  const start = -Math.PI / 2 + dir * Math.PI * 0.3;
-  const end = start + dir * Math.PI * 1.45;
-  g.beginPath();
-  g.arc(cx, cy, rr, start, end, !clockwise);
-  g.stroke();
-  const ax = cx + Math.cos(end) * rr;
-  const ay = cy + Math.sin(end) * rr;
-  const travel = end + (dir * Math.PI) / 2;
-  const s = r * 0.3;
-  const tipX = ax + Math.cos(travel) * s * 0.4;
-  const tipY = ay + Math.sin(travel) * s * 0.4;
-  for (const side of [1, -1]) {
-    const a = travel + Math.PI + side * (Math.PI / 4);
-    g.beginPath();
-    g.moveTo(tipX, tipY);
-    g.lineTo(tipX + Math.cos(a) * s, tipY + Math.sin(a) * s);
-    g.stroke();
-  }
-  // The board: a filled square in the stroke colour.
-  const sq = r * 0.36;
-  g.save();
-  g.fillStyle = g.strokeStyle;
-  roundRect(g, cx - sq / 2, cy - sq / 2, sq, sq, sq * 0.2);
-  g.fill();
-  g.restore();
+  ICONS[clockwise ? "rotateCw" : "rotateCcw"](g, cx, cy, r);
 }
 
+/** The hurry chevrons from the shared family. */
 export function chevronUp(g: Ctx, cx: number, cy: number, r: number): void {
-  const w = r * 0.5;
-  const h = r * 0.28;
-  for (const dy of [-h * 0.7, h * 0.7]) {
-    g.beginPath();
-    g.moveTo(cx - w, cy + dy + h / 2);
-    g.lineTo(cx, cy + dy - h / 2);
-    g.lineTo(cx + w, cy + dy + h / 2);
-    g.stroke();
-  }
+  ICONS.hurry(g, cx, cy, r);
 }
 
+/** The settings sliders from the shared family. */
 export function gearIcon(g: Ctx, cx: number, cy: number, r: number): void {
-  const teeth = 8;
-  const outer = r * 0.52;
-  const inner = r * 0.38;
-  g.beginPath();
-  for (let i = 0; i < teeth * 2; i++) {
-    const a = (i * Math.PI) / teeth;
-    const rad = i % 2 === 0 ? outer : inner;
-    const a2 = a + Math.PI / teeth / 2;
-    const x1 = cx + Math.cos(a) * rad;
-    const y1 = cy + Math.sin(a) * rad;
-    const x2 = cx + Math.cos(a2) * rad;
-    const y2 = cy + Math.sin(a2) * rad;
-    if (i === 0) g.moveTo(x1, y1);
-    else g.lineTo(x1, y1);
-    g.lineTo(x2, y2);
-  }
-  g.closePath();
-  g.fill();
-  g.globalCompositeOperation = "destination-out";
-  g.beginPath();
-  g.arc(cx, cy, r * 0.16, 0, Math.PI * 2);
-  g.fill();
-  g.globalCompositeOperation = "source-over";
+  ICONS.settings(g, cx, cy, r);
 }
 
-/**
- * Speaker glyph; `muted` drops the sound waves. Uses the current fill/stroke
- * style so both themes can share it.
- */
+/** Speaker from the shared family; muted draws the crossed-out form in the current stroke colour. */
 export function speakerIcon(g: Ctx, cx: number, cy: number, r: number, muted: boolean): void {
-  const bx = cx - r * 0.52;
-  const bw = r * 0.26;
-  const bh = r * 0.44;
-  g.beginPath();
-  g.moveTo(bx, cy - bh / 2);
-  g.lineTo(bx + bw, cy - bh / 2);
-  g.lineTo(bx + bw + r * 0.34, cy - r * 0.5);
-  g.lineTo(bx + bw + r * 0.34, cy + r * 0.5);
-  g.lineTo(bx + bw, cy + bh / 2);
-  g.lineTo(bx, cy + bh / 2);
-  g.closePath();
-  g.fill();
-  if (muted) return;
-  const ox = bx + bw + r * 0.3;
-  for (const k of [0.32, 0.56]) {
-    g.beginPath();
-    g.arc(ox, cy, r * k, -Math.PI * 0.24, Math.PI * 0.24);
-    g.stroke();
-  }
+  ICONS[muted ? "soundOff" : "soundOn"](g, cx, cy, r);
 }
 
 /** Paper card with a hard shadow. */

@@ -17,6 +17,8 @@ export interface SaveData {
   theme: ThemeName;
   /** Halve shake, hit-stop and debris and skip slow motion. */
   reduceMotion: boolean;
+  /** Mirror the in-game HUD and controls for the other thumb. */
+  leftHanded: boolean;
   /** Best score per arcade mode. */
   arcadeBest: Partial<Record<ArcadeMode, number>>;
   /** Save format version; bumped when a stored field should be reset. */
@@ -32,8 +34,9 @@ const KEY = "huebricks.save.v1";
  * 5: "pigment" is the default.
  * 6: sound off by default, with separate effects and music volumes.
  * 7: reduce-motion preference.
+ * 8: left-handed rails.
  */
-const SAVE_VERSION = 7;
+const SAVE_VERSION = 8;
 
 const DEFAULTS: SaveData = {
   hiscore: 0,
@@ -44,6 +47,7 @@ const DEFAULTS: SaveData = {
   music: 0.35,
   theme: "pigment",
   reduceMotion: false,
+  leftHanded: false,
   arcadeBest: {},
   v: SAVE_VERSION,
 };
