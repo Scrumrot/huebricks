@@ -324,11 +324,18 @@ export function chipButton(g: Ctx, w: number, h: number, pressed: boolean, icon:
 /** Kept for the slide builder. */
 export const circleButton = chipButton;
 
+/**
+ * Rotate-the-board icon: a three-quarter arc with an arrowhead, wrapped
+ * around a small filled square that stands for the board. The two
+ * directions are mirror images, so the pair reads as left / right rather
+ * than two refresh buttons.
+ */
 export function rotateIcon(g: Ctx, cx: number, cy: number, r: number, clockwise: boolean): void {
-  const rr = r * 0.5;
+  const rr = r * 0.56;
   const dir = clockwise ? 1 : -1;
-  const start = -Math.PI / 2 + dir * Math.PI * 0.25;
-  const end = start + dir * Math.PI * 1.62;
+  // The gap in the arc sits at the top, and the arrowhead points into it.
+  const start = -Math.PI / 2 + dir * Math.PI * 0.3;
+  const end = start + dir * Math.PI * 1.45;
   g.beginPath();
   g.arc(cx, cy, rr, start, end, !clockwise);
   g.stroke();
@@ -336,8 +343,8 @@ export function rotateIcon(g: Ctx, cx: number, cy: number, r: number, clockwise:
   const ay = cy + Math.sin(end) * rr;
   const travel = end + (dir * Math.PI) / 2;
   const s = r * 0.3;
-  const tipX = ax + Math.cos(travel) * s * 0.45;
-  const tipY = ay + Math.sin(travel) * s * 0.45;
+  const tipX = ax + Math.cos(travel) * s * 0.4;
+  const tipY = ay + Math.sin(travel) * s * 0.4;
   for (const side of [1, -1]) {
     const a = travel + Math.PI + side * (Math.PI / 4);
     g.beginPath();
@@ -345,6 +352,13 @@ export function rotateIcon(g: Ctx, cx: number, cy: number, r: number, clockwise:
     g.lineTo(tipX + Math.cos(a) * s, tipY + Math.sin(a) * s);
     g.stroke();
   }
+  // The board: a filled square in the stroke colour.
+  const sq = r * 0.36;
+  g.save();
+  g.fillStyle = g.strokeStyle;
+  roundRect(g, cx - sq / 2, cy - sq / 2, sq, sq, sq * 0.2);
+  g.fill();
+  g.restore();
 }
 
 export function chevronUp(g: Ctx, cx: number, cy: number, r: number): void {

@@ -4,7 +4,7 @@ import { BLUE, BLACK, colorFrame, COLOR_NAMES, GREEN, ORANGE, PURPLE, randomSpaw
 import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD } from "../core/constants";
 import { cellX, cellY, gridBottom, NO_SPACING, replenishY, screenToGrid, type Layout, type LayoutSpacing, type Viewport } from "../core/layout";
 import { levelParams } from "../core/level";
-import type { MusicName, SpriteName } from "../engine/assets";
+import type { MusicName, Sprite, SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
 import {
   drawBlock,
@@ -16,13 +16,18 @@ import {
   drawSpritePartX,
   drawText,
   fillRoundRect,
+  measureText,
   type PillButton,
 } from "../engine/draw";
 import { fillScreen } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
 import { drawCellWell, drawStain, drawTray, rgba } from "../engine/modernSkin";
 import { BACKDROPS, FURNITURE } from "../engine/backdrops";
-import { nextTheme, THEME_LABELS } from "../engine/theme";
+import { THEME_ORDER } from "../engine/theme";
+import { drawKeycaps } from "../engine/keycaps";
+import { drawModeGlyph, MODE_COLOR, modeLabel } from "../engine/modeGlyph";
+import { SoundControls, type SoundLayout } from "../engine/soundControls";
+import { drawSwatch, gridHeight, layoutGrid, layoutStrip, stripThemes, swatchAt, type Swatch } from "../engine/themePicker";
 import { Effects } from "../engine/effects";
 import { intensityFor, popScale } from "../engine/fxTuning";
 import { drawSwirlMix } from "../engine/mixFx";
@@ -227,6 +232,10 @@ function portraitButton(l: Layout): number {
   return Math.min(64, l.hudBottom * 0.55);
 }
 
+/** Space between the two rotate buttons (they read as one control) and between that pair and hurry. */
+const PAIR_GAP = 4;
+const GROUP_GAP = 18;
+
 /** Where the HUD pieces sit for the current layout (see `rail()`). */
 interface HudRail {
   /** Hold slot centre x and the sound button beside it. */
@@ -256,6 +265,25 @@ interface HudRail {
   goalY: number;
   textSize: number;
 }
+
+/** Where everything on the pause card sits this frame (already shifted by the slide-in offset). */
+interface PauseLayout {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  resume: PillButton;
+  restart: PillButton;
+  quit: PillButton;
+  keep: PillButton;
+  strip: Swatch[];
+  all: { cx: number; cy: number; w: number; h: number };
+  sound: SoundLayout;
+  keycapsY: number;
+  help: { cx: number; cy: number; d: number };
+}
+
+type MenuPage = "main" | "themes" | "help";
 
 /**
  * The playing scene: board, replenish line, side buttons, pause menu and the
@@ -319,6 +347,18 @@ export class GameScene implements Scene {
   private levelCompleteSounded = false;
   private lostTimer = 0;
 
+  // --- pause card ---
+  private readonly sound = new SoundControls();
+  private menuPage: MenuPage = "main";
+  /** Quit was tapped once; the next tap quits. */
+  private confirmQuit = false;
+  /** A key has been used this run, so the pause card shows the keycap hints. */
+  private keyboardUsed = false;
+  private helpSlide = 0;
+  private themeSwatches: Swatch[] = [];
+  /** Score when this level began, restored by "Restart level". */
+  private readonly levelStartScore: number;
+
   // --- tutorial ---
   private tutorialPhase: TutorialPhase = "intro";
   private tutorialState = 0;
@@ -362,6 +402,7 @@ export class GameScene implements Scene {
 
   constructor(ctx: GameContext) {
     this.ctx = ctx;
+    this.levelStartScore = ctx.session.score;
     this.board = new Board(DEFAULT_CELL_NUM, spacingFor(ctx.palette.kind), viewportFor(ctx.view, ctx.palette.kind));
     this.selected = this.board.cellNum;
     this.selX = cellX(this.board.layout, this.selected);
@@ -439,31 +480,34 @@ export class GameScene implements Scene {
       const r = this.rail();
       if (l.portrait) {
         // Pause in the top band; the board controls in a row along the bottom band.
+        // The rotate pair sits tight together, then a gap, then hurry at the
+        // edge: three controls that read as "turn, turn, hurry" under the thumb.
         const d = portraitButton(l);
         const yB = l.hudBottomY + l.hudBottom / 2;
         const right = vp.w - 16 - d / 2;
-        const step = d + 10;
         this.buttons = [
           mk("pause", "pause_button_sprite", 0, vp.w - 16 - d * 0.45, l.hudTopY + l.hudTop / 2, d * 0.9),
-          mk("ccw", "rotate_button_sprite", 0, right - step * 2, yB, d),
-          mk("cw", "rotate_button_sprite", 2, right - step, yB, d),
+          mk("ccw", "rotate_button_sprite", 0, right - d * 2 - PAIR_GAP - GROUP_GAP, yB, d),
+          mk("cw", "rotate_button_sprite", 2, right - d - GROUP_GAP, yB, d),
           mk("speed", "speedup_button_sprite", 0, right, yB, d),
           mk("sound", "sound_button_sprite", 0, r.soundX, r.soundY, d * 0.6),
         ];
         return;
       }
+      // Pause alone at the top of the rail; the three board controls grouped at
+      // the bottom, where a thumb rests: the rotate pair touching, hurry below.
       const d = Math.min(l.railW * 0.66, vp.h / 5.2);
       const margin = 16;
-      const pairGap = 8;
       const y0 = l.stackY;
-      const ym = l.stackY + l.boardH / 2;
       const y1 = l.stackY + l.boardH;
-      const ys = [y0 + margin + d / 2, ym - d / 2 - pairGap / 2, ym + d / 2 + pairGap / 2, y1 - margin - d / 2];
+      const speedY = y1 - margin - d / 2;
+      const cwY = speedY - d - GROUP_GAP;
+      const ccwY = cwY - d - PAIR_GAP;
       this.buttons = [
-        mk("pause", "pause_button_sprite", 0, cx, ys[0], d),
-        mk("ccw", "rotate_button_sprite", 0, cx, ys[1], d),
-        mk("cw", "rotate_button_sprite", 2, cx, ys[2], d),
-        mk("speed", "speedup_button_sprite", 0, cx, ys[3], d),
+        mk("pause", "pause_button_sprite", 0, cx, y0 + margin + d / 2, d),
+        mk("ccw", "rotate_button_sprite", 0, cx, ccwY, d),
+        mk("cw", "rotate_button_sprite", 2, cx, cwY, d),
+        mk("speed", "speedup_button_sprite", 0, cx, speedY, d),
         mk("sound", "sound_button_sprite", 0, r.soundX, r.soundY, d * 0.6),
       ];
       return;
@@ -670,9 +714,23 @@ export class GameScene implements Scene {
     for (const b of this.board.allBricks()) b.snapshot();
     this.held?.snapshot();
 
-    if (inp.keysPressed.has("Escape") || inp.keysPressed.has("Backspace")) {
-      this.quitToTitle();
-      return;
+    if (inp.keysPressed.size > 0) this.keyboardUsed = true;
+    // Esc is "back": it pauses, un-pauses, steps out of a pause sub-page, and only quits where there is nothing to lose.
+    if (inp.keysPressed.has("Escape")) {
+      if (this.state === "menu") {
+        if (this.menuPage !== "main") this.menuPage = "main";
+        else this.state = "rest";
+        this.confirmQuit = false;
+        return;
+      }
+      if (this.state === "lost" || this.state === "tutorial") {
+        this.quitToTitle();
+        return;
+      }
+      if (this.state === "rest") {
+        this.activateButton("pause");
+        return;
+      }
     }
 
     if (this.buttonsTheme !== this.layoutKey()) {
@@ -828,33 +886,162 @@ export class GameScene implements Scene {
   }
 
   private updateMenu(): void {
+    if (this.menuPage === "themes") {
+      this.updateThemesPage();
+      return;
+    }
+    if (this.menuPage === "help") {
+      this.updateHelp();
+      return;
+    }
     const inp = this.ctx.input;
-    const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy, b.w, b.h));
-    if (!hit) return;
-    this.ctx.audio.play("menuselect_snd");
-    if (hit.id === "resume") this.state = "rest";
-    else if (hit.id === "menu") this.quitToTitle();
-    else if (hit.id === "theme") this.ctx.setTheme(nextTheme(this.ctx.save.theme));
+    const L = this.pauseLayout(this.cardOffset());
+    if (this.sound.update(this.ctx, L.sound)) return;
+    if (!inp.released) return;
+    const hit = (b: { cx: number; cy: number; w: number; h: number }) => inp.inCentered(b.cx, b.cy, b.w, b.h);
+    const sw = swatchAt(L.strip, inp.x, inp.y);
+    if (sw) {
+      if (sw.name !== this.ctx.palette.name) {
+        this.ctx.audio.play("menuselect_snd");
+        this.ctx.setTheme(sw.name);
+      }
+      return;
+    }
+    if (hit(L.resume)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.state = "rest";
+      this.confirmQuit = false;
+    } else if (this.confirmQuit && hit(L.quit)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.quitToTitle();
+    } else if (this.confirmQuit && hit(L.keep)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.confirmQuit = false;
+    } else if (!this.confirmQuit && hit(L.quit)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.confirmQuit = true;
+    } else if (!this.confirmQuit && hit(L.restart)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.restartLevel();
+    } else if (hit(L.all)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.menuPage = "themes";
+      const T = this.themesPageLayout();
+      this.themeSwatches = layoutGrid(THEME_ORDER, T.x + 24, T.y + 62, T.w - 48, T.size, T.gap, T.rowGap);
+    } else if (hit({ cx: L.help.cx, cy: L.help.cy, w: L.help.d, h: L.help.d })) {
+      this.ctx.audio.play("menuselect_snd");
+      this.menuPage = "help";
+      this.helpSlide = 0;
+    }
   }
 
-  /** Buttons on the pause and game-over cards. */
+  private updateThemesPage(): void {
+    const inp = this.ctx.input;
+    const T = this.themesPageLayout();
+    if (inp.keysPressed.has("Enter")) {
+      this.menuPage = "main";
+      return;
+    }
+    if (!inp.released) return;
+    const sw = swatchAt(this.themeSwatches, inp.x, inp.y);
+    if (sw) {
+      if (sw.name !== this.ctx.palette.name) {
+        this.ctx.audio.play("menuselect_snd");
+        this.ctx.setTheme(sw.name);
+      }
+      return;
+    }
+    if (inp.inCentered(T.back.cx, T.back.cy, T.back.w, T.back.h) || !inp.inRect(T.x, T.y, T.w, T.h)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.menuPage = "main";
+    }
+  }
+
+  /** The how-to-play slides from the pause card; the last "next" returns to the card. */
+  private updateHelp(): void {
+    const inp = this.ctx.input;
+    const slides = this.ctx.sprites.tutorial_intro_sprite;
+    const { x: sx, y: sy, w, h } = this.slideRect();
+    const next = inp.keysPressed.has("ArrowRight") || inp.keysPressed.has("Enter") || (inp.pressed && inp.x > sx + w - h / 5 && inp.y > sy + h * 0.8);
+    const back = inp.keysPressed.has("ArrowLeft") || (inp.pressed && inp.x < sx + h * 0.2 && inp.y > sy + h * 0.8);
+    if (next) {
+      this.ctx.audio.play("menuselect_snd");
+      if (this.helpSlide < slides.frames.length - 1) this.helpSlide++;
+      else this.menuPage = "main";
+    } else if (back) {
+      this.ctx.audio.play("menuselect_snd");
+      if (this.helpSlide > 0) this.helpSlide--;
+      else this.menuPage = "main";
+    }
+  }
+
+  /** Where everything on the pause card sits, shifted by `off` while the card slides in. */
+  private pauseLayout(off = 0): PauseLayout {
+    const vp = this.ctx.view;
+    const w = Math.min(460, vp.w - 24);
+    const x = vp.w / 2 - w / 2;
+    const inner = w - 48;
+    const probe = this.sound.layout(0, 0, inner);
+    const h = 300 + probe.h + (this.keyboardUsed ? 30 : 0) + 18;
+    const y = Math.max(8, vp.h / 2 - h / 2) + off;
+    const bw = (inner - 12) / 2;
+    const size = 44;
+    const count = w >= 440 ? 6 : 5;
+    return {
+      x,
+      y,
+      w,
+      h,
+      resume: { id: "resume", label: "Resume", cx: vp.w / 2, cy: y + 96, w: inner, h: 44, primary: true },
+      restart: { id: "restart", label: "Restart level", cx: x + 24 + bw / 2, cy: y + 150, w: bw, h: 40 },
+      quit: {
+        id: "quit",
+        label: this.confirmQuit ? "Yes, quit" : "Quit to title",
+        cx: x + 24 + bw + 12 + bw / 2,
+        cy: y + 150,
+        w: bw,
+        h: 40,
+        primary: this.confirmQuit,
+      },
+      keep: { id: "keep", label: "Keep playing", cx: x + 24 + bw / 2, cy: y + 150, w: bw, h: 40 },
+      strip: layoutStrip(stripThemes(this.ctx.palette.name, count), x + 24, y + 212, inner - 72, size, 10),
+      all: { cx: x + w - 24 - 30, cy: y + 212 + size / 2, w: 64, h: 30 },
+      sound: this.sound.layout(x + 24, y + 300, inner),
+      keycapsY: y + 300 + probe.h + 22,
+      help: { cx: x + w - 30, cy: y + 30, d: 30 },
+    };
+  }
+
+  private themesPageLayout(): { x: number; y: number; w: number; h: number; size: number; gap: number; rowGap: number; back: PillButton } {
+    const vp = this.ctx.view;
+    const w = Math.min(520, vp.w - 24);
+    const size = vp.w < 440 ? 50 : 56;
+    const gap = 10;
+    const rowGap = size * 0.64;
+    const gridH = gridHeight(THEME_ORDER.length, w - 48, size, gap, rowGap);
+    const h = 62 + gridH + 24 + 62;
+    const x = vp.w / 2 - w / 2;
+    const y = Math.max(8, vp.h / 2 - h / 2);
+    return { x, y, w, h, size, gap, rowGap, back: { id: "back", label: "Back", cx: vp.w / 2, cy: y + h - 34, w: 140, h: 38, primary: true } };
+  }
+
+  /** Buttons on the game-over card. */
   private overlayButtons(): PillButton[] {
     const vp = this.ctx.view;
     const cx = vp.w / 2;
     const y = vp.h / 2 + 72;
     const w = 150;
     const h = 44;
-    if (this.state === "lost") {
-      return [
-        { id: "retry", label: "Retry", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
-        { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
-      ];
-    }
     return [
-      { id: "resume", label: "Resume", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
-      { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
-      { id: "theme", label: `Theme: ${THEME_LABELS[this.ctx.palette.name]}`, cx, cy: y + 52, w: w * 2 + 16, h },
+      { id: "retry", label: "Retry", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
+      { id: "menu", label: "Quit to title", cx: cx + w / 2 + 8, cy: y, w, h },
     ];
+  }
+
+  /** Start this level over with the score it began with. */
+  private restartLevel(): void {
+    this.ctx.session.score = this.levelStartScore;
+    this.ctx.setScene(new GameScene(this.ctx));
   }
 
   /** Restart the current level from a score of zero. */
@@ -1206,6 +1393,8 @@ export class GameScene implements Scene {
       case "pause":
         if (this.state === "rest") {
           this.state = "menu";
+          this.menuPage = "main";
+          this.confirmQuit = false;
           this.cardT0 = this.ctx.clock.t;
         } else if (this.state === "menu") {
           this.state = "rest";
@@ -2341,6 +2530,7 @@ export class GameScene implements Scene {
 
   private renderButtons(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
+    const pal = this.ctx.palette;
     for (const btn of this.buttons) {
       if (btn.kind === "sound") btn.baseFrame = this.ctx.audio.muted ? 2 : 0;
       const sprite = sp[btn.sprite];
@@ -2348,7 +2538,36 @@ export class GameScene implements Scene {
       const scale = this.feel.scale(btn.kind, btn.hilite, btn.pressed);
       const frame = btn.pressed ? Math.min(maxFrame, btn.baseFrame + 1) : btn.baseFrame;
       drawSprite(g, sprite, frame, btn.cx - (btn.w * scale) / 2, btn.cy - (btn.h * scale) / 2, btn.w * scale, btn.h * scale);
+      if (btn.kind === "speed" && pal.kind === "generated") this.renderHurryRing(g, btn, scale);
     }
+  }
+
+  /**
+   * A ring that charges around the hurry button while it is held (or Space /
+   * down is down): the replenish line's acceleration made visible, so the
+   * button explains that it wants to be held rather than tapped.
+   */
+  private renderHurryRing(g: CanvasRenderingContext2D, btn: SideButton, scale: number): void {
+    const charge = (this.accel - 1) / 3;
+    if (charge <= 0.001) return;
+    const pal = this.ctx.palette;
+    const lw = Math.max(2, btn.w * 0.07);
+    const radius = (btn.w * scale) / 2 + lw * 0.9;
+    const full = charge >= 0.999;
+    const pulse = full ? 0.85 + 0.15 * Math.sin(this.ctx.clock.t / 90) : 1;
+    g.save();
+    g.lineWidth = lw;
+    g.lineCap = "round";
+    g.strokeStyle = pal.multColors[Math.min(pal.multColors.length - 1, 3)];
+    g.globalAlpha = pulse;
+    if (pal.glow) {
+      g.shadowColor = g.strokeStyle;
+      g.shadowBlur = lw * 2;
+    }
+    g.beginPath();
+    g.arc(btn.cx, btn.cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, charge));
+    g.stroke();
+    g.restore();
   }
 
   /** `Board` draw event: score, chain meter, level, goal counter and progress bar. */
@@ -2415,25 +2634,38 @@ export class GameScene implements Scene {
           fillRoundRect(g, meterX, meterY - meterH / 2, fillW, meterH, meterH / 2, pal.multColors[mult]);
         }
       }
-      g.save();
-      g.translate(r.scoreCx, meterY + 12);
-      g.scale(this.badgeFx.s, this.badgeFx.s);
-      drawText(g, this.chain > 0 ? `CHAIN  x${mult}` : "CHAIN", 0, 0, {
-        size: textSize * 0.55,
-        color: this.chain > 0 ? pal.multColors[mult] : pal.hudMuted,
-        weight: 700,
-      });
-      g.restore();
+      // caption on the left, the multiplier as a badge on the right so x3 reads without watching the bar
+      drawText(g, "CHAIN", meterX, meterY + 12, { size: textSize * 0.55, color: pal.hudMuted, weight: 700, align: "left" });
+      if (this.chain > 0) {
+        const bw = textSize * 2.1;
+        const bh = textSize * 1.05;
+        g.save();
+        g.translate(meterX + meterW - bw / 2, meterY + 12);
+        g.scale(this.badgeFx.s, this.badgeFx.s);
+        if (pal.glow) {
+          g.shadowColor = pal.multColors[mult];
+          g.shadowBlur = 8;
+        }
+        fillRoundRect(g, -bw / 2, -bh / 2, bw, bh, bh / 2, pal.multColors[mult]);
+        g.shadowBlur = 0;
+        drawText(g, `x${mult}`, 0, 1, { size: textSize * 0.7, color: "#ffffff", weight: 800, tabular: true });
+        g.restore();
+      }
 
       const pillW = r.pillW;
       const pillH = textSize * 1.5;
       const pillY = r.levelY;
       fillRoundRect(g, r.pillCx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2, pal.pill, pal.pillEdge);
-      drawText(g, `${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}`, r.pillCx, pillY, {
-        size: textSize * 0.75,
-        color: pal.hudText,
-        weight: 700,
-      });
+      {
+        // the mode's brick glyph before its name, matching the title and the pause card
+        const modeText = `${modeLabel(s.gameType)} ${s.world}-${s.level + 1}`;
+        const style = { size: textSize * 0.75, color: pal.hudText, weight: 700 };
+        const gr = textSize * 0.3;
+        const tw = measureText(g, modeText, style);
+        const span = gr * 2 + 6 + tw;
+        drawModeGlyph(g, s.gameType, r.pillCx - span / 2 + gr, pillY, gr, pal.brickColors[MODE_COLOR[s.gameType]], 2);
+        drawText(g, modeText, r.pillCx + span / 2 - tw / 2, pillY, style);
+      }
 
       if (this.subtractGoal > 0) {
         caption("Subtract pops", r.goalX, r.goalLabelY);
@@ -2580,7 +2812,7 @@ export class GameScene implements Scene {
     const off = this.cardOffset();
     const vp = this.ctx.view;
     const w = Math.min(440, vp.w - 24);
-    const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0) - (buttons ? 0 : 50) + (this.state === "menu" ? 52 : 0);
+    const h = 236 + (accent ? 22 : 0) + (footer ? 26 : 0) - (buttons ? 0 : 50);
     const x = vp.w / 2 - w / 2;
     const y = vp.h / 2 - 110 + off;
     g.save();
@@ -2617,16 +2849,105 @@ export class GameScene implements Scene {
     );
   }
 
-  /** Pause menu (`STATE_MENU`). */
+  /** Pause menu (`STATE_MENU`): resume, restart, quit, a theme strip, sound and the keyboard hints. */
   private renderMenu(g: CanvasRenderingContext2D): void {
+    if (this.menuPage === "help") {
+      this.renderSlides(g, this.ctx.sprites.tutorial_intro_sprite, this.helpSlide, true);
+      return;
+    }
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
     const s = this.ctx.session;
-    this.renderOverlayCard(
-      g,
-      "Paused",
-      [`${s.gameType[0].toUpperCase()}${s.gameType.slice(1)} ${s.world}-${s.level + 1}   ·   Score ${s.score}`],
-      undefined,
-      "Q / E rotate  ·  H hold  ·  Space speed up  ·  T theme  ·  P pause  ·  Esc quit",
-    );
+    const vp = this.ctx.view;
+    const e = this.ctx.clock.t - this.cardT0;
+    g.globalAlpha = clamp01(e / D(200));
+    fillScreen(g, pal.ui.dim);
+    g.globalAlpha = 1;
+    if (this.menuPage === "themes") {
+      this.renderThemesPage(g);
+      return;
+    }
+    const L = this.pauseLayout(this.cardOffset());
+    const pill = (b: PillButton, feelId: string) => {
+      const hover = inp.inCentered(b.cx, b.cy, b.w, b.h) && inp.x >= 0;
+      const pressed = hover && inp.down;
+      b.scale = this.feel.scale(feelId, hover, pressed);
+      drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
+    };
+    drawCard(g, pal.ui, L.x, L.y, L.w, L.h, 20);
+    drawText(g, "Paused", vp.w / 2, L.y + 36, { size: 28, color: pal.overlayText, weight: 600, font: pal.display });
+    // mode glyph, level, score and what is left
+    const goal = s.gameType === "puzzle" ? `${this.board.countBricks()} bricks left` : `${this.comboRemaining} pops to go`;
+    const sub = `${modeLabel(s.gameType)} ${s.world}-${s.level + 1}   ·   ${s.score}   ·   ${goal}`;
+    const subStyle = { size: 13, color: pal.hudMuted, weight: 500, tabular: true };
+    const tw = measureText(g, sub, subStyle);
+    drawModeGlyph(g, s.gameType, vp.w / 2 - tw / 2 - 4, L.y + 62, 5, pal.brickColors[MODE_COLOR[s.gameType]], 1.8);
+    drawText(g, sub, vp.w / 2 + 8, L.y + 62, subStyle);
+    // help
+    {
+      const hv = inp.inCentered(L.help.cx, L.help.cy, L.help.d, L.help.d) && inp.x >= 0;
+      const sc = this.feel.scale("menu:help", hv, hv && inp.down);
+      const d = L.help.d * sc;
+      fillRoundRect(g, L.help.cx - d / 2, L.help.cy - d / 2, d, d, d / 2, hv ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+      drawText(g, "?", L.help.cx, L.help.cy + 1, { size: 15 * sc, color: pal.ui.secondaryText, weight: 800 });
+    }
+    pill(L.resume, "menu:resume");
+    if (this.confirmQuit) {
+      pill(L.keep, "menu:keep");
+      pill(L.quit, "menu:quit");
+      drawText(g, "Progress on this level is lost", vp.w / 2, L.y + 180, { size: 11, color: pal.overlayAccent, weight: 600 });
+    } else {
+      pill(L.restart, "menu:restart");
+      pill(L.quit, "menu:quit");
+    }
+    fillRoundRect(g, L.x + 24, L.y + 189, L.w - 48, 1, 0, pal.ui.secondaryEdge);
+    const caption = (txt: string, x: number, y: number) => drawText(g, txt, x, y, { size: 10, color: pal.hudMuted, weight: 700, align: "left" });
+    caption("THEME", L.x + 24, L.y + 200);
+    {
+      const hv = inp.inCentered(L.all.cx, L.all.cy, L.all.w, L.all.h) && inp.x >= 0;
+      drawText(g, `All ${THEME_ORDER.length}  ›`, L.x + L.w - 24, L.all.cy, {
+        size: 12,
+        color: hv ? pal.overlayText : pal.hudMuted,
+        weight: 700,
+        align: "right",
+      });
+    }
+    for (const sw of L.strip) {
+      const hv = swatchAt([sw], inp.x, inp.y) !== null && inp.x >= 0;
+      drawSwatch(g, sw, pal, sw.name === pal.name, hv, this.feel.scale(`menu:sw:${sw.name}`, hv, hv && inp.down));
+    }
+    caption("SOUND", L.x + 24, L.y + 288);
+    this.sound.render(g, this.ctx, L.sound, this.feel);
+    if (this.keyboardUsed) {
+      drawKeycaps(
+        g,
+        pal,
+        [
+          { key: "Q E", label: "rotate" },
+          { key: "H", label: "hold" },
+          { key: "Space", label: "hurry" },
+          { key: "T", label: "theme" },
+          { key: "Esc", label: "resume" },
+        ],
+        vp.w / 2,
+        L.keycapsY,
+      );
+    }
+  }
+
+  private renderThemesPage(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const T = this.themesPageLayout();
+    drawCard(g, pal.ui, T.x, T.y, T.w, T.h, 20);
+    drawText(g, "Theme", this.ctx.view.w / 2, T.y + 32, { size: 24, color: pal.overlayText, weight: 600, font: pal.display });
+    for (const sw of this.themeSwatches) {
+      const hv = swatchAt([sw], inp.x, inp.y) !== null && inp.x >= 0;
+      drawSwatch(g, sw, pal, sw.name === pal.name, hv, this.feel.scale(`menu:grid:${sw.name}`, hv, hv && inp.down));
+    }
+    const hover = inp.inCentered(T.back.cx, T.back.cy, T.back.w, T.back.h);
+    T.back.scale = this.feel.scale("menu:back", hover, hover && inp.down);
+    drawPillButton(g, pal.ui, T.back, hover, hover && inp.down, pal.font);
   }
 
   private renderLost(g: CanvasRenderingContext2D): void {
@@ -2645,12 +2966,17 @@ export class GameScene implements Scene {
 
   private renderTutorialSlides(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
-    const slides = this.tutorialPhase === "intro" ? sp.tutorial_intro_sprite : sp.tutorial_outro_sprite;
+    this.renderSlides(g, this.tutorialPhase === "intro" ? sp.tutorial_intro_sprite : sp.tutorial_outro_sprite, this.tutorialState, false);
+  }
+
+  /** One 3:2 slide with back / next corners; `backOnFirst` shows the back button on the first slide too (it closes). */
+  private renderSlides(g: CanvasRenderingContext2D, slides: Sprite, index: number, backOnFirst: boolean): void {
+    const sp = this.ctx.sprites;
     const { x, y, w, h } = this.slideRect();
     const inp = this.ctx.input;
-    drawSprite(g, slides, this.tutorialState, x, y, w, h);
+    drawSprite(g, slides, index, x, y, w, h);
     const size = h * 0.2;
-    if (this.tutorialState > 0) {
+    if (index > 0 || backOnFirst) {
       const hover = inp.inRect(x, y + h * 0.8, size, size);
       const sc = this.feel.scale("slide:back", hover, hover && inp.down);
       drawSprite(g, sp.back_button_sprite, 0, x + size / 2 - (size * sc) / 2, y + h * 0.9 - (size * sc) / 2, size * sc, size * sc);

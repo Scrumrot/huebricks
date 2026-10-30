@@ -280,7 +280,7 @@ export class Effects {
     const e = t - this.shakeT0;
     const remaining = e < SHAKE_MS ? this.shakeAmp * (1 - e / SHAKE_MS) : 0;
     this.shakeT0 = t;
-    this.shakeAmp = Math.max(amp, remaining);
+    this.shakeAmp = Math.max(amp * TUNING.motion, remaining);
     this.shakeDir = [dir[0] / len, dir[1] / len];
   }
 

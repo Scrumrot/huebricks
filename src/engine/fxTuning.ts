@@ -30,6 +30,8 @@ export interface FxTuning {
   slowmoAt: number;
   /** Bloom strength 0..1. */
   bloom: number;
+  /** Player preference: 1 is the full feel layer, 0.5 is "reduce motion" (half shake, hit-stop and debris, no slow motion). */
+  motion: number;
 }
 
 export const DEFAULT_TUNING: Readonly<FxTuning> = {
@@ -45,12 +47,18 @@ export const DEFAULT_TUNING: Readonly<FxTuning> = {
   slowmoMs: 160,
   slowmoAt: 0.7,
   bloom: 0.55,
+  motion: 1,
 };
 
 export const TUNING: FxTuning = { ...DEFAULT_TUNING };
 
+/** Back to the defaults, keeping the player's motion preference. */
 export function resetTuning(): void {
-  Object.assign(TUNING, DEFAULT_TUNING);
+  Object.assign(TUNING, DEFAULT_TUNING, { motion: TUNING.motion });
+}
+
+export function setReducedMotion(on: boolean): void {
+  TUNING.motion = on ? 0.5 : 1;
 }
 
 /** 0..1 for how big a moment a pop is: chain length plus how many bricks went at once. */
@@ -80,15 +88,16 @@ export interface PopScale {
 
 export function popScale(k: number, t: Readonly<FxTuning> = TUNING): PopScale {
   const q = clamp01(k);
+  const m = t.motion;
   return {
-    debris: 1 + (t.debris - 1) * q,
-    sparks: Math.round(t.sparks * (0.35 + 0.65 * q)),
+    debris: 1 + (t.debris - 1) * q * m,
+    sparks: Math.round(t.sparks * (0.35 + 0.65 * q) * m),
     grid: q < 0.45 ? 2 : Math.max(2, Math.round(t.fragmentGrid)),
-    shake: 1.5 + (t.shake - 1.5) * q,
+    shake: (1.5 + (t.shake - 1.5) * q) * m,
     ringCells: 2.5 + t.ring * q,
     secondRingDelay: q >= 0.3 ? 70 : 0,
-    freezeMs: 50 + t.freeze * q,
-    slowmo: q >= t.slowmoAt,
+    freezeMs: (50 + t.freeze * q) * m,
+    slowmo: q >= t.slowmoAt && m >= 1,
     flash: 0.6 + 0.8 * q,
   };
 }

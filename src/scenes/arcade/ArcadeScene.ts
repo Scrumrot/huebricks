@@ -482,18 +482,18 @@ export abstract class ArcadeScene implements Scene {
     if (this.state === "lost") {
       return [
         { id: "retry", label: "Retry", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
-        { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
+        { id: "menu", label: "Quit to title", cx: cx + w / 2 + 8, cy: y, w, h },
       ];
     }
     if (this.state === "won") {
       return [
         { id: "next", label: "Next level", cx: cx - w / 2 - 8, cy: y, w, h, primary: true },
-        { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y, w, h },
+        { id: "menu", label: "Quit to title", cx: cx + w / 2 + 8, cy: y, w, h },
       ];
     }
     return [
       { id: "resume", label: "Resume", cx: cx - w / 2 - 8, cy: y - 52, w, h, primary: true },
-      { id: "menu", label: "Menu", cx: cx + w / 2 + 8, cy: y - 52, w, h },
+      { id: "menu", label: "Quit to title", cx: cx + w / 2 + 8, cy: y - 52, w, h },
       { id: "theme", label: `Theme: ${THEME_LABELS[this.ctx.palette.name]}`, cx, cy: y, w: w * 2 + 16, h },
     ];
   }

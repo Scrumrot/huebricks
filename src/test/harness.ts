@@ -109,7 +109,19 @@ export class SilentAudio implements AudioPort {
 }
 
 export function freshSave(over: Partial<SaveData> = {}): SaveData {
-  return { hiscore: 0, worldProgress: 1, tutorialDone: true, muted: true, sfx: 0.6, music: 0.35, theme: "pigment", arcadeBest: {}, v: 99, ...over };
+  return {
+    hiscore: 0,
+    worldProgress: 1,
+    tutorialDone: true,
+    muted: true,
+    sfx: 0.6,
+    music: 0.35,
+    theme: "pigment",
+    reduceMotion: false,
+    arcadeBest: {},
+    v: 99,
+    ...over,
+  };
 }
 
 /** Sprites with no images; enough for layout and update, never drawn. */

@@ -2,7 +2,7 @@ import { ARCADE_MODES, type ArcadeInfo, type ArcadeMode } from "../core/arcade";
 import { BTN_H, BTN_W, MAX_WORLD, type GameType } from "../core/constants";
 import type { SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
-import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, type PillButton } from "../engine/draw";
+import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton } from "../engine/draw";
 import { fillScreen, screenRect } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
@@ -11,14 +11,18 @@ import { debrisFor } from "../engine/debris";
 import { drawStain, rgba as rgbaOf } from "../engine/modernSkin";
 import { Particles } from "../engine/particles";
 import type { Color } from "../core/color";
-import { nextTheme, THEME_LABELS } from "../engine/theme";
+import { nextTheme, THEME_LABELS, THEME_ORDER } from "../engine/theme";
+import { setReducedMotion } from "../engine/fxTuning";
+import { drawModeGlyph } from "../engine/modeGlyph";
+import { drawSpeaker, SoundControls } from "../engine/soundControls";
+import { drawSwatch, gridHeight, layoutGrid, swatchAt, type Swatch } from "../engine/themePicker";
 import { Tweens } from "../engine/tween";
 import { drawTile } from "../engine/tiles";
 import { createArcadeScene } from "./arcade";
 import { GameScene } from "./GameScene";
 import type { GameContext, Scene } from "./Scene";
 
-type MenuState = "main" | "mode" | "arcade" | "world" | "credits" | "settings" | "launch";
+type MenuState = "main" | "mode" | "arcade" | "world" | "credits" | "settings" | "themes" | "launch";
 
 /** A mode tile on the arcade grid. */
 interface ArcadeTile {
@@ -123,8 +127,12 @@ export class TitleScene implements Scene {
   private readonly tweens = new Tweens();
   private readonly feel: ButtonFeel;
   private enterT0 = 0;
-  /** Which slider the pointer is dragging on the sound card. */
-  private dragging: "music" | "sfx" | null = null;
+  private readonly sound = new SoundControls();
+  /** Pill buttons on the modern main menu (Play, Continue). */
+  private pills: PillButton[] = [];
+  private heldPill: PillButton | null = null;
+  /** Swatches on the theme picker card. */
+  private themeSwatches: Swatch[] = [];
   /** Debris from tapping the backdrop. */
   private readonly particles = new Particles(240);
   /** Smoothed cursor offset from the centre (-0.5..0.5), for parallax. */
@@ -144,14 +152,24 @@ export class TitleScene implements Scene {
     return this.ctx.view.h;
   }
 
-  /** Icon pill in the top-right corner that switches the theme. */
+  /**
+   * Top-right utility cluster. Classic keeps its two small icon pills; the
+   * modern title has a labelled theme pill that opens the picker, a speaker
+   * and the fullscreen toggle, all at a finger-sized height.
+   */
   private get themeToggle(): { cx: number; cy: number; w: number; h: number } {
-    return { cx: this.W - 36, cy: 26, w: 48, h: 30 };
+    if (!this.generated) return { cx: this.W - 36, cy: 26, w: 48, h: 30 };
+    const w = this.W < 520 ? 44 : 130;
+    return { cx: this.W - 30 - 48 - 48 - 8 - w / 2, cy: 28, w, h: 38 };
   }
 
-  /** Icon pill left of the theme pill that toggles browser fullscreen. */
+  private get soundToggle(): { cx: number; cy: number; w: number; h: number } {
+    return { cx: this.W - 30 - 48, cy: 28, w: 38, h: 38 };
+  }
+
   private get fullscreenToggle(): { cx: number; cy: number; w: number; h: number } {
-    return { cx: this.W - 36 - 58, cy: 26, w: 48, h: 30 };
+    if (!this.generated) return { cx: this.W - 36 - 58, cy: 26, w: 48, h: 30 };
+    return { cx: this.W - 30, cy: 28, w: 38, h: 38 };
   }
 
   /** Where the logo sits: a third of the way down sideways, centred above the bar upright. */
@@ -291,10 +309,18 @@ export class TitleScene implements Scene {
     if (this.menu === "credits") return "pointer";
     if (this.menu === "settings") {
       const L = this.settingsLayout();
-      if (this.dragging) return "grabbing";
-      if (inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h)) return "pointer";
-      return L.sliders.some((sl) => inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) ? "pointer" : "default";
+      if (this.sound.busy) return "grabbing";
+      if (inp.inCentered(L.sound.toggle.cx, L.sound.toggle.cy, L.sound.toggle.d, L.sound.toggle.d)) return "pointer";
+      if (inp.inCentered(L.motion.cx, L.motion.cy, L.motion.w, L.motion.h)) return "pointer";
+      return L.sound.sliders.some((sl) => inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) ? "pointer" : "default";
     }
+    if (this.menu === "themes") {
+      const L = this.themesLayout();
+      return swatchAt(this.themeSwatches, inp.x, inp.y) || inp.inCentered(L.done.cx, L.done.cy, L.done.w, L.done.h) ? "pointer" : "default";
+    }
+    if (this.menu === "main" && this.pills.some((b) => inp.inCentered(b.cx, b.cy, b.w, b.h))) return "pointer";
+    const so = this.soundToggle;
+    if (this.menu === "main" && this.generated && inp.inCentered(so.cx, so.cy, so.w, so.h)) return "pointer";
     if (this.menu === "arcade" && this.arcadeTiles.some((tile) => inp.inRect(tile.x, tile.y, tile.w, tile.h))) return "pointer";
     const t = this.themeToggle;
     if (this.menu === "main" && inp.inCentered(t.cx, t.cy, t.w, t.h)) return "pointer";
@@ -360,6 +386,71 @@ export class TitleScene implements Scene {
         this.buttons = [];
       }),
     ];
+    // The logo stays tappable; on the modern title a Play pill is the affordance and Continue resumes the furthest world.
+    this.pills = [];
+    if (this.generated) {
+      const logoH = (logoW * lg.height) / lg.width;
+      const y = this.logoY() + logoH / 2 + 44;
+      const stacked = this.W < 560;
+      const wp = Math.max(1, this.ctx.save.worldProgress);
+      this.pills = [
+        { id: "play", label: "Play", cx: stacked ? this.W / 2 : this.W / 2 - 122, cy: y, w: 186, h: 48, primary: true },
+        { id: "continue", label: `Continue  ·  World ${wp}`, cx: stacked ? this.W / 2 : this.W / 2 + 132, cy: stacked ? y + 58 : y, w: 236, h: 42 },
+      ];
+    }
+  }
+
+  private pressPill(id: string): void {
+    if (id === "play") this.showModes();
+    else if (id === "continue") {
+      this.pendingType = "normal";
+      this.launch(Math.max(1, this.ctx.save.worldProgress));
+    }
+  }
+
+  /** The theme picker: every theme as a swatch on a card. */
+  private showThemes(): void {
+    this.menu = "themes";
+    this.buttons = [];
+    this.pills = [];
+    const L = this.themesLayout();
+    this.themeSwatches = layoutGrid(THEME_ORDER, L.x + 24, L.y + 66, L.w - 48, L.size, L.gap, L.rowGap);
+  }
+
+  private themesLayout(): { x: number; y: number; w: number; h: number; size: number; gap: number; rowGap: number; done: PillButton } {
+    const w = Math.min(560, this.W - 16);
+    const size = this.W < 440 ? 54 : 64;
+    const gap = 12;
+    const rowGap = size * 0.62;
+    const gridH = gridHeight(THEME_ORDER.length, w - 48, size, gap, rowGap);
+    const h = 66 + gridH + 26 + 64;
+    const x = this.W / 2 - w / 2;
+    const y = Math.max(8, this.H / 2 - h / 2);
+    return { x, y, w, h, size, gap, rowGap, done: { id: "done", label: "Done", cx: this.W / 2, cy: y + h - 36, w: 150, h: 40, primary: true } };
+  }
+
+  private updateThemes(): void {
+    const inp = this.ctx.input;
+    const L = this.themesLayout();
+    if (inp.keysPressed.has("Escape") || inp.keysPressed.has("Backspace") || inp.keysPressed.has("Enter")) {
+      this.showMain();
+      return;
+    }
+    if (!inp.released) return;
+    const sw = swatchAt(this.themeSwatches, inp.x, inp.y);
+    if (sw) {
+      if (sw.name !== this.ctx.palette.name) {
+        this.ctx.audio.play("menuselect_snd");
+        this.ctx.setTheme(sw.name);
+        this.resetWall();
+        this.resetBubbles();
+      }
+      return;
+    }
+    if (inp.inCentered(L.done.cx, L.done.cy, L.done.w, L.done.h) || !inp.inRect(L.x, L.y, L.w, L.h)) {
+      this.ctx.audio.play("menuselect_snd");
+      this.showMain();
+    }
   }
 
   private showModes(): void {
@@ -478,6 +569,11 @@ export class TitleScene implements Scene {
       return;
     }
 
+    if (this.menu === "themes") {
+      this.updateThemes();
+      return;
+    }
+
     if (inp.keysPressed.has("Escape") || inp.keysPressed.has("Backspace")) {
       if (this.menu === "mode") this.showMain();
       else if (this.menu === "arcade") this.showModes();
@@ -486,10 +582,22 @@ export class TitleScene implements Scene {
 
     if (this.menu === "main" && inp.released && inp.inCentered(this.themeToggle.cx, this.themeToggle.cy, this.themeToggle.w, this.themeToggle.h)) {
       this.ctx.audio.play("menuselect_snd");
+      if (this.generated) {
+        this.showThemes();
+        return;
+      }
       this.ctx.setTheme(nextTheme(this.ctx.save.theme));
       this.resetWall();
       this.resetBubbles();
       this.showMain();
+      return;
+    }
+
+    const so = this.soundToggle;
+    if (this.menu === "main" && this.generated && inp.released && inp.inCentered(so.cx, so.cy, so.w, so.h)) {
+      this.ctx.save.muted = this.ctx.audio.toggleMute();
+      this.ctx.persist();
+      if (!this.ctx.audio.muted) this.ctx.audio.play("menuselect_snd");
       return;
     }
 
@@ -502,20 +610,28 @@ export class TitleScene implements Scene {
 
     if (inp.pressed) {
       this.held = this.buttons.find((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ?? null;
+      this.heldPill = this.menu === "main" ? (this.pills.find((b) => inp.inCentered(b.cx, b.cy, b.w, b.h)) ?? null) : null;
       this.heldTile = this.menu === "arcade" ? (this.arcadeTiles.find((tile) => inp.inRect(tile.x, tile.y, tile.w, tile.h)) ?? null) : null;
       const tt = this.themeToggle;
-      const onPill = this.menu === "main" && (inp.inCentered(tt.cx, tt.cy, tt.w, tt.h) || inp.inCentered(fs.cx, fs.cy, fs.w, fs.h));
-      if (!this.held && !this.heldTile && !onPill) this.ripple(inp.x, inp.y);
+      const onPill =
+        this.menu === "main" &&
+        (inp.inCentered(tt.cx, tt.cy, tt.w, tt.h) || inp.inCentered(fs.cx, fs.cy, fs.w, fs.h) || inp.inCentered(so.cx, so.cy, so.w, so.h));
+      if (!this.held && !this.heldTile && !this.heldPill && !onPill) this.ripple(inp.x, inp.y);
     }
     this.stepRipples();
     if (inp.released) {
       const target = this.held;
       const tile = this.heldTile;
+      const pill = this.heldPill;
       this.held = null;
       this.heldTile = null;
+      this.heldPill = null;
       if (target && inp.inCentered(target.cx, target.cy, target.w, target.h)) {
         this.ctx.audio.play("menuselect_snd");
         target.onPress();
+      } else if (pill && inp.inCentered(pill.cx, pill.cy, pill.w, pill.h)) {
+        this.ctx.audio.play("menuselect_snd");
+        this.pressPill(pill.id);
       } else if (tile && inp.inRect(tile.x, tile.y, tile.w, tile.h)) {
         this.ctx.audio.play("menuselect_snd");
         this.launchArcade(tile.info.id);
@@ -524,6 +640,7 @@ export class TitleScene implements Scene {
     if (!inp.down) {
       this.held = null;
       this.heldTile = null;
+      this.heldPill = null;
     }
   }
 
@@ -585,34 +702,25 @@ export class TitleScene implements Scene {
   // Render
   // ---------------------------------------------------------------------------
 
-  /** Sound card geometry: card rect, toggle pill and the two slider tracks. */
-  private settingsLayout(): {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    toggle: PillButton;
-    sliders: Array<{ id: "music" | "sfx"; label: string; x: number; y: number; w: number }>;
-  } {
-    const w = Math.min(420, this.W - 16);
-    const h = 270;
+  /** Settings card geometry: the sound controls and the reduce-motion toggle. */
+  private settingsLayout(): { x: number; y: number; w: number; h: number; sound: ReturnType<SoundControls["layout"]>; motion: PillButton } {
+    const w = Math.min(460, this.W - 16);
     const x = this.W / 2 - w / 2;
+    const sound = this.sound.layout(x + 24, 0, w - 48);
+    const h = 70 + sound.h + 24 + 44 + 24 + 36;
     const y = this.H / 2 - h / 2;
-    const muted = this.ctx.audio.muted;
-    const toggle: PillButton = { id: "mute", label: muted ? "Sound off" : "Sound on", cx: this.W / 2, cy: y + 92, w: 170, h: 42, primary: !muted };
-    const sx = x + 140;
-    const sw = w - 230;
-    return {
-      x,
-      y,
-      w,
-      h,
-      toggle,
-      sliders: [
-        { id: "music", label: "Music", x: sx, y: y + 156, w: sw },
-        { id: "sfx", label: "Effects", x: sx, y: y + 206, w: sw },
-      ],
+    const soundL = this.sound.layout(x + 24, y + 70, w - 48);
+    const reduce = this.ctx.save.reduceMotion;
+    const motion: PillButton = {
+      id: "motion",
+      label: reduce ? "Reduce motion: on" : "Reduce motion: off",
+      cx: this.W / 2,
+      cy: y + 70 + sound.h + 24 + 22,
+      w: 230,
+      h: 42,
+      primary: reduce,
     };
+    return { x, y, w, h, sound: soundL, motion };
   }
 
   private updateSettings(): void {
@@ -622,38 +730,16 @@ export class TitleScene implements Scene {
       this.showMain();
       return;
     }
-    if (inp.pressed) {
-      this.dragging = null;
-      for (const sl of L.sliders) {
-        if (inp.inRect(sl.x - 12, sl.y - 16, sl.w + 24, 32)) this.dragging = sl.id;
-      }
+    if (this.sound.update(this.ctx, L.sound)) return;
+    if (!inp.released) return;
+    if (inp.inCentered(L.motion.cx, L.motion.cy, L.motion.w, L.motion.h)) {
+      this.ctx.save.reduceMotion = !this.ctx.save.reduceMotion;
+      setReducedMotion(this.ctx.save.reduceMotion);
+      this.ctx.persist();
+      this.ctx.audio.play("menuselect_snd");
+      return;
     }
-    if ((inp.down || inp.pressed) && this.dragging) {
-      const sl = L.sliders.find((q) => q.id === this.dragging)!;
-      const v = Math.max(0, Math.min(1, (inp.x - sl.x) / sl.w));
-      if (sl.id === "music") {
-        this.ctx.save.music = v;
-        this.ctx.audio.setMusicVolume(v);
-      } else {
-        this.ctx.save.sfx = v;
-        this.ctx.audio.setSfxVolume(v);
-      }
-    }
-    if (inp.released) {
-      if (this.dragging) {
-        if (this.dragging === "sfx") this.ctx.audio.play("BlocksSelection_snd");
-        this.dragging = null;
-        this.ctx.persist();
-        return;
-      }
-      if (inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h)) {
-        this.ctx.save.muted = this.ctx.audio.toggleMute();
-        this.ctx.persist();
-        if (!this.ctx.audio.muted) this.ctx.audio.play("menuselect_snd");
-        return;
-      }
-      if (!inp.inRect(L.x, L.y, L.w, L.h)) this.showMain();
-    }
+    if (!inp.inRect(L.x, L.y, L.w, L.h)) this.showMain();
   }
 
   /** The arcade grid: a card of mode tiles, each with a little scene from its game. */
@@ -768,24 +854,94 @@ export class TitleScene implements Scene {
     const L = this.settingsLayout();
     fillScreen(g, pal.ui.dim);
     drawCard(g, pal.ui, L.x, L.y, L.w, L.h, 20);
-    drawText(g, "Sound", this.W / 2, L.y + 42, { size: 28, color: pal.overlayText, weight: 600, font: pal.display });
-    const hover = inp.inCentered(L.toggle.cx, L.toggle.cy, L.toggle.w, L.toggle.h);
-    L.toggle.scale = this.feel.scale("settings:mute", hover, hover && inp.down);
-    drawPillButton(g, pal.ui, L.toggle, hover, hover && inp.down, pal.font);
-    const muted = this.ctx.audio.muted;
-    for (const sl of L.sliders) {
-      const v = sl.id === "music" ? this.ctx.save.music : this.ctx.save.sfx;
-      drawText(g, sl.label, sl.x - 18, sl.y, { size: 15, color: pal.overlayText, weight: 700, align: "right" });
-      g.globalAlpha = muted ? 0.45 : 1;
-      fillRoundRect(g, sl.x, sl.y - 4, sl.w, 8, 4, pal.track);
-      fillRoundRect(g, sl.x, sl.y - 4, Math.max(8, sl.w * v), 8, 4, pal.ui.primary);
-      const kx = sl.x + sl.w * v;
-      const active = this.dragging === sl.id;
-      fillRoundRect(g, kx - 9, sl.y - 9, 18, 18, 9, pal.ui.card, pal.ui.primary, active ? 3 : 2);
-      g.globalAlpha = 1;
-      drawText(g, `${Math.round(v * 100)}%`, sl.x + sl.w + 16, sl.y, { size: 13, color: pal.hudMuted, weight: 600, tabular: true, align: "left" });
+    drawText(g, "Settings", this.W / 2, L.y + 38, { size: 26, color: pal.overlayText, weight: 600, font: pal.display });
+    this.sound.render(g, this.ctx, L.sound, this.feel);
+    const hover = inp.inCentered(L.motion.cx, L.motion.cy, L.motion.w, L.motion.h);
+    L.motion.scale = this.feel.scale("settings:motion", hover, hover && inp.down);
+    drawPillButton(g, pal.ui, L.motion, hover, hover && inp.down, pal.font);
+    drawText(g, "Halves shake and hit-stop, skips slow motion", this.W / 2, L.motion.cy + 34, { size: 11, color: pal.hudMuted, weight: 500 });
+    drawText(g, "M mutes in game  ·  T cycles themes", this.W / 2, L.y + L.h - 20, { size: 12, color: pal.hudMuted, weight: 500 });
+  }
+
+  /** The theme picker card: a grid of swatches, the current one ringed. */
+  private renderThemes(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const L = this.themesLayout();
+    fillScreen(g, pal.ui.dim);
+    drawCard(g, pal.ui, L.x, L.y, L.w, L.h, 22);
+    drawText(g, "Theme", this.W / 2, L.y + 34, { size: 26, color: pal.overlayText, weight: 600, font: pal.display });
+    for (const sw of this.themeSwatches) {
+      const hover = swatchAt([sw], inp.x, inp.y) !== null && inp.x >= 0;
+      const scale = this.feel.scale(`swatch:${sw.name}`, hover, hover && inp.down);
+      drawSwatch(g, sw, pal, sw.name === pal.name, hover, scale);
     }
-    drawText(g, "In game, the speaker button toggles sound  ·  M mutes", this.W / 2, L.y + L.h - 24, { size: 12, color: pal.hudMuted, weight: 500 });
+    const hover = inp.inCentered(L.done.cx, L.done.cy, L.done.w, L.done.h);
+    L.done.scale = this.feel.scale("themes:done", hover, hover && inp.down);
+    drawPillButton(g, pal.ui, L.done, hover, hover && inp.down, pal.font);
+  }
+
+  /** Play and Continue under the logo. Continue carries the Normal-mode glyph so it reads as the same thing as the HUD pill. */
+  private renderPills(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    for (const b of this.pills) {
+      const hover = inp.inCentered(b.cx, b.cy, b.w, b.h) && inp.x >= 0;
+      const pressed = hover && this.heldPill === b && inp.down;
+      b.scale = this.feel.scale(`pill:${b.id}`, hover, pressed);
+      drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
+      const scale = b.scale;
+      if (b.id === "play") {
+        // a play triangle left of the word
+        const tw = measureText(g, b.label, { size: b.h * scale * 0.4, weight: 700, font: pal.font });
+        const r = b.h * scale * 0.14;
+        const x = b.cx - tw / 2 - r * 1.6;
+        g.save();
+        g.fillStyle = pal.ui.primaryText;
+        g.beginPath();
+        g.moveTo(x - r * 0.8, b.cy - r);
+        g.lineTo(x + r * 0.9, b.cy);
+        g.lineTo(x - r * 0.8, b.cy + r);
+        g.closePath();
+        g.fill();
+        g.restore();
+      } else {
+        const tw = measureText(g, b.label, { size: b.h * scale * 0.4, weight: 700, font: pal.font });
+        drawModeGlyph(g, "normal", b.cx - tw / 2 - 16 * scale, b.cy, 6 * scale, pal.brickColors[2], 2);
+      }
+    }
+  }
+
+  /** The modern bottom bar: high score, furthest world and arcade best side by side. */
+  private renderBottomStats(g: CanvasRenderingContext2D, barY: number): void {
+    const pal = this.ctx.palette;
+    const save = this.ctx.save;
+    const arcadeBest = Math.max(0, ...Object.values(save.arcadeBest).map((v) => v ?? 0));
+    const stats: Array<{ label: string; value: string; accent?: boolean }> = [
+      { label: "HIGH SCORE", value: String(save.hiscore) },
+      { label: "FURTHEST", value: `World ${Math.max(1, save.worldProgress)}`, accent: true },
+      { label: "ARCADE BEST", value: String(arcadeBest) },
+    ];
+    const pitch = Math.min(190, (this.W - BTN_H * 2 - 20) / 3);
+    const size = pitch < 130 ? 22 : 30;
+    stats.forEach((st, i) => {
+      const x = this.W / 2 + (i - 1) * pitch;
+      drawText(g, st.label, x, barY - 18, { size: 11, color: pal.titleMuted, weight: 700 });
+      drawText(g, st.value, x, barY + 10, { size, color: st.accent ? pal.ui.primary : pal.titleText, weight: 600, font: pal.display, tabular: true });
+    });
+  }
+
+  private renderSoundToggle(g: CanvasRenderingContext2D): void {
+    const pal = this.ctx.palette;
+    const inp = this.ctx.input;
+    const t = this.soundToggle;
+    const muted = this.ctx.audio.muted;
+    const hover = inp.inCentered(t.cx, t.cy, t.w, t.h) && inp.x >= 0;
+    const scale = this.feel.scale("title:sound", hover, hover && inp.down);
+    const d = t.h * scale;
+    fillRoundRect(g, t.cx - d / 2, t.cy - d / 2, d, d, d / 2, hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+    drawSpeaker(g, t.cx, t.cy, d * 0.2, pal.titleText, muted);
+    if (hover) drawText(g, muted ? "Sound off (M)" : "Sound on (M)", t.cx, t.cy + d / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600 });
   }
 
   /** Icon pill that switches the theme; the label only appears on hover. */
@@ -798,10 +954,12 @@ export class TitleScene implements Scene {
     const w = t.w * scale;
     const h = t.h * scale;
     fillRoundRect(g, t.cx - w / 2, t.cy - h / 2, w, h, h / 2, hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+    const labelled = this.generated && t.w > 60;
     // half-filled circle: "contrast"
-    const r = h * 0.28;
+    const r = h * (labelled ? 0.2 : 0.28);
+    const iconX = labelled ? t.cx - w / 2 + 18 * scale : t.cx;
     g.save();
-    g.translate(t.cx, t.cy);
+    g.translate(iconX, t.cy);
     g.scale(scale, scale);
     g.lineWidth = 2;
     g.strokeStyle = pal.titleText;
@@ -814,10 +972,24 @@ export class TitleScene implements Scene {
     g.closePath();
     g.fill();
     g.restore();
+    if (labelled) {
+      drawText(g, THEME_LABELS[pal.name], iconX + 14 * scale, t.cy + 1, { size: 13 * scale, color: pal.titleText, weight: 700, align: "left" });
+      // chevron
+      const cx = t.cx + w / 2 - 14 * scale;
+      g.save();
+      g.strokeStyle = pal.titleMuted;
+      g.lineWidth = 2;
+      g.lineCap = "round";
+      g.beginPath();
+      g.moveTo(cx - 4, t.cy - 2);
+      g.lineTo(cx, t.cy + 2);
+      g.lineTo(cx + 4, t.cy - 2);
+      g.stroke();
+      g.restore();
+    }
     if (hover) {
-      const label = `Switch to ${THEME_LABELS[nextTheme(this.ctx.save.theme)]}`;
-      drawText(g, label, t.cx - 4, t.cy + h / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600, align: "right" });
-      drawText(g, "(T)", t.cx + 14, t.cy + h / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600, align: "left" });
+      const label = this.generated ? "Choose a theme  ·  T cycles" : `Switch to ${THEME_LABELS[nextTheme(this.ctx.save.theme)]} (T)`;
+      drawText(g, label, t.cx + w / 2, t.cy + h / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600, align: "right" });
     }
   }
 
@@ -1066,13 +1238,14 @@ export class TitleScene implements Scene {
       }
       const barY = this.H - BTN_H / 2;
       if (modern) {
-        drawText(g, "HIGH SCORE", this.W / 2, barY - 20, { size: 12, color: pal.titleMuted, weight: 700 });
-        drawText(g, String(this.ctx.save.hiscore), this.W / 2, barY + 10, { size: 34, color: pal.titleText, weight: 600, font: pal.display, tabular: true });
+        this.renderBottomStats(g, barY);
+        this.renderPills(g);
+        this.renderSoundToggle(g);
       } else {
         drawText(g, `High Score: ${this.ctx.save.hiscore}`, this.W / 2, barY, { size: 18, color: pal.titleText, tabular: true });
-      }
-      if (this.ctx.audio.muted) {
-        drawText(g, "muted", this.W - BTN_H / 2, this.H - BTN_H - 12, { size: 12, color: pal.titleMuted, weight: 500 });
+        if (this.ctx.audio.muted) {
+          drawText(g, "muted", this.W - BTN_H / 2, this.H - BTN_H - 12, { size: 12, color: pal.titleMuted, weight: 500 });
+        }
       }
       this.renderThemeToggle(g);
       if (this.ctx.fullscreen.supported) this.renderFullscreenToggle(g);
@@ -1139,6 +1312,7 @@ export class TitleScene implements Scene {
       drawSprite(g, cs, 0, this.W / 2 - (cs.width * k) / 2, this.H / 2 - (cs.height * k) / 2, cs.width * k, cs.height * k);
     }
     if (this.menu === "settings") this.renderSettings(g);
+    if (this.menu === "themes") this.renderThemes(g);
 
     // Scene fades: in from the background on entry, out to it on launch.
     const e = this.ctx.clock.t - this.enterT0;

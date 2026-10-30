@@ -15,6 +15,8 @@ export interface SaveData {
   sfx: number;
   music: number;
   theme: ThemeName;
+  /** Halve shake, hit-stop and debris and skip slow motion. */
+  reduceMotion: boolean;
   /** Best score per arcade mode. */
   arcadeBest: Partial<Record<ArcadeMode, number>>;
   /** Save format version; bumped when a stored field should be reset. */
@@ -29,8 +31,9 @@ const KEY = "huebricks.save.v1";
  * 4: "spectra" added and made the default.
  * 5: "pigment" is the default.
  * 6: sound off by default, with separate effects and music volumes.
+ * 7: reduce-motion preference.
  */
-const SAVE_VERSION = 6;
+const SAVE_VERSION = 7;
 
 const DEFAULTS: SaveData = {
   hiscore: 0,
@@ -40,6 +43,7 @@ const DEFAULTS: SaveData = {
   sfx: 0.6,
   music: 0.35,
   theme: "pigment",
+  reduceMotion: false,
   arcadeBest: {},
   v: SAVE_VERSION,
 };

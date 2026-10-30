@@ -70,8 +70,24 @@ colours contain two primaries; "chromatic gray" (black) contains all three.
   the level's subtract goal; finishing the goal pays a further bonus.
 
 Keyboard: `Q`/`←` rotate counter-clockwise, `E`/`→` rotate clockwise, hold
-`Space`/`↓` to speed up, `H` hold / pick up, `P` pause, `Esc` back to the
-title, `M` mute, `T` switch theme.
+`Space`/`↓` to speed up, `H` hold / pick up, `P` or `Esc` pause (Esc also
+steps back out of the pause card's pages), `M` mute, `T` switch theme. The
+pause card shows these as keycaps once a key has been used in the run.
+
+The pause card holds Resume, Restart level (back to the score the level
+began with), Quit to title (asks once), a strip of theme swatches with an
+"All" grid, the sound toggle and sliders, and a `?` that opens the
+how-to-play slides without leaving the run. The HUD's chain meter carries
+the multiplier as a badge, and the level pill starts with the mode's brick
+glyph (red octagon Puzzle, blue diamond Normal, yellow circle Zen), which
+the title's Continue chip uses too.
+
+On the modern title screen a Play pill opens the modes and a Continue chip
+resumes Normal at the furthest world reached; the bottom bar shows the high
+score, furthest world and arcade best; the top-right cluster is the theme
+pill (opens a picker of every theme), the speaker and fullscreen. The gear
+opens Settings: sound, plus a **Reduce motion** toggle that halves shake,
+hit-stop and debris and skips slow motion. Classic keeps the original title.
 
 Smaller touches: resting bricks breathe on a slow stagger, a picked-up
 brick carries a pulsing halo in its colour, each theme pops into its own
@@ -119,12 +135,11 @@ touch controls, and its own best score. Three so far:
 
 ## Themes
 
-Switch themes any time: the pill in the top-right of the title screen, the
-"Theme" button on the pause card, or the T key, all cycle through them and
-the choice is remembered.
+Switch themes any time: the theme pill in the top-right of the title screen
+opens a picker, the pause card has a swatch strip and an "All" grid, and the
+`T` key cycles. The choice is remembered.
 
-Twelve themes, cycled with the pill in the top-right corner of the title or
-the `T` key:
+Twelve themes:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
   crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
@@ -217,6 +232,10 @@ src/
     synth.ts     procedural sound cues (whoosh, crunch, thump, tick, sparkle) from Web Audio
     clock.ts     frame clock with hit-stop, slow motion and sim interpolation
     buttonFeel.ts press / hover scale for buttons
+    soundControls.ts speaker toggle + music / effects sliders shared by settings and the pause card
+    themePicker.ts   theme swatches: strip, grid and drawing
+    keycaps.ts       keyboard hint row
+    modeGlyph.ts     the brick glyph each game mode borrows
     modernSkin.ts  generated "Pigment" sprite set and shared drawing helpers
     blockySkin.ts  generated "Blocky" sprite set
     spectraSkin.ts generated "Spectra" sprite set
@@ -230,7 +249,8 @@ src/
     tiles.ts     one themed brick anywhere on screen (square, bubble or blob)
     save.ts      localStorage persistence
   scenes/
-    TitleScene.ts  logo -> mode -> world menus, credits, theme toggle
+    TitleScene.ts  logo / Play / Continue -> mode -> world menus, arcade grid, theme picker, settings, credits
+    ui.test.ts     title pills, theme picker, pause card and reduce-motion regressions
     GameScene.ts   gameplay state machine, replenish line, tutorial, pause
     FxLabScene.ts  effects lab behind `?fx`: fire each effect on demand, edit tuning live
     arcade/

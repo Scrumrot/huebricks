@@ -17,6 +17,7 @@ import { buildVintageSprites } from "./engine/vintageSkin";
 import { buildNatureSprites } from "./engine/natureSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
+import { setReducedMotion } from "./engine/fxTuning";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
 import type { GameContext, Scene } from "./scenes/Scene";
 import { TitleScene } from "./scenes/TitleScene";
@@ -249,6 +250,7 @@ async function boot(): Promise<void> {
     },
   };
   ctx.setTheme(save.theme);
+  setReducedMotion(save.reduceMotion);
   // `?fx` opens the effects lab instead of the title screen.
   scene = new URLSearchParams(location.search).has("fx") ? new FxLabScene(ctx) : new TitleScene(ctx);
   scene.enter?.();
