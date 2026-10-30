@@ -2910,7 +2910,9 @@ export class GameScene implements Scene {
       g.restore();
     }
     const lx = r.starsX + (n - 0.5) * r.starStep + r.side * 8;
-    drawText(g, this.goalAwarded ? "SUBTRACT GOAL DONE" : "SUBTRACT GOAL", lx, r.starsY + 1, {
+    // Upright, the band is tight: the stars stand for themselves and the label is one word.
+    const label = this.board.layout.portrait ? (this.goalAwarded ? "GOAL DONE" : "GOAL") : this.goalAwarded ? "SUBTRACT GOAL DONE" : "SUBTRACT GOAL";
+    drawText(g, label, lx, r.starsY + 1, {
       size: r.textSize * 0.5,
       color: this.goalAwarded ? pal.goalAccent : pal.hudMuted,
       weight: 700,

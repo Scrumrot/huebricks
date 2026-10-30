@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeLayout } from "../core/layout";
-import { CONTROL_MAX, hudControls, hudRail } from "./hudLayout";
+import { CONTROL_MAX, hudControls, hudRail, RAIL_GAP } from "./hudLayout";
 
 const SPACING = { top: 8, gap: 14, bottom: 14 };
 const landscape = computeLayout(7, SPACING, { w: 1067, h: 507, portrait: false });
@@ -16,7 +16,12 @@ describe("modern HUD geometry", () => {
     expect(r.scoreCx).toBeLessThan(landscape.boardX);
     expect(r.ring.cx + r.ring.r).toBeLessThan(landscape.boardX);
     for (const b of c.buttons) expect(b.cx - b.w / 2).toBeGreaterThan(landscape.boardX + landscape.boardW);
-    expect(c.rotatePill.x).toBeGreaterThan(landscape.boardX + landscape.boardW);
+    expect(c.rotatePill.x).toBeGreaterThanOrEqual(landscape.boardX + landscape.boardW + RAIL_GAP);
+    // the same holds on a squarer window, where the rails are narrower
+    const square = computeLayout(7, SPACING, { w: 675, h: 507, portrait: false });
+    const sc = hudControls(square);
+    expect(sc.rotatePill.x).toBeGreaterThanOrEqual(square.boardX + square.boardW + RAIL_GAP);
+    expect(hudRail(square).goalAlign).toBe("center");
   });
 
   it("gives portrait a 64 px control bar under the tray with nothing overlapping", () => {
@@ -31,6 +36,14 @@ describe("modern HUD geometry", () => {
     const r = hudRail(portrait);
     expect(r.ring.cy + r.ring.r).toBeLessThan(portrait.stackY);
     expect(c.labels.map((l) => l.text)).toEqual(["ROTATE", "HURRY"]);
+  });
+
+  it("keeps the portrait band clear of the goal ring on a squarer tablet", () => {
+    const tablet = computeLayout(7, SPACING, { w: 520, h: 693, portrait: true });
+    const r = hudRail(tablet);
+    // four stars and a one-word label end before the ring's right-aligned caption begins
+    expect(r.starsX + 4 * r.starStep + r.textSize * 2).toBeLessThan(r.goalCapX - r.textSize * 4.2);
+    expect(r.pillCx - r.pillW / 2).toBeLessThan(tablet.boardX);
   });
 
   it("puts the board low on an upright phone", () => {

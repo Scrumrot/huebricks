@@ -75,6 +75,8 @@ export interface Controls {
 
 /** Largest control button, the design sheet's 64 px bar. */
 export const CONTROL_MAX = 64;
+/** Least room between a control and the board's tray (which overhangs the board by 8). */
+export const RAIL_GAP = 22;
 
 const flipAlign = (a: CanvasTextAlign): CanvasTextAlign => (a === "left" ? "right" : a === "right" ? "left" : a);
 
@@ -126,7 +128,9 @@ function landscapeRail(l: Layout): HudRail {
   const cx = l.boardX - l.railW / 2;
   const textSize = Math.max(12, l.railW * 0.13);
   const ringR = Math.min(l.railW * 0.17, h * 0.6);
-  const ring = { cx: cx - l.railW * 0.22, cy: y0 + h * 4.1, r: ringR };
+  // A wide rail puts the caption beside the ring; a narrow one stacks it underneath so nothing runs into the board.
+  const beside = l.railW >= 200;
+  const ring = { cx: beside ? cx - l.railW * 0.22 : cx, cy: y0 + h * (beside ? 4.1 : 3.95), r: ringR };
   const slot = Math.min(l.cellW * 0.85, l.railW * 0.42);
   const d = controlSize(l);
   const pauseCx = l.boardX + l.boardW + l.railW - 16 - d * 0.4;
@@ -148,12 +152,12 @@ function landscapeRail(l: Layout): HudRail {
     pillW: l.railW * 0.92,
     levelY: y0 + h * 2.85,
     ring,
-    goalCapX: ring.cx + ringR + 12,
-    goalCapY: ring.cy - ringR * 0.45,
-    goalY: ring.cy + ringR * 0.2,
-    goalAlign: "left",
-    starsX: ring.cx - ringR + textSize * 0.45,
-    starsY: ring.cy + ringR + textSize * 0.9,
+    goalCapX: beside ? ring.cx + ringR + 12 : cx,
+    goalCapY: beside ? ring.cy - ringR * 0.45 : ring.cy + ringR + textSize * 0.75,
+    goalY: beside ? ring.cy + ringR * 0.2 : ring.cy + ringR + textSize * 1.65,
+    goalAlign: beside ? "left" : "center",
+    starsX: beside ? ring.cx - ringR + textSize * 0.45 : cx - textSize * 2.2,
+    starsY: beside ? ring.cy + ringR + textSize * 0.9 : ring.cy + ringR + textSize * 2.6,
     starStep: textSize * 1.1,
     popsCx: cx,
     popsCapY: y1 - h * 1.1,
@@ -178,6 +182,8 @@ function portraitRail(l: Layout): HudRail {
   const slot = Math.min(56, d * 0.9);
   const yB = l.hudBottomY + 12 + d / 2;
   const pauseCx = vp.w - m - d * 0.4;
+  // The band hangs off the viewport edge, not the board: a squarer screen has a narrower board that would push it into the ring.
+  const left = m;
   return {
     cx: l.boardX + slot / 2,
     holdY: yB,
@@ -187,12 +193,12 @@ function portraitRail(l: Layout): HudRail {
     holdLabelAlign: "center",
     soundX: pauseCx - d * 0.8,
     soundY: yT + 36,
-    scoreCx: l.boardX + colW / 2,
+    scoreCx: left + colW / 2,
     scoreCapY: yT + 18,
     scoreY: yT + 50,
     meterW: colW - 10,
     chainY: yT + 80,
-    pillCx: l.boardX + pillW / 2,
+    pillCx: left + pillW / 2,
     pillW,
     levelY: yT + 120,
     ring,
@@ -200,7 +206,7 @@ function portraitRail(l: Layout): HudRail {
     goalCapY: ring.cy - 9,
     goalY: ring.cy + 9,
     goalAlign: "right",
-    starsX: l.boardX + pillW + 14 + textSize * 0.45,
+    starsX: left + pillW + 14 + textSize * 0.45,
     starsY: yT + 120,
     starStep: textSize * 1.1,
     popsCx: vp.w / 2,
@@ -227,7 +233,8 @@ function landscapeControls(l: Layout, r: HudRail): Controls {
   const margin = 16;
   const pauseCx = l.boardX + l.boardW + l.railW - margin - d * 0.4;
   const hurryCy = y1 - margin - 16 - d / 2;
-  const pillW = Math.min(l.railW * 0.9, d * 2.7);
+  // The tray overhangs the board by 8; keep the pill well clear of it.
+  const pillW = Math.min(l.railW - 2 * RAIL_GAP, d * 2.7);
   const pillH = d * 0.8;
   const pillCy = hurryCy - d / 2 - 28 - pillH / 2;
   return {
