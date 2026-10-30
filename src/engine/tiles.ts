@@ -2,7 +2,7 @@ import { colorFrame, type Color } from "../core/color";
 import type { SpriteMap } from "./assets";
 import { drawSprite } from "./draw";
 import { easeOutCubic } from "./easing";
-import { drawSwirlMix } from "./mixFx";
+import { drawMix } from "./mixFx";
 import { chipPath } from "./modernSkin";
 import type { Palette } from "./theme";
 
@@ -91,8 +91,8 @@ export function drawTile(
   const face = (c: Color) => drawSprite(g, sp.brick_sprite, colorFrame(c), -w / 2, -w / 2, w, w);
   const wiping = o.wipeFrom !== undefined && o.wipe !== undefined && o.wipe < 1;
   const drawFace = () => {
-    if (wiping && pal.fx.mix === "swirl") {
-      drawSwirlMix(g, w, o.wipe!, pal.brickColors[o.wipeFrom!], pal.brickColors[color], { old: () => face(o.wipeFrom!), next: () => face(color) });
+    if (wiping && pal.fx.mix !== "wipe") {
+      drawMix(g, pal.fx.mix, w, o.wipe!, pal.brickColors[o.wipeFrom!], pal.brickColors[color], { old: () => face(o.wipeFrom!), next: () => face(color) });
     } else if (wiping) {
       face(o.wipeFrom!);
       g.save();

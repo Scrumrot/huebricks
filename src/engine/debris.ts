@@ -53,6 +53,16 @@ export function debrisFor(pal: Palette, color: Color, cw: number): { colors: str
         colors: ["#5BAE4E", "#3C8A36", "#E8893A", lighten(base, 0.2)],
         o: { speed: [140, 260], size: [cw * 0.12, cw * 0.2], life: [550, 850], gravity: 220, drag: 0.3, shape: 8 },
       };
+    case "scraps":
+      return {
+        colors: [base, lighten(base, 0.45), "#FFF7EA"],
+        o: { speed: [140, 280], size: [cw * 0.12, cw * 0.22], life: [600, 950], gravity: 320, drag: 0.35, shape: 0 },
+      };
+    case "embers":
+      return {
+        colors: ["#F2C76B", "#FFE3A3", lighten(base, 0.3)],
+        o: { speed: [60, 160], size: [cw * 0.05, cw * 0.1], life: [700, 1200], gravity: -140, drag: 0.4, shape: 1, dir: -Math.PI / 2, spread: 1.6 },
+      };
     case "confetti":
       return {
         colors: [base, "#F2D16B", "#FFFFFF"],

@@ -43,6 +43,28 @@ describe("pop signatures per theme", () => {
     expect(popAt("gooey").fx.rippleCount).toBe(1);
   });
 
+  it("lantern floats the popped tile away and chimes on big pops", () => {
+    const { h, fx } = popAt("lantern", 1);
+    expect(fx.floaterCount).toBe(1);
+    expect(fx.fragments.count).toBe(0);
+    expect(h.audio.cues).toContain("sparkle");
+    advance(h, fx, 1500);
+    expect(fx.floaterCount).toBe(0);
+  });
+
+  it("stained glass throws a caustic patch onto the stone", () => {
+    expect(popAt("stainedglass").fx.decalCount).toBe(1);
+  });
+
+  it("origami's fold mix still throws scraps, and a lantern clear releases embers", () => {
+    const o = setup("origami");
+    o.fx.mixSplash(0, 0, 40, ["#f00", "#00f"]);
+    expect(o.fx.particles.count).toBe(8);
+    const l = setup("lantern");
+    l.fx.celebrate([10, 50], 100, 40, () => 1);
+    expect(l.fx.particles.count).toBeGreaterThan(2 * 9);
+  });
+
   it("a scene can keep its own richer signature", () => {
     const { fx } = setup("pigment");
     fx.pop({ x: 0, y: 0, w: 40, h: 40, color: 2, draw, k: 1, signature: false });

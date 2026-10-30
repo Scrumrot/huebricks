@@ -22,10 +22,14 @@ export interface FxProfile {
   popFlash: boolean;
   /** Pop sound, hit-stop, flash and shake land on the burst frame rather than when the pop is decided. */
   stagedPop: boolean;
-  /** Colour mixing: a hard radial wipe or a soft swirl with a highlight sweep. */
-  mix: "wipe" | "swirl";
-  /** The material's own signature on a pop: a wet stain, a light flare, a surface ripple or chunks that bounce on the shelf. */
-  signature: "none" | "splat" | "flare" | "ripple" | "bounce";
+  /** Colour mixing: a hard radial wipe, a soft swirl with a highlight sweep, or a paper fold that flips the new colour over the old. */
+  mix: "wipe" | "swirl" | "fold";
+  /**
+   * The material's own signature on a pop: a wet stain, a light flare, a
+   * surface ripple, chunks that bounce on the shelf, or the whole tile
+   * floating up and away.
+   */
+  signature: "none" | "splat" | "flare" | "ripple" | "bounce" | "float";
 }
 
 /** Nothing on: the faithful port. */

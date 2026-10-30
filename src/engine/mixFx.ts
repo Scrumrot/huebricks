@@ -1,5 +1,6 @@
-import { clamp01, easeOutCubic } from "./easing";
-import { mixColors } from "./colorUtil";
+import { clamp01, easeInOutSine, easeOutCubic } from "./easing";
+import { mixColors, shade } from "./colorUtil";
+import type { FxProfile } from "./fxProfile";
 
 /**
  * The soft "swirl" colour mix: the new colour grows out of the centre as
@@ -18,6 +19,59 @@ export function sweepAt(q: number): { x: number; alpha: number } | null {
   if (q < 0.5) return null;
   const p = clamp01((q - 0.5) / 0.5);
   return { x: -1 + 2 * p, alpha: 0.4 * Math.sin(Math.PI * p) };
+}
+
+/**
+ * The paper "fold" mix: a flap of the new colour folds over the old one
+ * from the top-left corner down to the bottom-right, the way the tile's
+ * crease runs.
+ * Ahead of the flap runs a soft shadow; the flap itself shows the paper's
+ * underside (a darker shade of the new colour) while it is standing up.
+ */
+export function drawFoldMix(g: CanvasRenderingContext2D, w: number, q: number, _oldColor: string, newColor: string, faces: MixFaces): void {
+  const e = easeInOutSine(clamp01(q));
+  const D = w * 0.78;
+  const edge = -D + 2 * D * e;
+  faces.old();
+  // the part already folded over shows the new face
+  g.save();
+  g.rotate(Math.PI / 4);
+  g.beginPath();
+  g.rect(-D * 1.5, -D * 1.5, edge + D * 1.5, D * 3);
+  g.clip();
+  g.rotate(-Math.PI / 4);
+  faces.next();
+  g.restore();
+  if (e <= 0.01 || e >= 0.99) return;
+  const inset = w * 0.46;
+  g.save();
+  g.beginPath();
+  g.roundRect(-inset, -inset, inset * 2, inset * 2, w * 0.06);
+  g.clip();
+  g.rotate(Math.PI / 4);
+  const lift = Math.sin(Math.PI * e);
+  const flap = D * 0.55 * lift;
+  // shadow thrown ahead of the standing flap
+  const sh = g.createLinearGradient(edge, 0, edge + flap * 0.9 + w * 0.05, 0);
+  sh.addColorStop(0, `rgba(0,0,0,${0.28 * lift})`);
+  sh.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = sh;
+  g.fillRect(edge, -D * 1.5, flap * 0.9 + w * 0.05, D * 3);
+  // the flap's underside, standing between the two faces
+  g.fillStyle = shade(newColor, 0.8);
+  g.fillRect(edge - flap, -D * 1.5, flap, D * 3);
+  g.fillStyle = `rgba(255,255,255,${0.18 * lift})`;
+  g.fillRect(edge - flap, -D * 1.5, Math.max(1, flap * 0.25), D * 3);
+  // the crease itself
+  g.fillStyle = "rgba(0,0,0,0.22)";
+  g.fillRect(edge - Math.max(0.5, w * 0.006), -D * 1.5, Math.max(1, w * 0.012), D * 3);
+  g.restore();
+}
+
+/** The theme's mix treatment for anything but the plain radial wipe, which callers keep drawing themselves. */
+export function drawMix(g: CanvasRenderingContext2D, mix: FxProfile["mix"], w: number, q: number, oldColor: string, newColor: string, faces: MixFaces): void {
+  if (mix === "fold") drawFoldMix(g, w, q, oldColor, newColor, faces);
+  else drawSwirlMix(g, w, q, oldColor, newColor, faces);
 }
 
 export function drawSwirlMix(g: CanvasRenderingContext2D, w: number, q: number, oldColor: string, newColor: string, faces: MixFaces): void {

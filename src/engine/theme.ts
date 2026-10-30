@@ -7,7 +7,21 @@ import { CLASSIC_FX, fxProfile, type FxProfile } from "./fxProfile";
 import type { Color } from "../core/color";
 
 export type ThemeName =
-  "classic" | "pigment" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "gooey" | "vintage" | "nature" | "blocky" | "spectra";
+  | "classic"
+  | "pigment"
+  | "delicious"
+  | "crystals"
+  | "halloween"
+  | "winter"
+  | "christmas"
+  | "gooey"
+  | "vintage"
+  | "nature"
+  | "stainedglass"
+  | "lantern"
+  | "origami"
+  | "blocky"
+  | "spectra";
 
 /** Order the theme toggle cycles through. */
 export const THEME_ORDER: readonly ThemeName[] = [
@@ -20,6 +34,9 @@ export const THEME_ORDER: readonly ThemeName[] = [
   "gooey",
   "vintage",
   "nature",
+  "stainedglass",
+  "lantern",
+  "origami",
   "spectra",
   "blocky",
   "classic",
@@ -41,6 +58,9 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   gooey: "Gooey",
   vintage: "Vintage",
   nature: "Nature",
+  stainedglass: "Stained Glass",
+  lantern: "Lantern",
+  origami: "Origami",
   blocky: "Blocky",
   spectra: "Spectra",
 };
@@ -66,13 +86,28 @@ export interface Palette {
   /** Classic uses the original art and layout; generated themes share the modern layout. */
   kind: "classic" | "generated";
   /** How the board backdrop is painted. */
-  backdrop: "sprites" | "paper" | "delicious" | "crystals" | "halloween" | "winter" | "christmas" | "gooey" | "vintage" | "nature" | "blocky" | "spectra";
+  backdrop:
+    | "sprites"
+    | "paper"
+    | "delicious"
+    | "crystals"
+    | "halloween"
+    | "winter"
+    | "christmas"
+    | "gooey"
+    | "vintage"
+    | "nature"
+    | "blocky"
+    | "spectra"
+    | "stainedglass"
+    | "lantern"
+    | "origami";
   /** How bricks are drawn around their face sprite. */
   brickStyle: "flat" | "chip" | "extruded" | "gel";
   /** Fill timer: a bar under the grid, or the next tray well filling with the incoming colour. */
   timer: "bar" | "wells";
   /** What flies out of a popped brick. */
-  popStyle: "flecks" | "dots" | "cubes" | "splat" | "sprinkles" | "shards" | "bats" | "snow" | "confetti" | "leaves";
+  popStyle: "flecks" | "dots" | "cubes" | "splat" | "sprinkles" | "shards" | "bats" | "snow" | "confetti" | "leaves" | "scraps" | "embers";
   /** Title-screen decoration: scattered tiles, tiles floating up, or the flipping brick wall. */
   titleDeco: "chips" | "bubbles" | "wall";
   /** Veil over the decoration while a sub-menu is open. */
@@ -142,6 +177,8 @@ export interface Palette {
   particlesAdditive: boolean;
   /** Pops leave a fading paint stain on the board. */
   stains: boolean;
+  /** Settled same-colour neighbours fuse: the seam between them is painted over so a group reads as one piece. */
+  fuse: boolean;
   /** Which treatments the shared effects layer applies for this theme. */
   fx: FxProfile;
 }
@@ -209,6 +246,7 @@ export const CLASSIC: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: CLASSIC_FX,
 };
 
@@ -276,6 +314,7 @@ export const PIGMENT: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: true,
+  fuse: false,
   fx: fxProfile({ fragments: false, vignette: "rgba(70,45,20,1)", signature: "splat" }),
 };
 
@@ -343,6 +382,7 @@ export const BLOCKY: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ shakeRot: false, mix: "wipe", vignette: "#000000", signature: "bounce" }),
 };
 
@@ -410,6 +450,7 @@ export const SPECTRA: Palette = {
   flashFromBrick: true,
   particlesAdditive: true,
   stains: false,
+  fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, vignette: "#000000", signature: "flare" }),
 };
 
@@ -477,6 +518,7 @@ export const DELICIOUS: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ vignette: "rgba(90,50,30,1)", signature: "bounce" }),
 };
 
@@ -544,6 +586,7 @@ export const CRYSTALS: Palette = {
   flashFromBrick: true,
   particlesAdditive: true,
   stains: false,
+  fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
 };
 
@@ -611,6 +654,7 @@ export const HALLOWEEN: Palette = {
   flashFromBrick: true,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#ffb347", bloom: true, vignette: "#000000", signature: "splat" }),
 };
 
@@ -678,6 +722,7 @@ export const WINTER: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ sparks: "#ffffff", shakeRot: false, vignette: "rgba(40,70,110,1)", signature: "flare" }),
 };
 
@@ -745,6 +790,7 @@ export const CHRISTMAS: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ sparks: "#fff3b0", bloom: true, vignette: "#000000", signature: "bounce" }),
 };
 
@@ -812,6 +858,7 @@ export const GOOEY: Palette = {
   flashFromBrick: true,
   particlesAdditive: true,
   stains: false,
+  fuse: false,
   fx: fxProfile({ fragments: false, bloom: true, vignette: "#000000", signature: "ripple" }),
 };
 
@@ -879,6 +926,7 @@ export const VINTAGE: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, mix: "wipe", vignette: "rgba(50,35,20,1)", signature: "bounce" }),
 };
 
@@ -946,7 +994,212 @@ export const NATURE: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
+  fuse: false,
   fx: fxProfile({ vignette: "rgba(20,50,30,1)", signature: "bounce" }),
+};
+
+/** "Stained Glass": leaded panes in a dark stone chapel. */
+export const STAINED_GLASS: Palette = {
+  name: "stainedglass",
+  popStyle: "shards",
+  kind: "generated",
+  backdrop: "stainedglass",
+  brickStyle: "flat",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(21,17,14,0.72)",
+  background: "#2C2824",
+  hudText: "#FFF3D0",
+  hudMuted: "#B5A98E",
+  gridLine: "#FFF3D0",
+  gridAlpha: 0,
+  crosshair: "rgba(255,243,208,0.5)",
+  titleText: "#FFF3D0",
+  titleMuted: "#B5A98E",
+  overlayText: "#FFF3D0",
+  overlayAccent: "#E8C978",
+  tutorialText: "#FFF3D0",
+  tutorialShadow: "rgba(0,0,0,0.6)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Cinzel, "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif',
+  ui: {
+    card: "#1A1613",
+    cardEdge: "rgba(201,162,74,0.8)",
+    cardShadow: "rgba(0,0,0,0.6)",
+    dim: "rgba(10,8,6,0.6)",
+    primary: "#C9A24A",
+    primaryHover: "#E8C978",
+    primaryText: "#15110E",
+    secondary: "rgba(201,162,74,0.14)",
+    secondaryHover: "rgba(201,162,74,0.26)",
+    secondaryEdge: "rgba(201,162,74,0.5)",
+    secondaryText: "#FFF3D0",
+  },
+  brickShadow: null,
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFF3D0",
+  flashAlpha: 0.2,
+  callout: "#FFF3D0",
+  calloutShadow: "rgba(0,0,0,0.85)",
+  multColors: ["", "#FFF3D0", "#E3B23C", "#D9682A", "#B8232F", "#6B3A9E"],
+  brickColors: { 1: "#B8232F", 2: "#1F4FA3", 3: "#6B3A9E", 4: "#E3B23C", 5: "#D9682A", 6: "#3B8A4E", 7: "#4B4552" },
+  well: "rgba(0,0,0,0.42)",
+  wellEdge: "#15110E",
+  wellActive: "rgba(201,162,74,0.2)",
+  wellActiveEdge: "#C9A24A",
+  wellHint: "rgba(255,243,208,0.2)",
+  pill: "rgba(201,162,74,0.12)",
+  pillEdge: "rgba(201,162,74,0.35)",
+  track: "rgba(255,243,208,0.12)",
+  trackMax: "rgba(255,243,208,0.25)",
+  barFlash: "#E8C978",
+  goalAccent: "#6FA0F0",
+  ring: "#FFF3D0",
+  dust: ["rgba(232,201,120,0.7)", "rgba(255,255,255,0.5)"],
+  glow: false,
+  flashFromBrick: true,
+  particlesAdditive: true,
+  stains: false,
+  fuse: true,
+  fx: fxProfile({ sparks: "#FFF3D0", bloom: true, vignette: "#000000", signature: "splat" }),
+};
+
+/** "Lantern": paper lanterns at a night festival. */
+export const LANTERN: Palette = {
+  name: "lantern",
+  popStyle: "embers",
+  kind: "generated",
+  backdrop: "lantern",
+  brickStyle: "gel",
+  timer: "wells",
+  titleDeco: "bubbles",
+  titleDim: "rgba(21,17,43,0.72)",
+  background: "#15112B",
+  hudText: "#FFF0D6",
+  hudMuted: "#B9A98E",
+  gridLine: "#FFF0D6",
+  gridAlpha: 0,
+  crosshair: "rgba(255,240,214,0.5)",
+  titleText: "#FFF0D6",
+  titleMuted: "#B9A98E",
+  overlayText: "#FFF0D6",
+  overlayAccent: "#F2C76B",
+  tutorialText: "#FFF0D6",
+  tutorialShadow: "rgba(0,0,0,0.6)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: '"M PLUS Rounded 1c", "Varela Round", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#1D1840",
+    cardEdge: "rgba(242,199,107,0.5)",
+    cardShadow: "rgba(0,0,0,0.5)",
+    dim: "rgba(10,8,25,0.6)",
+    primary: "#F2C76B",
+    primaryHover: "#FFE3A3",
+    primaryText: "#3A2B1A",
+    secondary: "rgba(242,199,107,0.14)",
+    secondaryHover: "rgba(242,199,107,0.26)",
+    secondaryEdge: "rgba(242,199,107,0.5)",
+    secondaryText: "#FFF0D6",
+  },
+  brickShadow: null,
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFF0D6",
+  flashAlpha: 0.22,
+  callout: "#FFF0D6",
+  calloutShadow: "rgba(0,0,0,0.85)",
+  multColors: ["", "#FFF0D6", "#F7C843", "#F0883A", "#E8453C", "#8C55C9"],
+  brickColors: { 1: "#E8453C", 2: "#3B6FD0", 3: "#8C55C9", 4: "#F7C843", 5: "#F0883A", 6: "#58B868", 7: "#5A5270" },
+  well: "rgba(255,240,214,0.05)",
+  wellEdge: "rgba(255,240,214,0.12)",
+  wellActive: "rgba(242,199,107,0.2)",
+  wellActiveEdge: "#F2C76B",
+  wellHint: "rgba(255,240,214,0.2)",
+  pill: "rgba(242,199,107,0.12)",
+  pillEdge: "rgba(242,199,107,0.35)",
+  track: "rgba(255,240,214,0.12)",
+  trackMax: "rgba(255,240,214,0.25)",
+  barFlash: "#FFE3A3",
+  goalAccent: "#6F9AE8",
+  ring: "#FFE3A3",
+  dust: ["rgba(242,199,107,0.7)", "rgba(255,255,255,0.5)"],
+  glow: true,
+  flashFromBrick: true,
+  particlesAdditive: true,
+  stains: false,
+  fuse: false,
+  fx: fxProfile({ fragments: false, sparks: "#FFE3A3", bloom: true, vignette: "#000000", signature: "float" }),
+};
+
+/** "Origami": folded paper squares on a kraft desk. */
+export const ORIGAMI: Palette = {
+  name: "origami",
+  popStyle: "scraps",
+  kind: "generated",
+  backdrop: "origami",
+  brickStyle: "chip",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(214,190,155,0.72)",
+  background: "#D6BE9B",
+  hudText: "#3A2E22",
+  hudMuted: "#7A6650",
+  gridLine: "#3A2E22",
+  gridAlpha: 0,
+  crosshair: "rgba(58,46,34,0.5)",
+  titleText: "#3A2E22",
+  titleMuted: "#7A6650",
+  overlayText: "#3A2E22",
+  overlayAccent: "#E5483F",
+  tutorialText: "#3A2E22",
+  tutorialShadow: "rgba(0,0,0,0)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Nunito, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#FFF7EA",
+    cardEdge: "rgba(58,46,34,0.2)",
+    cardShadow: "rgba(58,46,34,0.25)",
+    dim: "rgba(58,46,34,0.42)",
+    primary: "#2F6FD6",
+    primaryHover: "#4A86E6",
+    primaryText: "#FFFFFF",
+    secondary: "rgba(58,46,34,0.08)",
+    secondaryHover: "rgba(58,46,34,0.16)",
+    secondaryEdge: "rgba(58,46,34,0.25)",
+    secondaryText: "#3A2E22",
+  },
+  brickShadow: "rgba(58,46,34,0.22)",
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.2,
+  callout: "#3A2E22",
+  calloutShadow: "rgba(255,247,234,0.9)",
+  multColors: ["", "#3A2E22", "#F4C542", "#F2893B", "#E5483F", "#8A4BC9"],
+  brickColors: { 1: "#E5483F", 2: "#2F6FD6", 3: "#8A4BC9", 4: "#F4C542", 5: "#F2893B", 6: "#4CB36B", 7: "#3C3C3C" },
+  well: "rgba(58,46,34,0.08)",
+  wellEdge: "rgba(255,247,234,0.35)",
+  wellActive: "rgba(47,111,214,0.15)",
+  wellActiveEdge: "#2F6FD6",
+  wellHint: "rgba(58,46,34,0.2)",
+  pill: "rgba(58,46,34,0.08)",
+  pillEdge: "rgba(58,46,34,0.25)",
+  track: "rgba(58,46,34,0.12)",
+  trackMax: "rgba(58,46,34,0.25)",
+  barFlash: "#E5483F",
+  goalAccent: "#2F6FD6",
+  ring: "#FFF7EA",
+  dust: ["rgba(255,247,234,0.8)", "rgba(58,46,34,0.3)"],
+  glow: false,
+  flashFromBrick: false,
+  particlesAdditive: false,
+  stains: false,
+  fuse: false,
+  fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "fold", vignette: "rgba(58,46,34,1)", signature: "bounce" }),
 };
 
 export const PALETTES: Record<ThemeName, Palette> = {
@@ -960,6 +1213,9 @@ export const PALETTES: Record<ThemeName, Palette> = {
   gooey: GOOEY,
   vintage: VINTAGE,
   nature: NATURE,
+  stainedglass: STAINED_GLASS,
+  lantern: LANTERN,
+  origami: ORIGAMI,
   blocky: BLOCKY,
   spectra: SPECTRA,
 };

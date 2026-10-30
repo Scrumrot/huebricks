@@ -59,6 +59,9 @@ const THEMES: readonly string[] = [
   "gooey",
   "vintage",
   "nature",
+  "stainedglass",
+  "lantern",
+  "origami",
   "blocky",
   "spectra",
 ];

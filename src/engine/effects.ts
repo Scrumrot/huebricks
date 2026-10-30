@@ -95,6 +95,20 @@ interface Ripple {
   dur: number;
 }
 
+/** A whole tile drifting up and away, for the "float" signature. */
+interface Floater {
+  draw: TileDraw;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+  t0: number;
+  dur: number;
+  sway: number;
+  phase: number;
+}
+
 /** Vertical afterimage of a fast drop. */
 interface Streak {
   x: number;
@@ -138,6 +152,7 @@ export class Effects {
   private flares: Flare[] = [];
   private ripples: Ripple[] = [];
   private streaks: Streak[] = [];
+  private floaters: Floater[] = [];
   private queue: Scheduled[] = [];
   private shakeT0 = -1e9;
   private shakeAmp = 0;
@@ -191,6 +206,10 @@ export class Effects {
     return this.streaks.length;
   }
 
+  get floaterCount(): number {
+    return this.floaters.length;
+  }
+
   get pending(): number {
     return this.queue.length;
   }
@@ -207,6 +226,7 @@ export class Effects {
     this.flares = this.flares.filter((f) => t - f.t0 < f.dur);
     this.ripples = this.ripples.filter((r) => t - r.t0 < r.dur);
     this.streaks = this.streaks.filter((s) => t - s.t0 < s.dur);
+    this.floaters = this.floaters.filter((f) => t - f.t0 < f.dur);
     if (this.queue.length) {
       const due = this.queue.filter((q) => q.at <= t);
       this.queue = this.queue.filter((q) => q.at > t);
@@ -240,6 +260,7 @@ export class Effects {
     this.flares = [];
     this.ripples = [];
     this.streaks = [];
+    this.floaters = [];
     this.queue = [];
     this.shakeT0 = -1e9;
     this.flashUntil = -1;
@@ -334,6 +355,11 @@ export class Effects {
     this.streaks.push({ x, y0, y1, w, color, t0: this.ctx.clock.t, dur });
   }
 
+  /** The tile itself drifting up and away, swaying as it goes, like a lantern let go. */
+  float(draw: TileDraw, x: number, y: number, w: number, h: number, color: string, dur = 1000): void {
+    this.floaters.push({ draw, x, y, w, h, color, t0: this.ctx.clock.t, dur, sway: w * 0.3, phase: Math.random() * Math.PI * 2 });
+  }
+
   /** One trail mote behind something moving at (vx, vy); call each step while it moves. */
   trail(x: number, y: number, vx: number, vy: number, color: string, cell: number): void {
     if (this.lowPower) return;
@@ -408,14 +434,18 @@ export class Effects {
         ...dirOpts,
       });
     }
-    if (spec.signature !== false) this.signature(cx, cy, cell, spec.color, spec.k);
+    if (spec.signature !== false) this.signature(cx, cy, cell, spec.color, spec.k, spec.draw);
   }
 
   /** The theme's own mark on a pop. */
-  private signature(cx: number, cy: number, cell: number, color: Color, k: number): void {
+  private signature(cx: number, cy: number, cell: number, color: Color, k: number, draw: TileDraw | null): void {
     const fx = this.pal.fx;
     const paint = this.pal.brickColors[color];
     switch (fx.signature) {
+      case "float":
+        if (draw) this.float(draw, cx, cy, cell, cell, paint, 900 + 400 * k);
+        if (k >= 0.3) this.ctx.audio.cue("sparkle", 0.3 + 0.3 * k, 0.8 + 0.2 * k);
+        break;
       case "splat":
         this.decal(cx, cy, cell * (0.55 + 0.25 * k), paint, 3200 + 1500 * k);
         break;
@@ -435,7 +465,7 @@ export class Effects {
   /** A splash of both paints where a brick lands on another and they mix. */
   mixSplash(cx: number, cy: number, cell: number, colors: readonly string[], dir?: number): void {
     const fx = this.pal.fx;
-    if (fx.mix !== "swirl") return;
+    if (fx.mix === "wipe") return;
     this.particles.spawn(cx, cy, 8, colors, {
       speed: [90, 200],
       size: [cell * 0.07, cell * 0.13],
@@ -465,6 +495,20 @@ export class Effects {
           life: [o.life[0] * 1.6, o.life[1] * 1.8],
           jitter: 0.35,
         });
+        if (fx.signature === "float") {
+          // the lantern release: embers drifting up out of every column
+          this.particles.spawn(x, y, 6, [fx.sparks ?? "#ffffff", this.pal.brickColors[color]], {
+            speed: [120, 260],
+            size: [cell * 0.05, cell * 0.09],
+            life: [900, 1500],
+            gravity: -220,
+            drag: 0.3,
+            shape: 1,
+            dir: -Math.PI / 2,
+            spread: 0.35,
+            jitter: 0.4,
+          });
+        }
         if (fx.sparks && !this.lowPower) {
           this.particles.spawn(x, y, 5, [this.pal.brickColors[color], fx.sparks], {
             speed: [500, 820],
@@ -507,6 +551,8 @@ export class Effects {
     if (this.decals.length === 0) return;
     const t = this.ctx.clock.t;
     g.save();
+    // on additive themes the stain is light thrown onto the surface, not paint soaking in
+    if (this.pal.particlesAdditive) g.globalCompositeOperation = "lighter";
     for (const d of this.decals) {
       const p = clamp01((t - d.t0) / d.dur);
       const grow = easeOutCubic(clamp01((t - d.t0) / 120));
@@ -534,11 +580,13 @@ export class Effects {
       this.rings.length > 0 ||
       this.flares.length > 0 ||
       this.ripples.length > 0 ||
-      this.streaks.length > 0;
+      this.streaks.length > 0 ||
+      this.floaters.length > 0;
     if (!busy) return;
     if (this.pal.fx.bloom && TUNING.bloom > 0 && !this.lowPower) this.renderBloom(g);
     this.renderStreaks(g);
     this.renderRipples(g);
+    this.renderFloaters(g);
     this.fragments.render(g);
     if (this.pal.particlesAdditive) {
       g.save();
@@ -664,6 +712,34 @@ export class Effects {
       g.closePath();
       g.fill();
       g.globalAlpha = 1;
+    }
+    g.restore();
+  }
+
+  /** Tiles drifting up: a halo in their colour, a sway, a slow shrink and a late fade. */
+  private renderFloaters(g: CanvasRenderingContext2D): void {
+    if (this.floaters.length === 0) return;
+    const t = this.ctx.clock.t;
+    g.save();
+    for (const f of this.floaters) {
+      const p = clamp01((t - f.t0) / f.dur);
+      const rise = easeOutCubic(p) * f.h * 2.6;
+      const x = f.x + Math.sin(p * 5 + f.phase) * f.sway * p;
+      const y = f.y - rise;
+      const s = 1 - 0.3 * p;
+      const alpha = p < 0.55 ? 1 : 1 - (p - 0.55) / 0.45;
+      const r = f.w * 0.9;
+      const halo = g.createRadialGradient(x, y, 0, x, y, r);
+      halo.addColorStop(0, rgba(f.color, 0.4 * alpha));
+      halo.addColorStop(1, rgba(f.color, 0));
+      g.globalAlpha = 1;
+      g.fillStyle = halo;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+      g.globalAlpha = alpha;
+      g.translate(x, y);
+      g.scale(s, s);
+      f.draw(g, f.w, f.h);
+      g.setTransform(1, 0, 0, 1, 0, 0);
     }
     g.restore();
   }

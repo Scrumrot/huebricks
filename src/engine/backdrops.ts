@@ -5,6 +5,9 @@ import { drawCrystalsBackdrop, drawCrystalTray, drawCrystalWell } from "./crysta
 import { drawDeliciousBackdrop } from "./deliciousSkin";
 import { drawGooeyBackdrop, drawGooeyTray, drawGooeyWell } from "./gooeySkin";
 import { drawNatureBackdrop, drawNatureTray, drawNatureWell } from "./natureSkin";
+import { drawStainedGlassBackdrop, drawStainedGlassTray, drawStainedGlassWell } from "./stainedGlassSkin";
+import { drawLanternBackdrop, drawLanternTray, drawLanternWell } from "./lanternSkin";
+import { drawOrigamiBackdrop, drawOrigamiTray, drawOrigamiWell } from "./origamiSkin";
 import { drawVintageBackdrop, drawVintageTray, drawVintageWell } from "./vintageSkin";
 import { drawHalloweenBackdrop, drawHalloweenTray, drawHalloweenWell } from "./halloweenSkin";
 import { drawCellWell, drawPaper, drawTray, type Ctx } from "./modernSkin";
@@ -53,6 +56,9 @@ export const BACKDROPS: Record<BackdropName, Backdrop> = {
   gooey: drawGooeyBackdrop,
   vintage: drawVintageBackdrop,
   nature: drawNatureBackdrop,
+  stainedglass: drawStainedGlassBackdrop,
+  lantern: drawLanternBackdrop,
+  origami: drawOrigamiBackdrop,
 };
 
 export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
@@ -64,4 +70,7 @@ export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
   gooey: { well: drawGooeyWell, tray: drawGooeyTray },
   vintage: { well: drawVintageWell, tray: drawVintageTray },
   nature: { well: drawNatureWell, tray: drawNatureTray },
+  stainedglass: { well: drawStainedGlassWell, tray: drawStainedGlassTray },
+  lantern: { well: drawLanternWell, tray: drawLanternTray },
+  origami: { well: drawOrigamiWell, tray: drawOrigamiTray },
 };

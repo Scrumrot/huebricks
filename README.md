@@ -139,7 +139,7 @@ Switch themes any time: the theme pill in the top-right of the title screen
 opens a picker, the pause card has a swatch strip and an "All" grid, and the
 `T` key cycles. The choice is remembered.
 
-Twelve themes:
+Fifteen themes:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
   crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
@@ -164,6 +164,24 @@ Twelve themes:
 - **Nature** (`src/engine/natureSkin.ts`): river stones with sprouts on a
   wooden board, wood-slice buttons, sun, clouds and blowing leaves over a
   meadow, and a log trough.
+- **Stained Glass** (`src/engine/stainedGlassSkin.ts`): bevelled panes set
+  in lead came on a stone wall, a rose window that glows when the pointer
+  comes near and after a clear, a light shaft drifting across the scene,
+  gold boss buttons and a came-channel tray. Settled neighbours of one
+  colour lose the lead between them so a growing group reads as one pane;
+  pops shatter into glass shards and throw a coloured patch of light onto
+  the stone. Display text is Cinzel.
+- **Lantern** (`src/engine/lanternSkin.ts`): ribbed paper lanterns lit from
+  inside with a halo, strings of lanterns swaying across a night sky that
+  dip toward the pointer, fireflies over dark hills, glowing gold buttons
+  and a string tray. Pops burst like fireworks and the popped lantern floats
+  up and away; a level clear sends embers up out of every column. Display
+  text is M PLUS Rounded 1c.
+- **Origami** (`src/engine/origamiSkin.ts`): folded paper squares with a
+  crease and a lifted corner on a ruled kraft desk, sticky-note buttons,
+  layered paper-cut hills and a crane that flaps after a clear. Colour
+  mixing folds the new colour over the old along the crease, and pops tear
+  into paper scraps that tumble and bounce. Display text is Nunito.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -242,6 +260,7 @@ src/
     deliciousSkin.ts generated "Delicious" sprite set
     crystalsSkin.ts generated "Crystals" sprite set
     skinKit.ts      shared builder the seasonal themes are made from
+    stainedGlassSkin.ts, lanternSkin.ts, origamiSkin.ts  the three newest themes, on the same kit
     halloweenSkin.ts, winterSkin.ts, christmasSkin.ts,
     gooeySkin.ts, vintageSkin.ts, natureSkin.ts
     backdrops.ts    backdrop and tray/well registry by theme
@@ -281,7 +300,8 @@ src/
   splash, a ring or a shake and the layer decides what that looks like from
   the theme's `fx` profile and the intensity of the moment. Classic's profile
   turns every new treatment off, so the faithful port is unaffected. Each
-  theme also names a pop signature (stain, flare, ripple or bouncing chunks)
+  theme also names a pop signature (stain, flare, ripple, bouncing chunks or
+  the tile floating away) and a mix treatment (radial wipe, swirl or paper fold)
   and the layer plays its own synthesised cues under mixes, fragments and
   hit-stops. A frame-time governor drops bloom, sparks and fragment detail on
   devices that cannot keep up. Tune numbers in the lab (`?fx` on the URL),

@@ -30,7 +30,7 @@ import { SoundControls, type SoundLayout } from "../engine/soundControls";
 import { drawSwatch, gridHeight, layoutGrid, layoutStrip, stripThemes, swatchAt, type Swatch } from "../engine/themePicker";
 import { Effects } from "../engine/effects";
 import { intensityFor, popScale } from "../engine/fxTuning";
-import { drawSwirlMix } from "../engine/mixFx";
+import { drawMix } from "../engine/mixFx";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
@@ -1947,6 +1947,7 @@ export class GameScene implements Scene {
     if (desat > 0) g.filter = `saturate(${Math.round((1 - desat * 0.9) * 100)}%)`;
     if (pal.brickStyle !== "flat") for (const b of boardBricks) this.renderShadow(g, b);
     for (const b of boardBricks) this.renderBrick(g, b);
+    if (pal.fuse) this.renderSeams(g, boardBricks);
     for (const d of this.dieAnims) this.renderDieAnim(g, d);
     g.filter = "none";
     g.restore();
@@ -2134,6 +2135,48 @@ export class GameScene implements Scene {
     g.globalAlpha = 1;
   }
 
+  /** A brick sitting still in its cell, wearing its own colour. */
+  private settled(b: Brick): boolean {
+    if (b.gridX < 0 || b.spriteColor !== b.color) return false;
+    const f = this.fxOf(b);
+    if (f.lift > 0 || f.noaddT0 >= 0 || this.brickScale(b, f) < 0.98) return false;
+    const l = this.board.layout;
+    const p = this.drawPos(b, f);
+    const slack = l.cellW * 0.08;
+    return Math.abs(p.x - cellX(l, b.gridX)) < slack && Math.abs(p.y - cellY(l, b.gridY)) < slack;
+  }
+
+  /**
+   * Fused seams: settled bricks of one colour lose the lead between them,
+   * so a growing group reads as one pane. Drawn after the faces, before
+   * anything that moves.
+   */
+  private renderSeams(g: CanvasRenderingContext2D, bricks: Brick[]): void {
+    const l = this.board.layout;
+    const pal = this.ctx.palette;
+    const across = l.cellSep + l.cellW * 0.2;
+    const along = l.cellW * 0.52;
+    for (const b of bricks) {
+      if (!this.settled(b)) continue;
+      const color = pal.brickColors[b.color];
+      for (const [dx, dy] of [
+        [1, 0],
+        [0, 1],
+      ] as const) {
+        const nb = this.board.get(b.gridX + dx, b.gridY + dy);
+        if (!nb || nb.color !== b.color || !this.settled(nb)) continue;
+        const cx = (cellX(l, b.gridX) + cellX(l, nb.gridX) + l.cellW) / 2;
+        const cy = (cellY(l, b.gridY) + cellY(l, nb.gridY) + l.cellH) / 2;
+        const w = dx ? across : along;
+        const h = dx ? along : across;
+        g.fillStyle = color;
+        g.fillRect(cx - w / 2, cy - h / 2, w, h);
+        g.fillStyle = "rgba(255,255,255,0.1)";
+        g.fillRect(cx - w / 2, cy - h / 2, w, h);
+      }
+    }
+  }
+
   /** `Brick` draw event, plus the refined marker. */
   private renderBrick(g: CanvasRenderingContext2D, b: Brick): void {
     const l = this.board.layout;
@@ -2150,7 +2193,7 @@ export class GameScene implements Scene {
     const t = this.ctx.clock.t;
 
     const wiping = b.spriteColor !== b.color && f.wipeT0 >= 0;
-    if (wiping && this.ctx.palette.fx.mix === "swirl") {
+    if (wiping && this.ctx.palette.fx.mix !== "wipe") {
       const pal = this.ctx.palette;
       const q = clamp01((t - f.wipeT0) / D(WIPE_MS));
       const w = l.cellW * xs;
@@ -2159,7 +2202,7 @@ export class GameScene implements Scene {
       g.translate(p.x + l.cellW / 2 + xo, p.y + l.cellH / 2);
       g.rotate(f.rot);
       g.globalAlpha *= alpha;
-      drawSwirlMix(g, w, q, pal.brickColors[b.spriteColor], pal.brickColors[b.color], {
+      drawMix(g, pal.fx.mix, w, q, pal.brickColors[b.spriteColor], pal.brickColors[b.color], {
         old: () => drawSprite(g, brick, colorFrame(b.spriteColor), -w / 2, -h / 2, w, h),
         next: () => drawSprite(g, brick, colorFrame(b.color), -w / 2, -h / 2, w, h),
       });

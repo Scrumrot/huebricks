@@ -15,6 +15,9 @@ import { buildChristmasSprites } from "./engine/christmasSkin";
 import { buildGooeySprites } from "./engine/gooeySkin";
 import { buildVintageSprites } from "./engine/vintageSkin";
 import { buildNatureSprites } from "./engine/natureSkin";
+import { buildStainedGlassSprites } from "./engine/stainedGlassSkin";
+import { buildLanternSprites } from "./engine/lanternSkin";
+import { buildOrigamiSprites } from "./engine/origamiSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
 import { setReducedMotion } from "./engine/fxTuning";
@@ -218,6 +221,9 @@ async function boot(): Promise<void> {
     gooey: buildGooeySprites,
     vintage: buildVintageSprites,
     nature: buildNatureSprites,
+    stainedglass: buildStainedGlassSprites,
+    lantern: buildLanternSprites,
+    origami: buildOrigamiSprites,
   };
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
 
