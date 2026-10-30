@@ -236,6 +236,7 @@ export class DrHueScene extends ArcadeScene {
         const c = this.cellPos(below.x, below.y);
         this.ring(c.x + L.cell / 2, c.y + L.cell / 2, L.cell * 0.3, L.cell * 0.9, this.colorOf(h.result), 3);
         this.effects.mixSplash(c.x + L.cell / 2, c.y + L.cell / 2, L.cell, [this.colorOf(f.wipeFrom as Color), this.colorOf(h.result)], -Math.PI / 2);
+        this.effects.mixArc(c.x + L.cell / 2, c.y + L.cell / 2, L.cell, f.wipeFrom as Color, h.result);
         mixed = true;
       } else {
         const cell = this.well.add(h.x, h.y, h.color);

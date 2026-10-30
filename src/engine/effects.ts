@@ -1,4 +1,5 @@
 import type { Color } from "../core/color";
+import { arcPlan, wheelColorAt } from "./colorWheel";
 import type { AudioPort } from "./audio";
 import type { Clock } from "./clock";
 import { debrisFor } from "./debris";
@@ -9,6 +10,8 @@ import { popScale, TUNING } from "./fxTuning";
 import type { Palette } from "./theme";
 import type { View } from "./view";
 import { rgba } from "./modernSkin";
+import { GLYPHS, glyphPath, type Glyph } from "./skinKit";
+import { mixColors } from "./colorUtil";
 
 /**
  * The shared effects layer: debris, fragments, rings, screen shake, flash,
@@ -61,6 +64,25 @@ interface Ring {
   r1: number;
   color: string;
   width: number;
+  /** Outline shape; a circle when absent. */
+  shape?: Glyph;
+  /** Radians the shape turns over its life. */
+  spin: number;
+}
+
+/** The colour-theory arc drawn around a brick while it mixes. */
+interface MixArc {
+  x: number;
+  y: number;
+  r: number;
+  t0: number;
+  dur: number;
+  from: number;
+  sweep: number;
+  subtract: boolean;
+  black: boolean;
+  blackColor: string;
+  dots: { color: string; from: number; to: number }[];
 }
 
 /** A soft stain left on the surface where something popped. */
@@ -148,6 +170,9 @@ export class Effects {
   readonly particles: Particles;
   readonly fragments = new Fragments();
   private rings: Ring[] = [];
+  private arcs: MixArc[] = [];
+  private silhouetteUntil = -1;
+  private silhouetteColor = "#ffffff";
   private decals: Decal[] = [];
   private flares: Flare[] = [];
   private ripples: Ripple[] = [];
@@ -190,6 +215,20 @@ export class Effects {
     return this.rings.length;
   }
 
+  get arcCount(): number {
+    return this.arcs.length;
+  }
+
+  /** Shapes of the live rings, oldest first, for tests and the lab. */
+  get ringShapes(): (Glyph | "circle")[] {
+    return this.rings.map((r) => r.shape ?? "circle");
+  }
+
+  /** The flat colour the scene should paint the impact frame in, or null when no impact frame is showing. */
+  get silhouette(): string | null {
+    return this.ctx.clock.now < this.silhouetteUntil ? this.silhouetteColor : null;
+  }
+
   get decalCount(): number {
     return this.decals.length;
   }
@@ -222,6 +261,7 @@ export class Effects {
     this.fragments.update(clock.dt);
     const t = clock.t;
     this.rings = this.rings.filter((r) => t - r.t0 < r.dur);
+    this.arcs = this.arcs.filter((a) => t - a.t0 < a.dur);
     this.decals = this.decals.filter((d) => t - d.t0 < d.dur);
     this.flares = this.flares.filter((f) => t - f.t0 < f.dur);
     this.ripples = this.ripples.filter((r) => t - r.t0 < r.dur);
@@ -256,6 +296,8 @@ export class Effects {
     this.particles.clear();
     this.fragments.clear();
     this.rings = [];
+    this.arcs = [];
+    this.silhouetteUntil = -1;
     this.decals = [];
     this.flares = [];
     this.ripples = [];
@@ -281,17 +323,64 @@ export class Effects {
   // Primitives
   // ---------------------------------------------------------------------------
 
-  ring(x: number, y: number, r0: number, r1: number, color: string, width = 3, dur = 260, delay = 0): void {
-    this.rings.push({ x, y, t0: this.ctx.clock.t + delay, dur, r0, r1, color, width });
+  ring(x: number, y: number, r0: number, r1: number, color: string, width = 3, dur = 260, delay = 0, shape?: Glyph, spin = 0): void {
+    this.rings.push({ x, y, t0: this.ctx.clock.t + delay, dur, r0, r1, color, width, shape, spin });
   }
 
-  /** The pop ring, reaching further with intensity and doubled on big moments where the theme allows. */
-  burstRing(x: number, y: number, cell: number, color: string, k: number, delay = 0, dur = 300): void {
+  /**
+   * The pop ring, reaching further with intensity and doubled on big moments
+   * where the theme allows. With the glyph ring shape and a popped colour,
+   * the outline takes that colour's glyph: octagon for red, diamond for
+   * blue, circle for yellow, and a mix nests its parts as the inner rings.
+   */
+  burstRing(x: number, y: number, cell: number, color: string, k: number, delay = 0, dur = 300, popColor?: Color): void {
     const sc = popScale(k);
-    this.ring(x, y, cell * 0.5, cell * sc.ringCells, color, 4, dur, delay);
-    if (this.pal.fx.doubleRing && sc.secondRingDelay > 0) {
-      this.ring(x, y, cell * 0.4, cell * sc.ringCells * 0.7, color, 2.5, dur * 0.9, delay + sc.secondRingDelay);
+    const glyphs = this.pal.fx.ringShape === "glyph" && popColor !== undefined ? GLYPHS[popColor] : [];
+    const outer = glyphs[0];
+    const spin = outer === "octagon" ? 0.25 : outer === "diamond" ? -0.35 : 0;
+    this.ring(x, y, cell * 0.5, cell * sc.ringCells, color, 4, dur, delay, outer, spin);
+    if (!this.pal.fx.doubleRing) return;
+    const inner = glyphs.slice(1);
+    if (sc.secondRingDelay > 0 || inner.length > 0) {
+      this.ring(x, y, cell * 0.4, cell * sc.ringCells * 0.7, color, 2.5, dur * 0.9, delay + Math.max(sc.secondRingDelay, 50), inner[0] ?? outer, -spin);
     }
+    if (inner.length > 1) {
+      this.ring(x, y, cell * 0.3, cell * sc.ringCells * 0.45, color, 2, dur * 0.8, delay + 100, inner[1], spin);
+    }
+  }
+
+  /**
+   * The colour-theory arc for a combine: a band of the wheel around the
+   * brick sweeping from the old colour to the new, with the primary that
+   * joined (or left) sliding along it. Off unless the theme asks for it.
+   */
+  mixArc(cx: number, cy: number, cell: number, oldColor: Color, newColor: Color, dur = 520): void {
+    if (!this.pal.fx.mixArc) return;
+    const plan = arcPlan(oldColor, newColor);
+    this.arcs.push({
+      x: cx,
+      y: cy,
+      r: cell * 0.66,
+      t0: this.ctx.clock.t,
+      dur,
+      from: plan.from,
+      sweep: plan.sweep,
+      subtract: plan.subtract,
+      black: plan.black,
+      blackColor: this.pal.brickColors[7],
+      dots: plan.dots.map((d) => ({ color: this.pal.brickColors[d.color], from: d.from, to: d.to })),
+    });
+  }
+
+  /**
+   * The comic-book impact frame: for `ms` of wall time the scene paints
+   * everything as flat ink on `color`. Off for the theme's profile and under
+   * reduced motion, where a full-screen flash is unwelcome.
+   */
+  impactFrame(color: string, ms = 40): void {
+    if (!this.pal.fx.impactFrame || TUNING.motion < 1) return;
+    this.silhouetteColor = color;
+    this.silhouetteUntil = this.ctx.clock.now + ms;
   }
 
   /** Shake the screen; `dir` is where the kick goes first (defaults to a downward thump). */
@@ -578,6 +667,7 @@ export class Effects {
       this.particles.count > 0 ||
       this.fragments.count > 0 ||
       this.rings.length > 0 ||
+      this.arcs.length > 0 ||
       this.flares.length > 0 ||
       this.ripples.length > 0 ||
       this.streaks.length > 0 ||
@@ -597,6 +687,7 @@ export class Effects {
       this.particles.render(g);
     }
     this.renderRings(g);
+    this.renderArcs(g);
     this.renderFlares(g);
   }
 
@@ -643,6 +734,7 @@ export class Effects {
       g.shadowColor = "rgba(255,255,255,0.8)";
       g.shadowBlur = 14;
     }
+    g.lineJoin = "round";
     for (const r of this.rings) {
       const p = (t - r.t0) / r.dur;
       if (p < 0) continue;
@@ -650,9 +742,84 @@ export class Effects {
       g.globalAlpha = 0.9 * (1 - q);
       g.lineWidth = r.width * (1 - q * 0.6);
       g.strokeStyle = r.color;
-      g.beginPath();
-      g.arc(r.x, r.y, lerp(r.r0, r.r1, q), 0, Math.PI * 2);
-      g.stroke();
+      const radius = lerp(r.r0, r.r1, q);
+      if (r.shape && r.shape !== "circle") {
+        // Polygons are measured to the corner; pad them so they read as big as the circle.
+        g.save();
+        g.translate(r.x, r.y);
+        g.rotate(r.spin * q);
+        glyphPath(g, r.shape, 0, 0, radius * (r.shape === "diamond" ? 1.2 : 1.06));
+        g.stroke();
+        g.restore();
+      } else {
+        g.beginPath();
+        g.arc(r.x, r.y, radius, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    g.restore();
+  }
+
+  /** The colour-wheel arcs: a band of blended paints growing round the brick, the changed primary riding its tip. */
+  private renderArcs(g: CanvasRenderingContext2D): void {
+    if (this.arcs.length === 0) return;
+    const t = this.ctx.clock.t;
+    const colors = this.pal.brickColors;
+    g.save();
+    g.lineCap = "butt";
+    for (const a of this.arcs) {
+      const p = clamp01((t - a.t0) / a.dur);
+      const grow = easeOutCubic(clamp01(p / 0.6));
+      const fade = p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+      const span = a.sweep * grow;
+      const segs = Math.max(2, Math.ceil(Math.abs(span) / 0.18));
+      const r = a.r * (1 + 0.08 * (1 - fade));
+      const band = Math.max(2, a.r * 0.13);
+      const paintAt = (u: number): string => {
+        const wheel = wheelColorAt(a.from + span * u, colors);
+        // Through black the band darkens toward (or lightens away from) the centre colour.
+        const dark = a.black ? (a.subtract ? 1 - u : u) : 0;
+        return dark > 0 ? mixColors(wheel, a.blackColor, dark * 0.85) : wheel;
+      };
+      g.globalAlpha = 0.85 * fade;
+      g.lineWidth = band;
+      // Butt-capped segments that overlap by a hair, so the band is one smooth gradient rather than a string of beads.
+      const lap = (span < 0 ? -1 : 1) * Math.min(0.02, Math.abs(span) / segs / 2);
+      for (let i = 0; i < segs; i++) {
+        const u0 = i / segs;
+        const u1 = (i + 1) / segs;
+        g.strokeStyle = paintAt((u0 + u1) * 0.5);
+        g.beginPath();
+        g.arc(a.x, a.y, r, a.from + span * u0, a.from + span * u1 + (i < segs - 1 ? lap : 0), span < 0);
+        g.stroke();
+      }
+      // Round ends.
+      for (const [u, c] of [
+        [0, paintAt(0)],
+        [1, paintAt(1)],
+      ] as const) {
+        const ang = a.from + span * u;
+        g.fillStyle = c;
+        g.beginPath();
+        g.arc(a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r, band / 2, 0, Math.PI * 2);
+        g.fill();
+      }
+      // The primary that joined slides in along the wheel to the result; one that left slides out and away.
+      for (const d of a.dots) {
+        const k = easeOutCubic(clamp01(p / 0.7));
+        const ang = a.subtract ? lerp(d.to, d.from, k) : lerp(d.from, d.to, k);
+        const rr = a.subtract ? r * (1 + 0.55 * k) : r * (1.45 - 0.45 * k);
+        const dotAlpha = a.subtract ? fade * (1 - 0.7 * k) : fade;
+        g.globalAlpha = dotAlpha;
+        g.fillStyle = d.color;
+        g.beginPath();
+        g.arc(a.x + Math.cos(ang) * rr, a.y + Math.sin(ang) * rr, Math.max(2, a.r * 0.11), 0, Math.PI * 2);
+        g.fill();
+        g.globalAlpha = dotAlpha * 0.9;
+        g.lineWidth = Math.max(1, a.r * 0.03);
+        g.strokeStyle = "rgba(255,255,255,0.9)";
+        g.stroke();
+      }
     }
     g.restore();
   }

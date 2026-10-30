@@ -211,6 +211,13 @@ display's refresh rate. Pops have hit-stop, particles, a shockwave, screen
 shake on big chains and rising score labels; bricks squash when they land,
 the board turns as one piece with a small overshoot, combines wipe the new
 colour in radially, invalid moves shake, buttons spring, and cards slide in.
+The modern themes add the colour theory itself to the picture: a combine
+draws a short arc of the colour wheel round the brick from the old colour to
+the new, with the primary that joined (or left) sliding along it; while a
+brick is selected, the bricks a drop would pop together breathe as one and
+are joined by a faint line; pop shockwaves take the popped colour's glyph
+(octagon, diamond, circle, nested for mixes); and the biggest pops open on a
+single flat-ink impact frame.
 
 The theme is remembered in `localStorage` together with the high score, the
 furthest world reached, the mute setting and the two volume levels.
@@ -301,8 +308,9 @@ src/
   the theme's `fx` profile and the intensity of the moment. Classic's profile
   turns every new treatment off, so the faithful port is unaffected. Each
   theme also names a pop signature (stain, flare, ripple, bouncing chunks or
-  the tile floating away) and a mix treatment (radial wipe, swirl or paper fold)
-  and the layer plays its own synthesised cues under mixes, fragments and
+  the tile floating away), a mix treatment (radial wipe, swirl or paper fold)
+  and switches for the mix arc, group preview, glyph-shaped rings and impact
+  frame, and the layer plays its own synthesised cues under mixes, fragments and
   hit-stops. A frame-time governor drops bloom, sparks and fragment detail on
   devices that cannot keep up. Tune numbers in the lab (`?fx` on the URL),
   which shows frame and render times, then write them into `fxTuning.ts`.

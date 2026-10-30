@@ -195,6 +195,7 @@ export class HueSwapScene extends ArcadeScene {
       this.ctx.audio.play("BlocksCombine_snd");
       this.ring(to.x, to.y, L.cell * 0.3, L.cell * 0.9, this.colorOf(m.result), 3);
       this.effects.mixSplash(to.x, to.y, L.cell, [this.colorOf(m.from.color), this.colorOf(m.result)], Math.atan2(to.y - from.y, to.x - from.x));
+      this.effects.mixArc(to.x, to.y, L.cell, was, m.result);
     } else {
       const ax = m.a.x;
       const ay = m.a.y;

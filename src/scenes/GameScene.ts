@@ -1,4 +1,5 @@
-import { Board, type PopResult } from "../core/Board";
+import { Board, POP_GROUP_SIZE, type PopResult } from "../core/Board";
+import { groupIfPlaced } from "../core/preview";
 import { Brick } from "../core/Brick";
 import { BLUE, BLACK, colorFrame, COLOR_NAMES, GREEN, ORANGE, PURPLE, randomSpawnColor, RED, YELLOW, type Color } from "../core/color";
 import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD } from "../core/constants";
@@ -80,6 +81,8 @@ const CARD_MS = 420;
 const COUNT_MS = 500;
 const DESAT_MS = 400;
 const BREATHE_MS = 1400;
+/** Period of the group preview's shared breath. */
+const PREVIEW_MS = 720;
 /** Idle breathing of resting bricks: cycle length and amplitude (logical px). */
 const IDLE_MS = 2600;
 const IDLE_AMP = 0.9;
@@ -336,6 +339,8 @@ export class GameScene implements Scene {
   // --- hold slot and preview ---
   private held: Brick | null = null;
   private holdHover = false;
+  /** The group a drop on the hovered cell would complete, while a brick is selected. */
+  private preview: { key: string; members: Set<Brick>; t0: number } | null = null;
   private nextColors: Color[] = [];
 
   // --- subtract goal ---
@@ -1171,7 +1176,7 @@ export class GameScene implements Scene {
         this.fx.delete(b.id);
         this.dieAnims.push({ x: b.x, y: b.y, color: b.color, t0: t + D(gi * 40 + i * POP_STAGGER_MS), burst: false, spin: i % 2 === 0 ? 1 : -1, k });
       });
-      this.effects.burstRing(cxg, cyg, l.cellW, pal.callout, k, D(gi * 40 + 60), D(SHOCK_MS));
+      this.effects.burstRing(cxg, cyg, l.cellW, pal.callout, k, D(gi * 40 + 60), D(SHOCK_MS), g[0].color);
       if (pal.stains) {
         let ext = 0;
         for (const b of g) ext = Math.max(ext, Math.hypot(b.x + l.cellW / 2 - cxg, b.y + l.cellH / 2 - cyg));
@@ -1273,6 +1278,7 @@ export class GameScene implements Scene {
     this.ctx.audio.play("BlocksPopping_snd", 1, 1.0595 ** p.semitones);
     const sc = popScale(p.k);
     this.effects.impact(p.k, p.mult >= 3 ? sc.freezeMs + 30 : sc.freezeMs);
+    if (p.mult >= 4 || p.k >= 0.85) this.effects.impactFrame(pal.brickColors[p.color]);
     if (p.mult >= 2) this.effects.flash(pal.flashFromBrick ? pal.brickColors[p.color] : pal.flash, 30, generated ? sc.flash : 1);
     if (generated) {
       if (this.chain >= 2 || p.k > 0.25) this.effects.shake(sc.shake, p.dir);
@@ -1478,6 +1484,30 @@ export class GameScene implements Scene {
 
     this.selectedBrick = this.selected === HOLD ? this.held : (this.board.replenishList[this.selected] ?? null);
     this.syncSelectionFx();
+    this.updatePreview(inp.x, inp.y);
+  }
+
+  /** Work out which bricks a drop on the cell under the pointer would pop together, for the breathing preview. */
+  private updatePreview(px: number, py: number): void {
+    const sel = this.selectedBrick;
+    const placing = this.state === "rest" || (this.state === "tutorial" && this.tutorialPhase === "add");
+    const l = this.board.layout;
+    const n = this.board.cellNum;
+    const { gx, gy } = screenToGrid(l, px, py);
+    if (!this.ctx.palette.fx.groupPreview || !sel || !placing || gx < 0 || gy < 0 || gx >= n || gy >= n) {
+      this.preview = null;
+      return;
+    }
+    const key = `${sel.color}:${gx}:${gy}`;
+    if (this.preview?.key === key) return;
+    const rules = this.state === "tutorial" ? TUTORIAL_LEVELS[this.ctx.session.level] : undefined;
+    const p = groupIfPlaced(this.board, sel.color, gx, gy, rules?.canAdd ?? true, rules?.canSubtract ?? true);
+    this.preview = p && p.members.length >= POP_GROUP_SIZE ? { key, members: new Set(p.members), t0: this.ctx.clock.t } : null;
+  }
+
+  /** 0..1 shared breath of the previewed group. */
+  private previewBreath(): number {
+    return 0.5 - 0.5 * Math.cos((this.ctx.clock.t / D(PREVIEW_MS)) * Math.PI * 2);
   }
 
   /** Lift the newly selected brick, drop the old one, dim the rest of the line. */
@@ -1612,6 +1642,7 @@ export class GameScene implements Scene {
           this.effects.ring(cx, cy, l.cellW * 0.5, l.cellW * 0.8, pal.ring, 3, D(RING_MS));
           const dir = from ? Math.atan2(dest.y - from.y, dest.x - from.x) : undefined;
           this.effects.mixSplash(cx, cy, l.cellW, [pal.brickColors[dest.spriteColor], pal.brickColors[dest.color]], dir);
+          this.effects.mixArc(cx, cy, l.cellW, dest.spriteColor, dest.color);
         }
         break;
       }
@@ -1926,6 +1957,12 @@ export class GameScene implements Scene {
       return;
     }
 
+    const silhouette = this.effects.silhouette;
+    if (silhouette) {
+      this.renderImpactFrame(g, silhouette);
+      return;
+    }
+
     g.save();
     this.effects.applyShake(g, this.ctx.view.w / 2, this.ctx.view.h / 2);
 
@@ -1948,6 +1985,7 @@ export class GameScene implements Scene {
     if (pal.brickStyle !== "flat") for (const b of boardBricks) this.renderShadow(g, b);
     for (const b of boardBricks) this.renderBrick(g, b);
     if (pal.fuse) this.renderSeams(g, boardBricks);
+    if (this.preview) this.renderPreviewLinks(g);
     for (const d of this.dieAnims) this.renderDieAnim(g, d);
     g.filter = "none";
     g.restore();
@@ -2079,6 +2117,7 @@ export class GameScene implements Scene {
     const grow = b.inactiveDuration ? easeOutCubic(1 - b.inactiveTimer / b.inactiveDuration) : 1;
     let s = grow * f.s;
     if (b === this.selectedBrick) s *= 1 + 0.015 * (1 - Math.cos((this.ctx.clock.t / D(BREATHE_MS)) * Math.PI * 2));
+    if (this.preview?.members.has(b)) s *= 1 + 0.04 * this.previewBreath();
     return s;
   }
 
@@ -2151,6 +2190,70 @@ export class GameScene implements Scene {
    * so a growing group reads as one pane. Drawn after the faces, before
    * anything that moves.
    */
+  /** Faint links between the bricks a drop would pop together, pulsing with their shared breath. */
+  private renderPreviewLinks(g: CanvasRenderingContext2D): void {
+    const pv = this.preview;
+    if (!pv) return;
+    const l = this.board.layout;
+    const fadeIn = clamp01((this.ctx.clock.t - pv.t0) / D(140));
+    const col = this.ctx.palette.ring;
+    const w = Math.max(2, l.cellW * 0.07);
+    const centre = (b: Brick) => {
+      const p = this.drawPos(b, this.fxOf(b));
+      return { x: p.x + l.cellW / 2, y: p.y + l.cellH / 2 };
+    };
+    g.save();
+    g.globalAlpha = fadeIn * (0.26 + 0.24 * this.previewBreath());
+    g.fillStyle = col;
+    for (const b of pv.members) {
+      const c = centre(b);
+      for (const nb of [this.board.get(b.gridX + 1, b.gridY), this.board.get(b.gridX, b.gridY + 1)]) {
+        if (!nb || !pv.members.has(nb)) continue;
+        const d = centre(nb);
+        drawLine(g, c.x, c.y, d.x, d.y, w, col);
+      }
+      g.beginPath();
+      g.arc(c.x, c.y, w * 0.9, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /**
+   * The impact frame: for a couple of frames at a huge pop the scene is flat
+   * ink on the popped colour, every brick a solid block, before the normal
+   * burst plays.
+   */
+  private renderImpactFrame(g: CanvasRenderingContext2D, paper: string): void {
+    const l = this.board.layout;
+    fillScreen(g, paper);
+    const ink = "#15120F";
+    const pad = l.cellW * 0.04;
+    const box = (x: number, y: number, s = 1) => {
+      const w = (l.cellW - pad * 2) * s;
+      const h = (l.cellH - pad * 2) * s;
+      fillRoundRect(g, x + l.cellW / 2 - w / 2, y + l.cellH / 2 - h / 2, w, h, l.cellW * 0.18, ink);
+    };
+    g.save();
+    this.applyBoardTransform(g);
+    for (const b of this.board.bricks()) {
+      const p = this.drawPos(b, this.fxOf(b));
+      box(p.x, p.y);
+    }
+    for (const d of this.dieAnims) if (!d.burst) box(d.x, d.y, 1.18);
+    g.restore();
+    for (const b of this.board.replenishList) {
+      const p = this.drawPos(b, this.fxOf(b));
+      box(p.x, p.y);
+    }
+    if (this.held) {
+      const p = this.drawPos(this.held, this.fxOf(this.held));
+      box(p.x, p.y);
+    }
+    g.fillStyle = ink;
+    g.fillRect(l.boardX, replenishY(l) - l.cellSep * 1.5, l.boardW, Math.max(2, l.cellSep * 0.6));
+  }
+
   private renderSeams(g: CanvasRenderingContext2D, bricks: Brick[]): void {
     const l = this.board.layout;
     const pal = this.ctx.palette;

@@ -240,6 +240,7 @@ export class HueBobbleScene extends ArcadeScene {
       const c = this.center(hit.row, hit.col);
       this.ring(c.x, c.y, r * 0.6, r * 2.2, this.colorOf(result), 3);
       this.effects.mixSplash(c.x, c.y, L.cell, [this.colorOf(f.wipeFrom as Color), this.colorOf(result)], Math.atan2(s.vy, s.vx));
+      this.effects.mixArc(c.x, c.y, L.cell, f.wipeFrom as Color, result);
       this.ctx.audio.play("BlocksCombine_snd");
       at = hit;
     } else {

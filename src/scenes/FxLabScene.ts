@@ -264,7 +264,7 @@ export class FxLabScene implements Scene {
     });
     const cx = sx / picks.length;
     const cy = sy / picks.length;
-    this.effects.burstRing(cx, cy, cell, this.ctx.palette.callout, k, 60, 300);
+    this.effects.burstRing(cx, cy, cell, this.ctx.palette.callout, k, 60, 300, this.dying[0]?.color);
     const gx = x + (N * cell) / 2;
     const gy = y + (N * cell) / 2;
     this.pendingImpact = { k, dir: [cx - gx, cy - gy] };
@@ -298,6 +298,7 @@ export class FxLabScene implements Scene {
     const pal = this.ctx.palette;
     this.effects.ring(cx, cy, cell * 0.5, cell * 0.8, pal.ring, 3, 220);
     this.effects.mixSplash(cx, cy, cell, [pal.brickColors[tile.fx.wipeFrom], pal.brickColors[next]], -Math.PI / 2);
+    this.effects.mixArc(cx, cy, cell, tile.fx.wipeFrom, next);
     this.ctx.audio.play("BlocksCombine_snd");
   }
 

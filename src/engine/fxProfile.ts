@@ -30,6 +30,14 @@ export interface FxProfile {
    * floating up and away.
    */
   signature: "none" | "splat" | "flare" | "ripple" | "bounce" | "float";
+  /** Pop ring outline: a plain circle, or the popped colour's glyph (octagon, diamond, circle; nested for mixes). */
+  ringShape: "circle" | "glyph";
+  /** A short arc of the colour wheel around a mixing brick, from the old colour to the new, with the changed primary sliding along it. */
+  mixArc: boolean;
+  /** On the biggest pops the burst frame draws the board as flat ink on the popped colour for a couple of frames. */
+  impactFrame: boolean;
+  /** While a brick is selected, the group a drop would complete breathes together, joined by a faint line. */
+  groupPreview: boolean;
 }
 
 /** Nothing on: the faithful port. */
@@ -45,6 +53,10 @@ export const CLASSIC_FX: FxProfile = {
   stagedPop: false,
   mix: "wipe",
   signature: "none",
+  ringShape: "circle",
+  mixArc: false,
+  impactFrame: false,
+  groupPreview: false,
 };
 
 /** Baseline for generated themes; each overrides what its material calls for. */
@@ -60,6 +72,10 @@ export const MODERN_FX: FxProfile = {
   stagedPop: true,
   mix: "swirl",
   signature: "bounce",
+  ringShape: "glyph",
+  mixArc: true,
+  impactFrame: true,
+  groupPreview: true,
 };
 
 export function fxProfile(overrides: Partial<FxProfile> = {}): FxProfile {

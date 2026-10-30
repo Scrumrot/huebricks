@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "../test/harness";
 import { Effects } from "./effects";
 import { Fragments } from "./fragments";
-import { resetTuning } from "./fxTuning";
+import { resetTuning, setReducedMotion } from "./fxTuning";
 import type { ThemeName } from "./theme";
 
 const draw = () => {};
@@ -63,6 +63,46 @@ describe("pop signatures per theme", () => {
     const l = setup("lantern");
     l.fx.celebrate([10, 50], 100, 40, () => 1);
     expect(l.fx.particles.count).toBeGreaterThan(2 * 9);
+  });
+
+  it("the mix arc, impact frame and shaped rings are off for classic", () => {
+    const { h, fx } = setup("classic");
+    fx.mixArc(0, 0, 40, 1, 5);
+    expect(fx.arcCount).toBe(0);
+    fx.impactFrame("#f00");
+    expect(fx.silhouette).toBeNull();
+    fx.burstRing(0, 0, 40, "#fff", 1, 0, 300, 1);
+    expect(fx.ringShapes).toEqual(["circle"]);
+    advance(h, fx, 100);
+    expect(fx.ringCount).toBe(1);
+  });
+
+  it("modern themes ring in the popped colour's glyph, nested for mixes", () => {
+    const { fx } = setup("pigment");
+    fx.burstRing(0, 0, 40, "#fff", 0, 0, 300, 1);
+    expect(fx.ringShapes).toEqual(["octagon"]);
+    fx.clear();
+    fx.burstRing(0, 0, 40, "#fff", 0, 0, 300, 3);
+    expect(fx.ringShapes).toEqual(["diamond", "octagon"]);
+    fx.clear();
+    fx.burstRing(0, 0, 40, "#fff", 1, 0, 300, 7);
+    expect(fx.ringShapes).toEqual(["octagon", "diamond", "circle"]);
+  });
+
+  it("the mix arc lives for its duration and the impact frame for a few wall frames", () => {
+    const { h, fx } = setup("pigment");
+    fx.mixArc(0, 0, 40, 1, 5);
+    expect(fx.arcCount).toBe(1);
+    advance(h, fx, 600);
+    expect(fx.arcCount).toBe(0);
+    fx.impactFrame("#f00", 60);
+    expect(fx.silhouette).toBe("#f00");
+    h.clock.advance(h.clock.now + 100);
+    expect(fx.silhouette).toBeNull();
+    setReducedMotion(true);
+    fx.impactFrame("#f00", 60);
+    expect(fx.silhouette).toBeNull();
+    setReducedMotion(false);
   });
 
   it("a scene can keep its own richer signature", () => {

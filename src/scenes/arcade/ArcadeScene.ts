@@ -566,7 +566,7 @@ export abstract class ArcadeScene implements Scene {
   protected impact(k: number, x: number, y: number, color?: Color): void {
     const sc = popScale(k);
     const L = this.L;
-    this.effects.burstRing(x, y, L.cell, this.ctx.palette.callout, k, 60, 300);
+    this.effects.burstRing(x, y, L.cell, this.ctx.palette.callout, k, 60, 300, color);
     if (k >= 0.1) this.effects.impact(k);
     this.effects.shake(sc.shake, [x - (L.x + L.w / 2), y - (L.y + L.h / 2)]);
     if (k >= 0.25) this.effects.flash(this.ctx.palette.flash, 90, sc.flash);
