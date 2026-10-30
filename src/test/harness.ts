@@ -1,6 +1,7 @@
 import type { ArcadeMode } from "../core/arcade";
 import { SPRITE_FRAMES, type MusicName, type SoundName, type Sprite, type SpriteMap, type SpriteName } from "../engine/assets";
 import type { AudioPort } from "../engine/audio";
+import type { CueName } from "../engine/synth";
 import { Clock } from "../engine/clock";
 import type { InputState } from "../engine/input";
 import type { SaveData } from "../engine/save";
@@ -85,9 +86,13 @@ export class FakeInput implements InputState {
 export class SilentAudio implements AudioPort {
   muted = false;
   readonly played: SoundName[] = [];
+  readonly cues: CueName[] = [];
   music: MusicName | null = null;
   play(name: SoundName): void {
     this.played.push(name);
+  }
+  cue(name: CueName): void {
+    this.cues.push(name);
   }
   playMusic(name: MusicName): void {
     this.music = name;

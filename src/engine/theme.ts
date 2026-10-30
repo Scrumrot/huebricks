@@ -276,7 +276,7 @@ export const PIGMENT: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: true,
-  fx: fxProfile({ fragments: false, vignette: "rgba(70,45,20,1)" }),
+  fx: fxProfile({ fragments: false, vignette: "rgba(70,45,20,1)", signature: "splat" }),
 };
 
 /** "Blocky": soft 3D toy bricks, one light from the top-left, cel shaded. */
@@ -343,7 +343,7 @@ export const BLOCKY: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ shakeRot: false, mix: "wipe", vignette: "#000000" }),
+  fx: fxProfile({ shakeRot: false, mix: "wipe", vignette: "#000000", signature: "bounce" }),
 };
 
 /** "Spectra": glowing gel tiles on a deep dark field. */
@@ -410,7 +410,7 @@ export const SPECTRA: Palette = {
   flashFromBrick: true,
   particlesAdditive: true,
   stains: false,
-  fx: fxProfile({ sparks: "#ffffff", bloom: true, vignette: "#000000" }),
+  fx: fxProfile({ sparks: "#ffffff", bloom: true, vignette: "#000000", signature: "flare" }),
 };
 
 /** "Delicious": frosted tarts on a gingham bakery counter. */
@@ -477,7 +477,7 @@ export const DELICIOUS: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ vignette: "rgba(90,50,30,1)" }),
+  fx: fxProfile({ vignette: "rgba(90,50,30,1)", signature: "bounce" }),
 };
 
 /** "Crystals": cut gemstones in a dark cave; the tray sockets fill with light. */
@@ -544,7 +544,7 @@ export const CRYSTALS: Palette = {
   flashFromBrick: true,
   particlesAdditive: true,
   stains: false,
-  fx: fxProfile({ sparks: "#ffffff", bloom: true, shakeRot: false, vignette: "#000000" }),
+  fx: fxProfile({ sparks: "#ffffff", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
 };
 
 /** "Halloween: candies under a harvest moon". */
@@ -611,7 +611,7 @@ export const HALLOWEEN: Palette = {
   flashFromBrick: true,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ fragments: false, sparks: "#ffb347", bloom: true, vignette: "#000000" }),
+  fx: fxProfile({ fragments: false, sparks: "#ffb347", bloom: true, vignette: "#000000", signature: "splat" }),
 };
 
 /** "Winter: ice cubes in the snow". */
@@ -678,7 +678,7 @@ export const WINTER: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ sparks: "#ffffff", shakeRot: false, vignette: "rgba(40,70,110,1)" }),
+  fx: fxProfile({ sparks: "#ffffff", shakeRot: false, vignette: "rgba(40,70,110,1)", signature: "flare" }),
 };
 
 /** "Christmas: presents under the lights". */
@@ -745,7 +745,7 @@ export const CHRISTMAS: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ sparks: "#fff3b0", bloom: true, vignette: "#000000" }),
+  fx: fxProfile({ sparks: "#fff3b0", bloom: true, vignette: "#000000", signature: "bounce" }),
 };
 
 /** "Gooey: glossy slime in a dark lab". */
@@ -812,7 +812,7 @@ export const GOOEY: Palette = {
   flashFromBrick: true,
   particlesAdditive: true,
   stains: false,
-  fx: fxProfile({ fragments: false, bloom: true, vignette: "#000000" }),
+  fx: fxProfile({ fragments: false, bloom: true, vignette: "#000000", signature: "ripple" }),
 };
 
 /** "Vintage: letterpress on aged paper". */
@@ -879,7 +879,7 @@ export const VINTAGE: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, mix: "wipe", vignette: "rgba(50,35,20,1)" }),
+  fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, mix: "wipe", vignette: "rgba(50,35,20,1)", signature: "bounce" }),
 };
 
 /** "Nature: river stones on wood in a meadow". */
@@ -946,7 +946,7 @@ export const NATURE: Palette = {
   flashFromBrick: false,
   particlesAdditive: false,
   stains: false,
-  fx: fxProfile({ vignette: "rgba(20,50,30,1)" }),
+  fx: fxProfile({ vignette: "rgba(20,50,30,1)", signature: "bounce" }),
 };
 
 export const PALETTES: Record<ThemeName, Palette> = {

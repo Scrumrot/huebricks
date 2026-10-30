@@ -24,6 +24,8 @@ export interface FxProfile {
   stagedPop: boolean;
   /** Colour mixing: a hard radial wipe or a soft swirl with a highlight sweep. */
   mix: "wipe" | "swirl";
+  /** The material's own signature on a pop: a wet stain, a light flare, a surface ripple or chunks that bounce on the shelf. */
+  signature: "none" | "splat" | "flare" | "ripple" | "bounce";
 }
 
 /** Nothing on: the faithful port. */
@@ -38,6 +40,7 @@ export const CLASSIC_FX: FxProfile = {
   popFlash: false,
   stagedPop: false,
   mix: "wipe",
+  signature: "none",
 };
 
 /** Baseline for generated themes; each overrides what its material calls for. */
@@ -52,6 +55,7 @@ export const MODERN_FX: FxProfile = {
   popFlash: true,
   stagedPop: true,
   mix: "swirl",
+  signature: "bounce",
 };
 
 export function fxProfile(overrides: Partial<FxProfile> = {}): FxProfile {

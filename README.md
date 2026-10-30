@@ -206,6 +206,7 @@ src/
     fxTuning.ts  intensity from chain and size, plus the live numbers the lab edits
     mixFx.ts     the soft "swirl" colour mix with a highlight sweep
     colorUtil.ts parse / mix / shade colours, memoised colour ramps
+    synth.ts     procedural sound cues (whoosh, crunch, thump, tick, sparkle) from Web Audio
     clock.ts     frame clock with hit-stop, slow motion and sim interpolation
     buttonFeel.ts press / hover scale for buttons
     modernSkin.ts  generated "Pigment" sprite set and shared drawing helpers
@@ -251,8 +252,12 @@ src/
 - **Effects go through `engine/effects.ts`.** A scene asks for a pop, a mix
   splash, a ring or a shake and the layer decides what that looks like from
   the theme's `fx` profile and the intensity of the moment. Classic's profile
-  turns every new treatment off, so the faithful port is unaffected. Tune
-  numbers in the lab (`?fx` on the URL), then write them into `fxTuning.ts`.
+  turns every new treatment off, so the faithful port is unaffected. Each
+  theme also names a pop signature (stain, flare, ripple or bouncing chunks)
+  and the layer plays its own synthesised cues under mixes, fragments and
+  hit-stops. A frame-time governor drops bloom, sparks and fragment detail on
+  devices that cannot keep up. Tune numbers in the lab (`?fx` on the URL),
+  which shows frame and render times, then write them into `fxTuning.ts`.
 - `npm run check` is what CI runs; keep it green.
 
 ## Differences from the GameMaker version

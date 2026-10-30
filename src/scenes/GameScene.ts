@@ -340,6 +340,10 @@ export class GameScene implements Scene {
   private cardT0 = -1;
   /** Impact of the current scoring pop, held until its first brick bursts on staged themes. */
   private pendingPop: PopImpact | null = null;
+  /** Intensity of the last scoring pop: the score counter ticks faster after a big one. */
+  private lastK = 0;
+  private lastTick = -1e9;
+  private scoreShownFrom = 0;
   private barFlashT0 = -1e9;
   private selFlashT0 = -1e9;
   /** HUD score counts toward the real score. */
@@ -1085,6 +1089,8 @@ export class GameScene implements Scene {
     if (p.mult >= 2) this.effects.flash(pal.flashFromBrick ? pal.brickColors[p.color] : pal.flash, 30, generated ? sc.flash : 1);
     if (generated) {
       if (this.chain >= 2 || p.k > 0.25) this.effects.shake(sc.shake, p.dir);
+      if (this.chain >= 3) this.effects.wash(pal.brickColors[p.color], 450 + 250 * p.k);
+      this.lastK = p.k;
     } else if (this.chain >= 3) {
       this.effects.shake(3, [0, 0]);
     }
@@ -1514,6 +1520,10 @@ export class GameScene implements Scene {
             if (b.spriteY < b.y) {
               b.grav += GRAVITY;
               b.spriteY += b.grav;
+              if (b.grav > GRAVITY * 4 && this.ctx.palette.kind === "generated") {
+                const l = this.board.layout;
+                this.effects.trail(b.spriteX + l.cellW / 2, b.spriteY + l.cellH * 0.3, 0, b.grav * FPS, this.ctx.palette.brickColors[b.color], l.cellW);
+              }
             }
             if (b.spriteY >= b.y) {
               b.spriteY = b.y;
@@ -1550,7 +1560,8 @@ export class GameScene implements Scene {
     this.tweens.to(f, { sx: 1, sy: 1 }, D(LAND_SETTLE_MS), easeOutBack, { delay: D(LAND_SQUASH_MS) });
     if (fell > l.cellH * 1.5) {
       const dust = this.ctx.palette.dust;
-      this.effects.particles.spawn(b.x + l.cellW / 2, b.y + l.cellH, 3, dust, {
+      const count = Math.min(9, 3 + Math.floor(fell / l.cellH) * 2);
+      this.effects.particles.spawn(b.x + l.cellW / 2, b.y + l.cellH, count, dust, {
         speed: [30, 80],
         size: [3, 5],
         life: [200, 350],
@@ -1657,8 +1668,14 @@ export class GameScene implements Scene {
     const t = clock.t;
     if (this.ctx.session.score !== this.scoreTarget) {
       this.scoreTarget = this.ctx.session.score;
-      this.tweens.to(this.scoreFx, { v: this.scoreTarget }, D(COUNT_MS));
+      this.tweens.to(this.scoreFx, { v: this.scoreTarget }, D(COUNT_MS * (1 - 0.5 * this.lastK)));
     }
+    if (this.ctx.palette.fx.stagedPop && this.scoreFx.v < this.scoreTarget - 0.5 && t - this.lastTick > 45) {
+      this.lastTick = t;
+      const progress = 1 - (this.scoreTarget - this.scoreFx.v) / Math.max(1, this.scoreTarget - this.scoreShownFrom);
+      this.ctx.audio.cue("tick", 0.5, 1 + 0.6 * clamp01(progress));
+    }
+    if (this.scoreFx.v >= this.scoreTarget - 0.5) this.scoreShownFrom = this.scoreTarget;
     for (const d of this.dieAnims) {
       const e = t - d.t0;
       if (!d.burst && e >= D(POP_GROW_MS + POP_HOLD_MS)) {
@@ -1687,6 +1704,8 @@ export class GameScene implements Scene {
       color: d.color,
       k: d.k,
       draw: (g, w, h) => drawSprite(g, sp.brick_sprite, frame, -w / 2, -h / 2, w, h),
+      floor: gridBottom(l),
+      signature: !this.ctx.palette.stains,
     });
   }
 
@@ -1696,7 +1715,7 @@ export class GameScene implements Scene {
     const n = l.cellNum;
     const y = cellY(l, n) - l.cellSep;
     const xs = Array.from({ length: n }, (_, x) => cellX(l, x) + l.cellW / 2);
-    this.effects.celebrate(xs, y, l.cellW, (i) => ((i % 6) + 1) as Color);
+    this.effects.celebrate(xs, y, l.cellW, (i) => ((i % 6) + 1) as Color, this.ctx.palette.kind === "generated" ? 45 : 0);
   }
 
   /** 1 right after a level clear, easing to 0 over FLARE_MS. */
@@ -1722,6 +1741,7 @@ export class GameScene implements Scene {
     this.effects.applyShake(g, this.ctx.view.w / 2, this.ctx.view.h / 2);
 
     this.renderBackground(g);
+    this.effects.renderUnder(g);
     if (world !== 0) {
       this.renderButtons(g);
       this.renderPreview(g);
@@ -1754,6 +1774,7 @@ export class GameScene implements Scene {
       this.renderBrick(g, this.selectedBrick);
     }
 
+    this.effects.renderWash(g, l.boardX, l.boardY, l.boardW, l.boardH);
     this.effects.renderFlash(g, l.boardX, l.boardY, l.boardW, l.boardH);
 
     this.renderSelector(g);
@@ -1856,7 +1877,9 @@ export class GameScene implements Scene {
       if (e < a0) {
         y += pitch + (b.gridY === l.cellNum - 1 ? 2 * Math.sin((e / a0) * Math.PI * 4) : 0);
       } else {
-        y += pitch * (1 - PUSH_EASE(clamp01((e - a0) / D(PUSH_MS))));
+        // Generated themes let the columns lag a little so the push rolls across the board.
+        const lag = this.ctx.palette.kind === "generated" ? b.gridX * D(14) : 0;
+        y += pitch * (1 - PUSH_EASE(clamp01((e - a0 - lag) / D(PUSH_MS))));
       }
     }
     return { x, y };

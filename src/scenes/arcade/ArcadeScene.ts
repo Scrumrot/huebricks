@@ -559,13 +559,14 @@ export abstract class ArcadeScene implements Scene {
   }
 
   /** Ring, hit-stop, shake and flash for a pop of intensity `k` centred at (x, y). */
-  protected impact(k: number, x: number, y: number): void {
+  protected impact(k: number, x: number, y: number, color?: Color): void {
     const sc = popScale(k);
     const L = this.L;
     this.effects.burstRing(x, y, L.cell, this.ctx.palette.callout, k, 60, 300);
     if (k >= 0.1) this.effects.impact(k);
     this.effects.shake(sc.shake, [x - (L.x + L.w / 2), y - (L.y + L.h / 2)]);
     if (k >= 0.25) this.effects.flash(this.ctx.palette.flash, 90, sc.flash);
+    if (k >= 0.5 && color !== undefined) this.effects.wash(this.colorOf(color), 450 + 250 * k);
   }
 
   /** Debris, fragments and sparks from a popped tile centred at (cx, cy), in the theme's own style. */
@@ -583,6 +584,7 @@ export abstract class ArcadeScene implements Scene {
       k: o.k ?? 0,
       debris: o.count ?? 12,
       draw: (g, w) => drawTile(g, sp, pal, color, -w / 2, -w / 2, w, { shape, seed: o.seed }),
+      floor: this.L.y + this.L.h - cell * 0.1,
     });
   }
 
@@ -590,7 +592,7 @@ export abstract class ArcadeScene implements Scene {
   protected celebrate(): void {
     const L = this.L;
     const xs = Array.from({ length: L.cols }, (_, x) => L.x + (x + 0.5) * L.cell);
-    this.effects.celebrate(xs, L.y + L.h, L.cell, (i) => ((i % 6) + 1) as Color);
+    this.effects.celebrate(xs, L.y + L.h, L.cell, (i) => ((i % 6) + 1) as Color, this.ctx.palette.kind === "generated" ? 45 : 0);
   }
 
   /** Screen position of a grid cell's top-left corner. */
@@ -620,6 +622,7 @@ export abstract class ArcadeScene implements Scene {
     g.save();
     this.effects.applyShake(g, this.L.vw / 2, this.L.vh / 2);
     this.renderWellPanel(g);
+    this.effects.renderUnder(g);
     g.save();
     const desat = this.lostFx.desat;
     if (desat > 0) g.filter = `saturate(${Math.round((1 - desat * 0.9) * 100)}%)`;
@@ -627,6 +630,7 @@ export abstract class ArcadeScene implements Scene {
     g.filter = "none";
     g.restore();
     this.effects.renderWorld(g);
+    this.effects.renderWash(g, this.L.x, this.L.y, this.L.w, this.L.h);
     this.effects.renderFlash(g, this.L.x, this.L.y, this.L.w, this.L.h);
     this.renderCallouts(g);
     this.renderHud(g);

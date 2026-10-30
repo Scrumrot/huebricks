@@ -14,6 +14,7 @@ import {
   type Bubble,
 } from "../../core/bobble";
 import { BLUE, combineColors, RED, type Color } from "../../core/color";
+import { FPS } from "../../core/constants";
 import type { MusicName } from "../../engine/assets";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
 import { ArcadeScene, STEP_MS } from "./ArcadeScene";
@@ -217,6 +218,7 @@ export class HueBobbleScene extends ArcadeScene {
     s.y = step.shot.y + L.y;
     s.vx = step.shot.vx;
     s.vy = step.shot.vy;
+    if (this.ctx.palette.kind === "generated") this.effects.trail(s.px, s.py, s.vx * FPS, s.vy * FPS, this.colorOf(s.color), L.cell);
     if (step.bounces) this.ctx.audio.play("BlocksSelection_snd", 0.3, 0.8);
     if (step.landed) this.stick(s, step.landed.hit);
   }
@@ -288,7 +290,7 @@ export class HueBobbleScene extends ArcadeScene {
     this.addScore(pts);
     this.callout(`+${pts}`, sx / group.length, sy / group.length, this.ctx.palette.callout, 18);
     this.ctx.audio.play("BlocksPopping_snd");
-    this.impact(k, sx / group.length, sy / group.length);
+    this.impact(k, sx / group.length, sy / group.length, group[0]?.color);
     // anything no longer hanging from the ceiling drops out
     const loose = this.grid.floating();
     if (loose.length) {

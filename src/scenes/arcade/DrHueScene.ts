@@ -197,6 +197,18 @@ export class DrHueScene extends ArcadeScene {
     if (!p) return;
     const y = restingRow(this.well, p);
     const fell = y - p.y;
+    if (fell >= 2) {
+      const L = this.L;
+      const [ox, oy] = offsetOf(p.rot);
+      for (const [hx, hy, c] of [
+        [p.x, p.y, p.a],
+        [p.x + ox, p.y + oy, p.b],
+      ] as const) {
+        const from = this.cellPos(hx, hy);
+        const to = this.cellPos(hx, hy + fell);
+        this.effects.streak(from.x + L.cell / 2, from.y, to.y + L.cell, L.cell, this.colorOf(c));
+      }
+    }
     p.y = y;
     p.dy = y - Math.min(1.5, fell * 0.4);
     this.land();
@@ -330,7 +342,7 @@ export class DrHueScene extends ArcadeScene {
       );
     }
     this.ctx.audio.play("BlocksPopping_snd", 1, 1 + (this.chain - 1) * 0.08);
-    this.impact(k, sx / cells.length, sy / cells.length);
+    this.impact(k, sx / cells.length, sy / cells.length, cells[0]?.color);
   }
 
   // ---------------------------------------------------------------------------

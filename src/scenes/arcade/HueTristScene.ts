@@ -144,6 +144,12 @@ export class HueTristScene extends ArcadeScene {
     if (!p) return;
     const y = restingRow(this.well, p.x, p.y);
     const fell = y - p.y;
+    if (fell >= 2) {
+      const L = this.L;
+      const from = this.cellPos(p.x, p.y);
+      const to = this.cellPos(p.x, y);
+      this.effects.streak(from.x + L.cell / 2, from.y, to.y + L.cell, L.cell, this.colorOf(p.color));
+    }
     p.y = y;
     p.dy = y - Math.min(1.5, fell * 0.4);
     this.land();
@@ -267,7 +273,7 @@ export class HueTristScene extends ArcadeScene {
     }
     this.addScore(total);
     this.ctx.audio.play("BlocksPopping_snd", 1, 1 + (this.chain - 1) * 0.08);
-    this.impact(k, mx / groups.length, my / groups.length);
+    this.impact(k, mx / groups.length, my / groups.length, groups[0]?.[0]?.color);
   }
 
   // ---------------------------------------------------------------------------

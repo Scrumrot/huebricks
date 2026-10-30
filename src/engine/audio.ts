@@ -1,4 +1,5 @@
 import { audioUrl, SOUND_NAMES, type MusicName, type SoundName } from "./assets";
+import { playCue, type CueName } from "./synth";
 
 /**
  * Sound effects through Web Audio (low latency, overlapping plays) and
@@ -11,6 +12,8 @@ import { audioUrl, SOUND_NAMES, type MusicName, type SoundName } from "./assets"
 export interface AudioPort {
   muted: boolean;
   play(name: SoundName, volume?: number, rate?: number): void;
+  /** A synthesised cue (see `synth.ts`); no asset, so it never waits on a load. */
+  cue(name: CueName, volume?: number, rate?: number): void;
   playMusic(name: MusicName): void;
   stopMusic(): void;
   toggleMute(): boolean;
@@ -72,6 +75,11 @@ export class AudioSystem implements AudioPort {
     gain.gain.value = volume * this.sfxVolume;
     src.connect(gain).connect(this.ctx.destination);
     src.start();
+  }
+
+  cue(name: CueName, volume = 1, rate = 1): void {
+    if (this.muted || !this.ctx) return;
+    playCue(this.ctx, name, volume * this.sfxVolume, rate);
   }
 
   playMusic(name: MusicName): void {

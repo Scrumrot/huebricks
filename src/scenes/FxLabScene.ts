@@ -69,6 +69,7 @@ export class FxLabScene implements Scene {
   private rowsY = 0;
   private status = "";
   private statusT0 = -1e9;
+  private renderMs = 0;
 
   constructor(ctx: GameContext) {
     this.ctx = ctx;
@@ -101,7 +102,7 @@ export class FxLabScene implements Scene {
       this.grid = { x: v.w / 2 - side / 2, y: m + 30, cell: side / N };
       this.panel = { x: m, y: this.grid.y + side + 18, w: v.w - m * 2 };
     } else {
-      const side = Math.min(v.h - m * 2 - 36, v.w * 0.46);
+      const side = Math.min(v.h - m * 2 - 62, v.w * 0.46);
       this.grid = { x: m, y: m + 30, cell: side / N };
       this.panel = { x: m + side + 24, y: m + 8, w: v.w - (m + side + 24) - m };
     }
@@ -118,8 +119,11 @@ export class FxLabScene implements Scene {
       ["chain+", "Chain +"],
       ["clear", "Level clear"],
       ["lose", "Lose"],
+      ["drop", "Hard drop"],
+      ["wash", "Chain wash"],
       ["theme", "Theme ▸"],
       ["reset", "Reset tuning"],
+      ["low", "Low power"],
     ];
     this.buttons = actions.map(([id, label, primary], i) => ({
       id,
@@ -182,6 +186,21 @@ export class FxLabScene implements Scene {
         this.effects.vignette(0.6, 1600);
         this.effects.shake(4, [0, 1]);
         this.ctx.audio.play("tryagain_snd");
+        break;
+      case "drop": {
+        const { x, y, cell } = this.grid;
+        const col = Math.floor(Math.random() * N);
+        const color = this.tiles[col]?.color ?? 1;
+        this.effects.streak(x + (col + 0.5) * cell, y - cell * 2.5, y + N * cell, cell, this.ctx.palette.brickColors[color]);
+        this.ctx.audio.play("BlocksLanding_snd");
+        break;
+      }
+      case "wash":
+        this.effects.wash(this.ctx.palette.brickColors[randomSpawnColor()], 600);
+        break;
+      case "low":
+        this.effects.lowPower = !this.effects.lowPower;
+        this.say(this.effects.lowPower ? "Low power on" : "Low power off");
         break;
       case "theme":
         this.ctx.setTheme(nextTheme(this.ctx.save.theme));
@@ -324,11 +343,13 @@ export class FxLabScene implements Scene {
     const v = this.ctx.view;
     const sp = this.ctx.sprites;
 
+    const renderStart = performance.now();
     fillScreen(g, pal.background);
     if (pal.kind === "generated" && pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, t);
 
     g.save();
     this.effects.applyShake(g, v.w / 2, v.h / 2);
+    this.effects.renderUnder(g);
 
     const { x, y, cell } = this.grid;
     const size = cell * 0.9;
@@ -364,6 +385,7 @@ export class FxLabScene implements Scene {
           color,
           k: d.k,
           draw: (gg, w) => drawTile(gg, sp, pal, color, -w / 2, -w / 2, w),
+          floor: y + N * cell,
         });
       }
       const { s, rot, alpha } = dyingScale(e, d.spin);
@@ -387,6 +409,7 @@ export class FxLabScene implements Scene {
     this.dying = this.dying.filter((d) => t - d.t0 < DYING_MS);
 
     this.effects.renderWorld(g);
+    this.effects.renderWash(g, x, y, N * cell, N * cell);
     this.effects.renderFlash(g, x, y, N * cell, N * cell);
 
     // Panel
@@ -416,6 +439,16 @@ export class FxLabScene implements Scene {
     });
     const info = `chain ${this.chain}  ·  ${THEME_LABELS[pal.name]}  ·  keys: P pop, O pop×4, X mix, C clear, L lose, [ ] chain, Esc back`;
     drawText(g, info, x, y + N * cell + 18, { size: 11, color: pal.hudMuted, weight: 500, font: pal.font, align: "left" });
+    this.renderMs += (performance.now() - renderStart - this.renderMs) * 0.1;
+    const perf = `frame ${this.effects.frameMs.toFixed(1)} ms  ·  render ${this.renderMs.toFixed(2)} ms  ·  ${this.effects.particles.count} particles, ${this.effects.fragments.count} fragments${this.effects.lowPower ? "  ·  LOW POWER" : ""}`;
+    drawText(g, perf, x, y + N * cell + 34, {
+      size: 11,
+      color: this.effects.lowPower ? pal.overlayAccent : pal.hudMuted,
+      weight: 500,
+      font: pal.font,
+      align: "left",
+      tabular: true,
+    });
     if (t - this.statusT0 < 1600) {
       const w = Math.min(v.w - 32, 360);
       drawCard(g, pal.ui, v.w / 2 - w / 2, 8, w, 30, 12);

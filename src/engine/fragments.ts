@@ -21,6 +21,8 @@ export interface ShatterOptions {
   bias?: number;
   /** Spin range (radians/s). */
   spin?: number;
+  /** A surface the chunks bounce off once (screen y), if any. */
+  floor?: number;
 }
 
 interface Fragment {
@@ -41,6 +43,8 @@ interface Fragment {
   grav: number;
   life: number;
   max: number;
+  floor: number;
+  bounced: boolean;
 }
 
 /** Position of a fragment `e` ms later under gravity, for tests and previews. */
@@ -100,6 +104,8 @@ export class Fragments {
           grav: o.gravity ?? 1400,
           life: max,
           max,
+          floor: o.floor ?? Infinity,
+          bounced: false,
         });
       }
     }
@@ -116,6 +122,20 @@ export class Fragments {
       f.x += f.vx * s;
       f.y += f.vy * s;
       f.rot += f.vr * s;
+      if (f.vy > 0 && f.y >= f.floor) {
+        f.y = f.floor;
+        if (f.bounced) {
+          // second touch: come to rest on the shelf
+          f.vy = 0;
+          f.vx *= 0.85;
+          f.vr *= 0.7;
+        } else {
+          f.bounced = true;
+          f.vy = -f.vy * 0.42;
+          f.vx *= 0.6;
+          f.vr *= 0.5;
+        }
+      }
       return true;
     });
   }
