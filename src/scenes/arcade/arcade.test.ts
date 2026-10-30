@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BLUE, RED } from "../../core/color";
+import { BLUE, PURPLE, RED } from "../../core/color";
+import { START_MS } from "../../core/swap";
+import type { Cell, Well } from "../../core/well";
 import type { BubbleGrid } from "../../core/bobble";
 import { internals, makeHarness } from "../../test/harness";
 import { TitleScene } from "../TitleScene";
@@ -24,9 +26,14 @@ interface Exposed {
   aim: number;
   launcher(): { x: number; y: number };
   L: { x: number; y: number; w: number; h: number; cell: number };
+  well: Well;
+  timeMs: number;
+  popped: number;
+  level: number;
+  selected: Cell | null;
 }
 
-function startPlaying(mode: "trist" | "drhue" | "bobble") {
+function startPlaying(mode: "trist" | "drhue" | "bobble" | "swap") {
   const h = makeHarness();
   const scene = createArcadeScene(h.ctx, mode);
   scene.enter?.();
@@ -146,5 +153,117 @@ describe("Hue Bobble", () => {
     h.step(scene, 10);
     expect(s.state).toBe("play");
     expect(internals<{ level: number }>(scene).level).toBe(2);
+  });
+});
+
+describe("Hue Swap", () => {
+  /** Red and blue in a checkerboard: no group of four anywhere, and every neighbour pair can mix. */
+  const checker = (s: Exposed) => {
+    for (const c of s.well.cells()) {
+      c.color = (c.x + c.y) % 2 ? BLUE : RED;
+      c.refined = false;
+    }
+  };
+  const at = (s: Exposed, x: number, y: number) => ({ x: s.L.x + (x + 0.5) * s.L.cell, y: s.L.y + (y + 0.5) * s.L.cell });
+  const tap = (h: ReturnType<typeof startPlaying>["h"], scene: ReturnType<typeof startPlaying>["scene"], s: Exposed, x: number, y: number) => {
+    const p = at(s, x, y);
+    h.input.press(p.x, p.y);
+    h.step(scene);
+    h.input.release();
+    h.step(scene);
+  };
+
+  it("pours the picked tile into a neighbour it can mix with, then refills the gap", () => {
+    const { h, scene, s } = startPlaying("swap");
+    checker(s);
+    const a = s.well.get(0, 7)!;
+    const b = s.well.get(1, 7)!;
+    tap(h, scene, s, 0, 7);
+    expect(s.selected).toBe(a);
+    tap(h, scene, s, 1, 7);
+    expect(s.selected).toBeNull();
+    expect(b.color).toBe(PURPLE);
+    expect(s.well.get(0, 7)).toBeNull();
+    h.step(scene, 40);
+    expect(s.well.get(0, 7)).not.toBeNull();
+    expect(s.well.count()).toBe(56);
+  });
+
+  it("trades places when the two cannot mix", () => {
+    const { h, scene, s } = startPlaying("swap");
+    checker(s);
+    const a = s.well.get(0, 7)!;
+    const b = s.well.get(1, 7)!;
+    a.color = b.color;
+    tap(h, scene, s, 0, 7);
+    tap(h, scene, s, 1, 7);
+    expect(s.well.get(0, 7)).toBe(b);
+    expect(s.well.get(1, 7)).toBe(a);
+  });
+
+  it("tapping a tile that is not a neighbour picks it instead", () => {
+    const { h, scene, s } = startPlaying("swap");
+    checker(s);
+    tap(h, scene, s, 0, 7);
+    tap(h, scene, s, 3, 3);
+    expect(s.selected).toBe(s.well.get(3, 3));
+    expect(s.well.count()).toBe(56);
+    tap(h, scene, s, 3, 3);
+    expect(s.selected).toBeNull();
+  });
+
+  it("a drag towards a neighbour acts once per press", () => {
+    const { h, scene, s } = startPlaying("swap");
+    checker(s);
+    const b = s.well.get(1, 7)!;
+    const p = at(s, 0, 7);
+    h.input.press(p.x, p.y);
+    h.step(scene);
+    h.input.moveTo(p.x + s.L.cell, p.y);
+    h.step(scene);
+    expect(b.color).toBe(PURPLE);
+    const c = s.well.get(2, 7)!;
+    const was = c.color;
+    h.input.moveTo(p.x + s.L.cell * 2, p.y);
+    h.step(scene, 2);
+    h.input.release();
+    h.step(scene);
+    expect(c.color).toBe(was);
+    expect(s.selected).toBeNull();
+  });
+
+  it("the clock drains while thinking, not while the board resolves, and runs out into a loss", () => {
+    const { h, scene, s } = startPlaying("swap");
+    checker(s);
+    expect(s.timeMs).toBe(START_MS);
+    h.step(scene, 30);
+    expect(s.timeMs).toBeLessThan(START_MS);
+    const a = s.well.get(0, 7)!;
+    a.color = s.well.get(1, 7)!.color;
+    tap(h, scene, s, 0, 7);
+    tap(h, scene, s, 1, 7);
+    const before = s.timeMs;
+    h.step(scene, 2);
+    expect(s.timeMs).toBe(before);
+    s.timeMs = 50;
+    h.step(scene, 40);
+    expect(s.state).toBe("lost");
+  });
+
+  it("a pop puts time back on the clock and pops count up the level", () => {
+    const { h, scene, s } = startPlaying("swap");
+    checker(s);
+    s.timeMs = 10_000;
+    s.popped = 39;
+    // three reds waiting at the bottom-left; the swap at the far right completes nothing itself
+    s.well.get(0, 7)!.color = RED;
+    s.well.get(2, 7)!.color = RED;
+    s.well.get(6, 0)!.color = s.well.get(6, 1)!.color;
+    tap(h, scene, s, 6, 0);
+    tap(h, scene, s, 6, 1);
+    h.step(scene, 12);
+    expect(s.timeMs).toBeGreaterThan(10_000);
+    expect(s.popped).toBeGreaterThanOrEqual(43);
+    expect(s.level).toBe(2);
   });
 });

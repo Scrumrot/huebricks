@@ -726,7 +726,7 @@ export class TitleScene implements Scene {
       g.beginPath();
       g.roundRect(cx + d * 0.65 - d * 0.1, cy - u * 1.3 + bob - 4 * 0.3 - d * 0.22, d * 0.2, d * 0.44, d * 0.08);
       g.fill();
-    } else {
+    } else if (mode === "trist") {
       const d = u * 1.1;
       g.save();
       g.strokeStyle = pal.kind === "classic" ? "rgba(255,255,255,0.3)" : rgbaOf(pal.titleText, 0.25);
@@ -745,6 +745,20 @@ export class TitleScene implements Scene {
       tile(6, d * 1.2, u * 1.5 - d, d);
       const fall = (t / 1100) % 1;
       tile(4, 0, -u * 1.9 + fall * u * 2.2, d, "square", 1, 0.3);
+    } else {
+      // a three-by-three board; the two left tiles of the middle row keep trading places
+      const d = u * 1.15;
+      const board: Color[] = [1, 6, 2, 4, 1, 5, 2, 3, 4];
+      const k = 0.5 - 0.5 * Math.cos((t / 1500) * Math.PI * 2);
+      const at = (i: number) => ({ x: ((i % 3) - 1) * d, y: (Math.floor(i / 3) - 1) * d + u * 0.2 });
+      board.forEach((c, i) => {
+        if (i !== 3 && i !== 4) tile(c, at(i).x, at(i).y, d * 0.92);
+      });
+      const a = at(3);
+      const b = at(4);
+      const lift = Math.sin(k * Math.PI);
+      tile(board[4], b.x + (a.x - b.x) * k, b.y + lift * u * 0.25, d * 0.92, "square", 1, lift * 0.2);
+      tile(board[3], a.x + (b.x - a.x) * k, a.y - lift * u * 0.25, d * 0.92, "square", 1, lift * 0.4);
     }
   }
 

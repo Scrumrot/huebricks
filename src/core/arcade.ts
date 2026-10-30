@@ -1,10 +1,10 @@
-import { BLUE, GREEN, ORANGE, type Color } from "./color";
+import { BLUE, GREEN, ORANGE, PURPLE, type Color } from "./color";
 
 /**
  * The arcade cabinet: self-contained score-attack modes that borrow the
  * HueBricks colour rules (see `color.ts`) but play on their own boards.
  */
-export type ArcadeMode = "bobble" | "drhue" | "trist";
+export type ArcadeMode = "bobble" | "drhue" | "trist" | "swap";
 
 export interface ArcadeInfo {
   id: ArcadeMode;
@@ -61,6 +61,20 @@ export const ARCADE_MODES: readonly ArcadeInfo[] = [
     ],
     color: GREEN,
     keys: "← → move  ·  ↓ soft drop  ·  Space hard drop",
+  },
+  {
+    id: "swap",
+    name: "Hue Swap",
+    tagline: "Pick two, mix or swap",
+    rules: [
+      "Tap a tile, then one of its neighbours.",
+      "If the two can mix, the first pours into the second and the gap fills from above.",
+      "If they cannot mix, they trade places.",
+      "Four or more touching of one colour pop; new tiles fall in and can chain.",
+      "Pops put time back on the clock. Lose when it runs out.",
+    ],
+    color: PURPLE,
+    keys: "Click a tile, then a neighbour  ·  Arrows move the cursor, Space picks",
   },
 ];
 

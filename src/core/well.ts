@@ -69,6 +69,18 @@ export class Well {
     this.grid[x][y] = cell;
   }
 
+  /** Two cells trade places. */
+  swap(a: Cell, b: Cell): void {
+    const ax = a.x;
+    const ay = a.y;
+    this.grid[ax][ay] = b;
+    this.grid[b.x][b.y] = a;
+    a.x = b.x;
+    a.y = b.y;
+    b.x = ax;
+    b.y = ay;
+  }
+
   /** Every cell, column by column, top to bottom. */
   cells(): Cell[] {
     const out: Cell[] = [];
@@ -95,31 +107,37 @@ export class Well {
     return this.rows;
   }
 
+  /** The 4-connected same-colour group `start` belongs to. `seen` lets callers skip cells already grouped. */
+  groupOf(start: Cell, seen: Set<Cell> = new Set()): Cell[] {
+    seen.add(start);
+    const group: Cell[] = [];
+    const stack = [start];
+    while (stack.length) {
+      const c = stack.pop()!;
+      group.push(c);
+      for (const [dx, dy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ] as const) {
+        const nb = this.get(c.x + dx, c.y + dy);
+        if (nb && nb.color === start.color && !seen.has(nb)) {
+          seen.add(nb);
+          stack.push(nb);
+        }
+      }
+    }
+    return group;
+  }
+
   /** 4-connected groups of one colour with at least `min` cells. */
   groups(min: number): Cell[][] {
     const seen = new Set<Cell>();
     const out: Cell[][] = [];
     for (const start of this.cells()) {
       if (seen.has(start)) continue;
-      seen.add(start);
-      const group: Cell[] = [];
-      const stack = [start];
-      while (stack.length) {
-        const c = stack.pop()!;
-        group.push(c);
-        for (const [dx, dy] of [
-          [-1, 0],
-          [1, 0],
-          [0, -1],
-          [0, 1],
-        ] as const) {
-          const nb = this.get(c.x + dx, c.y + dy);
-          if (nb && nb.color === start.color && !seen.has(nb)) {
-            seen.add(nb);
-            stack.push(nb);
-          }
-        }
-      }
+      const group = this.groupOf(start, seen);
       if (group.length >= min) out.push(group);
     }
     return out;

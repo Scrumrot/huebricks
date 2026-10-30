@@ -2,6 +2,7 @@ import type { ArcadeMode } from "../../core/arcade";
 import type { GameContext, Scene } from "../Scene";
 import { DrHueScene } from "./DrHueScene";
 import { HueBobbleScene } from "./HueBobbleScene";
+import { HueSwapScene } from "./HueSwapScene";
 import { HueTristScene } from "./HueTristScene";
 
 export function createArcadeScene(ctx: GameContext, mode: ArcadeMode): Scene {
@@ -12,5 +13,7 @@ export function createArcadeScene(ctx: GameContext, mode: ArcadeMode): Scene {
       return new DrHueScene(ctx);
     case "trist":
       return new HueTristScene(ctx);
+    case "swap":
+      return new HueSwapScene(ctx);
   }
 }

@@ -109,6 +109,13 @@ touch controls, and its own best score. Three so far:
   Land on a brick it can mix with and the two become one new colour (the
   ghost shows the result); land anywhere else and it stacks. Four or more
   touching pop, the stack falls and chains, and the drops speed up as you go.
+- **Hue Swap** (match-3-ish): a full seven-by-eight board. Tap a tile, then a
+  neighbour: if the two can mix, the first pours into the second and the gap
+  fills from above; if they cannot, they trade places. Four or more touching
+  pop and the board cascades. A clock drains while you think (not while the
+  board resolves), every pop puts time back, chains more so, and the drain
+  quickens with each level. Drag a tile towards a neighbour to act in one
+  gesture, or use the arrow keys and Space.
 
 ## Themes
 
@@ -189,6 +196,7 @@ src/
     well.ts      tall well of cells for Dr. Hue / Hue Trist (lines, groups, gravity)
     drhue.ts     Dr. Hue rules: domino moves, kicks, settling and mixing, scoring
     trist.ts     Hue Trist rules: landing, levels, scoring
+    swap.ts      Hue Swap rules: mix-or-swap moves, refill, clock, scoring
     bobble.ts    hex-packed bubble grid plus shot physics, aim and scoring for Hue Bobble
     stains.ts    seeded Dr. Hue stain layouts
   engine/      browser plumbing
@@ -227,7 +235,7 @@ src/
     FxLabScene.ts  effects lab behind `?fx`: fire each effect on demand, edit tuning live
     arcade/
       ArcadeScene.ts   shared well layout, HUD, cards, controls and effects
-      HueBobbleScene.ts, DrHueScene.ts, HueTristScene.ts
+      HueBobbleScene.ts, DrHueScene.ts, HueTristScene.ts, HueSwapScene.ts
       arcade.test.ts   state-machine and input regressions, driven through the harness
   test/
     harness.ts   a GameContext for tests: scripted input, hand-advanced clock, silent audio

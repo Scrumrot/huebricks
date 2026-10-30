@@ -161,6 +161,10 @@ export abstract class ArcadeScene implements Scene {
   protected abstract stats(): Array<{ label: string; value: string }>;
   /** The "next" preview, drawn in a slot `size` wide. */
   protected renderNext(_g: CanvasRenderingContext2D, _x: number, _y: number, _size: number): void {}
+  /** Label over the preview slot in the landscape HUD, or null for none. */
+  protected nextLabel(): string | null {
+    return "NEXT";
+  }
   /** Which touch controls to show (ids are passed back to `onControl`). */
   protected controlSpec(): Array<{ id: string; icon: Control["icon"] }> {
     return [];
@@ -779,7 +783,8 @@ export abstract class ArcadeScene implements Scene {
         y += 50;
       }
       const ns = Math.min(64, col.w * 0.5);
-      drawText(g, "NEXT", cx, y + 6, { size: 10, color: mutedC, weight: 700 });
+      const label = this.nextLabel();
+      if (label) drawText(g, label, cx, y + 6, { size: 10, color: mutedC, weight: 700 });
       this.renderNext(g, cx - ns / 2, y + 18, ns);
     }
 
