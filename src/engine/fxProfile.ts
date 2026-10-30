@@ -26,10 +26,10 @@ export interface FxProfile {
   mix: "wipe" | "swirl" | "fold";
   /**
    * The material's own signature on a pop: a wet stain, a light flare, a
-   * surface ripple, chunks that bounce on the shelf, or the whole tile
-   * floating up and away.
+   * surface ripple, chunks that bounce on the shelf, the whole tile
+   * floating up and away, or a paper crane flying off.
    */
-  signature: "none" | "splat" | "flare" | "ripple" | "bounce" | "float";
+  signature: "none" | "splat" | "flare" | "ripple" | "bounce" | "float" | "crane";
   /** Pop ring outline: a plain circle, or the popped colour's glyph (octagon, diamond, circle; nested for mixes). */
   ringShape: "circle" | "glyph";
   /** A short arc of the colour wheel around a mixing brick, from the old colour to the new, with the changed primary sliding along it. */
@@ -38,6 +38,16 @@ export interface FxProfile {
   impactFrame: boolean;
   /** While a brick is selected, the group a drop would complete breathes together, joined by a faint line. */
   groupPreview: boolean;
+  /** Debris and fragments land on resting bricks and the tray ledge instead of passing through. */
+  debrisCollide: boolean;
+  /** The board compresses and springs back when a row is pushed in; the backdrop jolts with it. */
+  boardHeave: boolean;
+  /** From a x3 chain the multiplier colour glows in at the screen edges and breathes with the meter. */
+  chainBleed: boolean;
+  /** Level clear pops what is left on the board in a wave from the last pop before the fountain. */
+  clearWave: boolean;
+  /** A brick carried across the board trails a short ribbon in its colour. */
+  liftRibbon: boolean;
 }
 
 /** Nothing on: the faithful port. */
@@ -57,6 +67,11 @@ export const CLASSIC_FX: FxProfile = {
   mixArc: false,
   impactFrame: false,
   groupPreview: false,
+  debrisCollide: false,
+  boardHeave: false,
+  chainBleed: false,
+  clearWave: false,
+  liftRibbon: false,
 };
 
 /** Baseline for generated themes; each overrides what its material calls for. */
@@ -76,6 +91,11 @@ export const MODERN_FX: FxProfile = {
   mixArc: true,
   impactFrame: true,
   groupPreview: true,
+  debrisCollide: true,
+  boardHeave: true,
+  chainBleed: true,
+  clearWave: true,
+  liftRibbon: true,
 };
 
 export function fxProfile(overrides: Partial<FxProfile> = {}): FxProfile {

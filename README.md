@@ -180,8 +180,9 @@ Fifteen themes:
 - **Origami** (`src/engine/origamiSkin.ts`): folded paper squares with a
   crease and a lifted corner on a ruled kraft desk, sticky-note buttons,
   layered paper-cut hills and a crane that flaps after a clear. Colour
-  mixing folds the new colour over the old along the crease, and pops tear
-  into paper scraps that tumble and bounce. Display text is Nunito.
+  mixing folds the new colour over the old along the crease, pops tear into
+  paper scraps and a crane in the popped colour flies off. Display text is
+  Nunito.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -217,7 +218,12 @@ the new, with the primary that joined (or left) sliding along it; while a
 brick is selected, the bricks a drop would pop together breathe as one and
 are joined by a faint line; pop shockwaves take the popped colour's glyph
 (octagon, diamond, circle, nested for mixes); and the biggest pops open on a
-single flat-ink impact frame.
+single flat-ink impact frame. Debris lands on resting bricks and the tray
+ledge instead of falling through, the board compresses and springs back
+when a row is pushed in (the scenery jolts with it), from a x3 chain the
+multiplier colour breathes in at the screen edges, a brick dragged across
+the board trails a ribbon in its colour, and a level clear pops whatever is
+left in a wave from the last pop before the fountain.
 
 The theme is remembered in `localStorage` together with the high score, the
 furthest world reached, the mute setting and the two volume levels.
@@ -309,8 +315,9 @@ src/
   turns every new treatment off, so the faithful port is unaffected. Each
   theme also names a pop signature (stain, flare, ripple, bouncing chunks or
   the tile floating away), a mix treatment (radial wipe, swirl or paper fold)
-  and switches for the mix arc, group preview, glyph-shaped rings and impact
-  frame, and the layer plays its own synthesised cues under mixes, fragments and
+  and switches for the mix arc, group preview, glyph-shaped rings, impact
+  frame, debris collisions, board heave, chain bleed, clear wave and lift
+  ribbon, and the layer plays its own synthesised cues under mixes, fragments and
   hit-stops. A frame-time governor drops bloom, sparks and fragment detail on
   devices that cannot keep up. Tune numbers in the lab (`?fx` on the URL),
   which shows frame and render times, then write them into `fxTuning.ts`.

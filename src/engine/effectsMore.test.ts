@@ -105,6 +105,41 @@ describe("pop signatures per theme", () => {
     setReducedMotion(false);
   });
 
+  it("origami sends a paper crane off every pop, and it flies away", () => {
+    const { h, fx } = popAt("origami", 0.5);
+    expect(fx.flyerCount).toBe(1);
+    advance(h, fx, 1600);
+    expect(fx.flyerCount).toBe(0);
+    expect(popAt("pigment").fx.flyerCount).toBe(0);
+  });
+
+  it("the chain bleed eases in and drains, and classic never bleeds", () => {
+    const { h, fx } = setup("pigment");
+    fx.setBleed("#f00", 1);
+    expect(fx.bleed).toBe(0);
+    advance(h, fx, 500);
+    expect(fx.bleed).toBeGreaterThan(0.5);
+    fx.setBleed(null, 0);
+    advance(h, fx, 3000);
+    expect(fx.bleed).toBe(0);
+    const c = setup("classic");
+    c.fx.setBleed("#f00", 1);
+    advance(c.h, c.fx, 500);
+    expect(c.fx.bleed).toBe(0);
+  });
+
+  it("debris lands on the scene's solids only when the theme collides it", () => {
+    const drop = (theme: ThemeName) => {
+      const { h, fx } = setup(theme);
+      fx.collider = (_x, y) => (y >= 60 ? 60 : null);
+      fx.particles.spawn(0, 40, 1, ["#fff"], { speed: [0, 0], size: [2, 2], life: [5000, 5000], gravity: 2000 });
+      advance(h, fx, 1000);
+      return (fx.particles as unknown as { y: Float32Array }).y[0];
+    };
+    expect(drop("pigment")).toBeLessThanOrEqual(60.001);
+    expect(drop("classic")).toBeGreaterThan(200);
+  });
+
   it("a scene can keep its own richer signature", () => {
     const { fx } = setup("pigment");
     fx.pop({ x: 0, y: 0, w: 40, h: 40, color: 2, draw, k: 1, signature: false });

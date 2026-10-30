@@ -1199,7 +1199,7 @@ export const ORIGAMI: Palette = {
   particlesAdditive: false,
   stains: false,
   fuse: false,
-  fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "fold", vignette: "rgba(58,46,34,1)", signature: "bounce" }),
+  fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "fold", vignette: "rgba(58,46,34,1)", signature: "crane" }),
 };
 
 export const PALETTES: Record<ThemeName, Palette> = {

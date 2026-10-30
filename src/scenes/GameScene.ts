@@ -30,6 +30,8 @@ import { drawModeGlyph, MODE_COLOR, modeLabel } from "../engine/modeGlyph";
 import { SoundControls, type SoundLayout } from "../engine/soundControls";
 import { drawSwatch, gridHeight, layoutGrid, layoutStrip, stripThemes, swatchAt, type Swatch } from "../engine/themePicker";
 import { Effects } from "../engine/effects";
+import { clearWave } from "../engine/clearWave";
+import { ageRibbon, drawRibbon, pushRibbon, type RibbonPoint } from "../engine/ribbon";
 import { intensityFor, popScale } from "../engine/fxTuning";
 import { drawMix } from "../engine/mixFx";
 import { Tweens } from "../engine/tween";
@@ -155,6 +157,8 @@ interface DieAnim {
   spin: number;
   /** Moment size 0..1 for the burst. */
   k: number;
+  /** Part of the level-clear wave: a smaller burst. */
+  wave?: boolean;
 }
 
 /** Paint left on the paper where a group popped. */
@@ -341,6 +345,13 @@ export class GameScene implements Scene {
   private holdHover = false;
   /** The group a drop on the hovered cell would complete, while a brick is selected. */
   private preview: { key: string; members: Set<Brick>; t0: number } | null = null;
+  /** Vertical squash of the whole board about its bottom edge, for the push heave. */
+  private readonly heaveFx = { sy: 1 };
+  /** Trail behind the brick ghost being dragged across the board. */
+  private ribbon: RibbonPoint[] = [];
+  private ribbonColor = "#ffffff";
+  /** Centre of the most recent scoring pop, where the level-clear wave starts. */
+  private lastPopAt: { x: number; y: number } | null = null;
   private nextColors: Color[] = [];
 
   // --- subtract goal ---
@@ -414,6 +425,7 @@ export class GameScene implements Scene {
     for (let i = 0; i < PREVIEW_COUNT; i++) this.nextColors.push(randomSpawnColor());
     this.feel = new ButtonFeel(this.tweens);
     this.effects = new Effects(ctx, 400);
+    this.effects.collider = (x, y) => this.solidTop(x, y);
     this.scoreFx.v = ctx.session.score;
     this.scoreTarget = ctx.session.score;
     this.layoutButtons();
@@ -862,7 +874,9 @@ export class GameScene implements Scene {
     this.levelCompleteDelay = LEVEL_CARD_FRAMES + CARD_HOLD_FRAMES;
     this.cardT0 = this.ctx.clock.t + D((CARD_HOLD_FRAMES * 1000) / FPS);
     this.flareT0 = this.ctx.clock.t;
-    this.celebrate();
+    const wave = this.ctx.palette.fx.clearWave ? this.startClearWave() : 0;
+    if (wave > 0) this.effects.later(wave, () => this.celebrate());
+    else this.celebrate();
     if (!this.levelCompleteSounded) {
       this.levelCompleteSounded = true;
       this.ctx.audio.play("achievment_snd");
@@ -881,6 +895,13 @@ export class GameScene implements Scene {
     this.animation = "push";
     this.animFrame = 0;
     this.pushT0 = this.ctx.clock.t;
+    if (this.ctx.palette.fx.boardHeave) {
+      // The board takes the row on the chin: compresses as it lands, then springs back past true.
+      this.tweens.set(this.heaveFx, { sy: 1 });
+      this.tweens.to(this.heaveFx, { sy: 0.95 }, D(PUSH_ANTICIPATE_MS), easeOutCubic, {
+        onDone: () => this.tweens.to(this.heaveFx, { sy: 1 }, D(620), easeOutElastic),
+      });
+    }
     // The pushed line is on the board now: undo any selection dim it carried.
     for (const b of this.board.bricks()) this.tweens.to(this.fxOf(b), { dim: 1 }, D(DIM_MS));
     this.barFlashT0 = this.ctx.clock.t;
@@ -1218,6 +1239,7 @@ export class GameScene implements Scene {
     if (scoring) {
       this.comboRemaining -= 1;
       const c0 = this.groupCentre(res.groups[0]);
+      this.lastPopAt = c0;
       const impact: PopImpact = {
         k,
         mult,
@@ -1905,6 +1927,19 @@ export class GameScene implements Scene {
     }
     this.stains = this.stains.filter((s) => t - s.t0 < s.dur);
     this.callouts = this.callouts.filter((c) => t - c.t0 < c.dur);
+    const pal = this.ctx.palette;
+    const mult = this.chainMultiplier();
+    this.effects.setBleed(mult >= 3 && this.heat > 0 ? pal.multColors[mult] : null, this.heat);
+    if (pal.fx.liftRibbon) {
+      const l = this.board.layout;
+      const sel = this.selectedBrick;
+      if (this.boardDown && sel) {
+        this.ribbonColor = pal.brickColors[sel.color];
+        this.ribbon = pushRibbon(this.ribbon, this.bx + l.cellW / 2, this.by + l.cellH / 2, t);
+      } else {
+        this.ribbon = ageRibbon(this.ribbon, t);
+      }
+    }
   }
 
   /** Debris, fragments and sparks flying out of a popped brick, in the theme's own style. */
@@ -1923,6 +1958,7 @@ export class GameScene implements Scene {
       h: l.cellH,
       color: d.color,
       k: d.k,
+      debris: d.wave ? 4 : undefined,
       draw: (g, w, h) => drawSprite(g, sp.brick_sprite, frame, -w / 2, -h / 2, w, h),
       floor: gridBottom(l),
       signature: !this.ctx.palette.stains,
@@ -1936,6 +1972,46 @@ export class GameScene implements Scene {
     const y = cellY(l, n) - l.cellSep;
     const xs = Array.from({ length: n }, (_, x) => cellX(l, x) + l.cellW / 2);
     this.effects.celebrate(xs, y, l.cellW, (i) => ((i % 6) + 1) as Color, this.ctx.palette.kind === "generated" ? 45 : 0);
+  }
+
+  /**
+   * Pop whatever is left on the board in a wave spreading from the last pop,
+   * each brick with its own small burst and a rising chime. Returns how long
+   * until the fountain should follow, or 0 when the board was already empty.
+   */
+  private startClearWave(): number {
+    const l = this.board.layout;
+    const bricks = [...this.board.bricks()];
+    if (bricks.length === 0) return 0;
+    const origin = this.lastPopAt ?? { x: l.boardX + l.boardW / 2, y: l.boardY + l.boardH / 2 };
+    const t = this.ctx.clock.t;
+    const steps = clearWave(bricks, (b) => ({ x: b.x + l.cellW / 2, y: b.y + l.cellH / 2 }), origin, l.cellW + l.cellSep);
+    steps.forEach((s, i) => {
+      const b = s.item;
+      this.board.set(b.gridX, b.gridY, null);
+      this.fx.delete(b.id);
+      this.dieAnims.push({ x: b.x, y: b.y, color: b.color, t0: t + D(s.delay), burst: false, spin: i % 2 === 0 ? 1 : -1, k: 0.15, wave: true });
+      this.effects.later(D(s.delay), () => this.ctx.audio.cue("sparkle", 0.25, s.rate));
+    });
+    return D(steps[steps.length - 1].delay + POP_TOTAL_MS);
+  }
+
+  /**
+   * Where debris lands: the top of a resting brick under (x, y) or the tray
+   * ledge under the board; open air while the board is turning or taking a
+   * push, when nothing is where it looks.
+   */
+  private solidTop(x: number, y: number): number | null {
+    if (this.state === "animation" && (this.animation === "rotate" || this.animation === "push")) return null;
+    const l = this.board.layout;
+    if (x < l.boardX || x > l.boardX + l.boardW) return null;
+    const bottom = gridBottom(l);
+    if (y >= bottom) return y < bottom + l.cellSep * 3 ? bottom : null;
+    const { gx, gy } = screenToGrid(l, x, y);
+    const b = this.board.get(gx, gy);
+    if (!b) return null;
+    const top = cellY(l, gy);
+    return Math.abs(b.y - top) > 1 ? null : top;
   }
 
   /** 1 right after a level clear, easing to 0 over FLARE_MS. */
@@ -2044,6 +2120,12 @@ export class GameScene implements Scene {
 
   /** Anticipation squeeze, then the quarter turn with a small overshoot. */
   private applyBoardTransform(g: CanvasRenderingContext2D): void {
+    if (this.heaveFx.sy !== 1) {
+      const bottom = gridBottom(this.board.layout);
+      g.translate(0, bottom);
+      g.scale(1, this.heaveFx.sy);
+      g.translate(0, -bottom);
+    }
     if (this.rotateT0 < 0) return;
     const l = this.board.layout;
     const n = l.cellNum;
@@ -2526,6 +2608,12 @@ export class GameScene implements Scene {
       }
     }
 
+    if (this.ribbon.length > 1) {
+      g.save();
+      if (this.ctx.palette.particlesAdditive) g.globalCompositeOperation = "lighter";
+      drawRibbon(g, this.ribbon, t, l.cellW * 0.4, this.ribbonColor);
+      g.restore();
+    }
     const showGhost = this.state === "rest" || (this.state === "animation" && this.animation === "combine");
     if (showGhost && this.selAlpha > 0.01) {
       g.save();
@@ -2551,7 +2639,14 @@ export class GameScene implements Scene {
     const { world } = this.ctx.session;
 
     if (pal.kind === "generated") {
-      if (pal.backdrop !== "sprites") BACKDROPS[pal.backdrop](g, this.ctx.clock.t, l, this.flare());
+      if (pal.backdrop !== "sprites") {
+        // The scenery jolts with the board when a row lands.
+        const jolt = (1 - this.heaveFx.sy) * l.cellH * 0.8;
+        g.save();
+        g.translate(0, jolt);
+        BACKDROPS[pal.backdrop](g, this.ctx.clock.t, l, this.flare());
+        g.restore();
+      }
       const pad = l.cellW * 0.04;
       if (pal.timer === "wells") {
         // Wells for every cell and a tray for the replenish line; the next

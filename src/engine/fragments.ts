@@ -6,6 +6,8 @@
  */
 
 /** Paints a whole tile centred on the origin at `w` by `h`. */
+import { BOUNCE_SLIDE, landOn, type SolidTop } from "./collide";
+
 export type TileDraw = (g: CanvasRenderingContext2D, w: number, h: number) => void;
 
 export interface ShatterOptions {
@@ -111,8 +113,8 @@ export class Fragments {
     }
   }
 
-  /** Advance by `dt` game milliseconds. */
-  update(dt: number): void {
+  /** Advance by `dt` game milliseconds; chunks land on whatever `solid` reports under them. */
+  update(dt: number, solid: SolidTop | null = null): void {
     if (dt <= 0 || this.list.length === 0) return;
     const s = dt / 1000;
     this.list = this.list.filter((f) => {
@@ -120,9 +122,16 @@ export class Fragments {
       if (f.life <= 0) return false;
       f.vy += f.grav * s;
       f.x += f.vx * s;
+      const yPrev = f.y;
       f.y += f.vy * s;
       f.rot += f.vr * s;
-      if (f.vy > 0 && f.y >= f.floor) {
+      const hit = landOn(solid, f.x, yPrev, f.y, f.vy);
+      if (hit) {
+        f.y = hit.y;
+        f.vy = hit.vy;
+        f.vx *= BOUNCE_SLIDE;
+        f.vr *= 0.6;
+      } else if (f.vy > 0 && f.y >= f.floor) {
         f.y = f.floor;
         if (f.bounced) {
           // second touch: come to rest on the shelf

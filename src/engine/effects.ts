@@ -11,6 +11,8 @@ import type { Palette } from "./theme";
 import type { View } from "./view";
 import { rgba } from "./modernSkin";
 import { GLYPHS, glyphPath, type Glyph } from "./skinKit";
+import type { SolidTop } from "./collide";
+import { crane } from "./origamiSkin";
 import { mixColors } from "./colorUtil";
 
 /**
@@ -131,6 +133,18 @@ interface Floater {
   phase: number;
 }
 
+/** A paper crane flying off a popped tile, for the "crane" signature. */
+interface Flyer {
+  x: number;
+  y: number;
+  s: number;
+  color: string;
+  t0: number;
+  dur: number;
+  /** +1 flies right, -1 left. */
+  dir: number;
+}
+
 /** Vertical afterimage of a fast drop. */
 interface Streak {
   x: number;
@@ -178,7 +192,13 @@ export class Effects {
   private ripples: Ripple[] = [];
   private streaks: Streak[] = [];
   private floaters: Floater[] = [];
+  private flyers: Flyer[] = [];
   private queue: Scheduled[] = [];
+  /** What debris can land on; the scene supplies it. Used when the theme's profile collides debris. */
+  collider: SolidTop | null = null;
+  private bleedColor: string | null = null;
+  private bleedTarget = 0;
+  private bleedShown = 0;
   private shakeT0 = -1e9;
   private shakeAmp = 0;
   private shakeDir: [number, number] = [0, 1];
@@ -219,6 +239,15 @@ export class Effects {
     return this.arcs.length;
   }
 
+  get flyerCount(): number {
+    return this.flyers.length;
+  }
+
+  /** How strongly the chain bleed is showing right now, 0..1 (eases toward what the scene last set). */
+  get bleed(): number {
+    return this.bleedShown;
+  }
+
   /** Shapes of the live rings, oldest first, for tests and the lab. */
   get ringShapes(): (Glyph | "circle")[] {
     return this.rings.map((r) => r.shape ?? "circle");
@@ -257,9 +286,12 @@ export class Effects {
   update(): void {
     const { clock } = this.ctx;
     this.governor(clock.now);
-    this.particles.update(clock.dt);
-    this.fragments.update(clock.dt);
+    const solid = this.pal.fx.debrisCollide ? this.collider : null;
+    this.particles.update(clock.dt, solid);
+    this.fragments.update(clock.dt, solid);
     const t = clock.t;
+    this.bleedShown += (this.bleedTarget - this.bleedShown) * (this.bleedTarget > this.bleedShown ? 0.18 : 0.08);
+    if (this.bleedShown < 0.01) this.bleedShown = 0;
     this.rings = this.rings.filter((r) => t - r.t0 < r.dur);
     this.arcs = this.arcs.filter((a) => t - a.t0 < a.dur);
     this.decals = this.decals.filter((d) => t - d.t0 < d.dur);
@@ -267,6 +299,7 @@ export class Effects {
     this.ripples = this.ripples.filter((r) => t - r.t0 < r.dur);
     this.streaks = this.streaks.filter((s) => t - s.t0 < s.dur);
     this.floaters = this.floaters.filter((f) => t - f.t0 < f.dur);
+    this.flyers = this.flyers.filter((f) => t - f.t0 < f.dur);
     if (this.queue.length) {
       const due = this.queue.filter((q) => q.at <= t);
       this.queue = this.queue.filter((q) => q.at > t);
@@ -297,6 +330,9 @@ export class Effects {
     this.fragments.clear();
     this.rings = [];
     this.arcs = [];
+    this.flyers = [];
+    this.bleedTarget = 0;
+    this.bleedShown = 0;
     this.silhouetteUntil = -1;
     this.decals = [];
     this.flares = [];
@@ -526,6 +562,22 @@ export class Effects {
     if (spec.signature !== false) this.signature(cx, cy, cell, spec.color, spec.k, spec.draw);
   }
 
+  /** A paper crane that takes off from a popped tile and flies away, flapping. */
+  fly(x: number, y: number, s: number, color: string, dur = 1200): void {
+    this.flyers.push({ x, y, s, color, t0: this.ctx.clock.t, dur, dir: Math.random() < 0.5 ? -1 : 1 });
+  }
+
+  /**
+   * The chain bleed: `level` (0..1, the chain meter) of `color` glowing in
+   * at the screen edges. Null colour lets it drain away. Ignored unless the
+   * theme's profile asks for it.
+   */
+  setBleed(color: string | null, level: number): void {
+    if (!this.pal.fx.chainBleed) return;
+    if (color) this.bleedColor = color;
+    this.bleedTarget = color ? clamp01(level) : 0;
+  }
+
   /** The theme's own mark on a pop. */
   private signature(cx: number, cy: number, cell: number, color: Color, k: number, draw: TileDraw | null): void {
     const fx = this.pal.fx;
@@ -534,6 +586,9 @@ export class Effects {
       case "float":
         if (draw) this.float(draw, cx, cy, cell, cell, paint, 900 + 400 * k);
         if (k >= 0.3) this.ctx.audio.cue("sparkle", 0.3 + 0.3 * k, 0.8 + 0.2 * k);
+        break;
+      case "crane":
+        this.fly(cx, cy, cell * 0.9, paint, 1100 + 300 * k);
         break;
       case "splat":
         this.decal(cx, cy, cell * (0.55 + 0.25 * k), paint, 3200 + 1500 * k);
@@ -671,12 +726,14 @@ export class Effects {
       this.flares.length > 0 ||
       this.ripples.length > 0 ||
       this.streaks.length > 0 ||
-      this.floaters.length > 0;
+      this.floaters.length > 0 ||
+      this.flyers.length > 0;
     if (!busy) return;
     if (this.pal.fx.bloom && TUNING.bloom > 0 && !this.lowPower) this.renderBloom(g);
     this.renderStreaks(g);
     this.renderRipples(g);
     this.renderFloaters(g);
+    this.renderFlyers(g);
     this.fragments.render(g);
     if (this.pal.particlesAdditive) {
       g.save();
@@ -712,6 +769,7 @@ export class Effects {
 
   /** Edge darkening that fades out; cheap when idle since nothing is drawn. */
   renderVignette(g: CanvasRenderingContext2D): void {
+    this.renderBleed(g);
     const p = (this.ctx.clock.t - this.vigT0) / this.vigDur;
     if (p < 0 || p >= 1) return;
     const { w, h } = this.ctx.view;
@@ -723,6 +781,45 @@ export class Effects {
     g.globalAlpha = a;
     g.fillStyle = grad;
     g.fillRect(0, 0, w, h);
+    g.restore();
+  }
+
+  /** The chain bleed: the multiplier colour glowing in from the screen edges, breathing slowly. */
+  private renderBleed(g: CanvasRenderingContext2D): void {
+    if (this.bleedShown <= 0 || !this.bleedColor) return;
+    const { w, h } = this.ctx.view;
+    const breathe = 0.82 + 0.18 * Math.sin(this.ctx.clock.now / 240);
+    const grad = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32, w / 2, h / 2, Math.hypot(w, h) * 0.56);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, this.bleedColor);
+    g.save();
+    if (this.pal.particlesAdditive) g.globalCompositeOperation = "lighter";
+    g.globalAlpha = 0.5 * this.bleedShown * breathe;
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+    g.restore();
+  }
+
+  /** Cranes climbing away from their tiles on a wavering path, flapping as they go. */
+  private renderFlyers(g: CanvasRenderingContext2D): void {
+    if (this.flyers.length === 0) return;
+    const t = this.ctx.clock.t;
+    g.save();
+    for (const f of this.flyers) {
+      const p = clamp01((t - f.t0) / f.dur);
+      const rise = easeOutCubic(p);
+      const x = f.x + f.dir * f.s * 2.4 * p;
+      const y = f.y - f.s * 3 * rise + Math.sin(p * Math.PI * 6) * f.s * 0.08;
+      const flap = Math.sin(p * Math.PI * 9);
+      const scale = 0.95 - 0.45 * p;
+      g.globalAlpha = p < 0.6 ? 1 : 1 - (p - 0.6) / 0.4;
+      g.save();
+      g.translate(x, y);
+      g.scale(f.dir, 1);
+      g.rotate(-0.35 + 0.15 * flap);
+      crane(g, 0, 0, f.s * scale, flap, f.color);
+      g.restore();
+    }
     g.restore();
   }
 

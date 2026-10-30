@@ -1,3 +1,4 @@
+import { BOUNCE_SLIDE, landOn, type SolidTop } from "./collide";
 /**
  * Pooled particle system for pops and dust. Fixed capacity, typed-array
  * storage, no allocation while running. Positions are in logical screen
@@ -118,8 +119,8 @@ export class Particles {
     }
   }
 
-  /** Advance by `dt` game milliseconds. */
-  update(dt: number): void {
+  /** Advance by `dt` game milliseconds; particles land on whatever `solid` reports under them. */
+  update(dt: number, solid: SolidTop | null = null): void {
     if (dt <= 0 || this.n === 0) return;
     const s = dt / 1000;
     for (let i = 0; i < this.n; i++) {
@@ -133,8 +134,16 @@ export class Particles {
       this.vx[i] *= keep;
       this.vy[i] = this.vy[i] * keep + this.grav[i] * s;
       this.x[i] += this.vx[i] * s;
+      const yPrev = this.y[i];
       this.y[i] += this.vy[i] * s;
       this.rot[i] += this.vr[i] * s;
+      const hit = solid && landOn(solid, this.x[i], yPrev, this.y[i], this.vy[i]);
+      if (hit) {
+        this.y[i] = hit.y;
+        this.vy[i] = hit.vy;
+        this.vx[i] *= BOUNCE_SLIDE;
+        this.vr[i] *= 0.6;
+      }
     }
   }
 
