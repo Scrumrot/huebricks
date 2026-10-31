@@ -337,6 +337,54 @@ export function drawStainedGlassTray(g: Ctx, x: number, y: number, w: number, h:
   }
 }
 
+/** Where a solder run `k` (0..1) of the way round a rectangle, clockwise from the top-left corner, has reached. */
+function alongRect(x: number, y: number, w: number, h: number, k: number): { x: number; y: number } {
+  const d = k * 2 * (w + h);
+  if (d < w) return { x: x + d, y };
+  if (d < w + h) return { x: x + w, y: y + d - w };
+  if (d < 2 * w + h) return { x: x + w - (d - w - h), y: y + h };
+  return { x, y: y + h - (d - 2 * w - h) };
+}
+
+/** The next pane soldered into its came: the glass fades in while a gold solder run traces the frame, a hot bead at its head. */
+export function drawStainedGlassFill(g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string, t: number): void {
+  if (level <= 0) return;
+  const r = Math.min(w, h) * 0.06;
+  roundRect(g, x + 3, y + 3, w - 6, h - 6, r);
+  g.fillStyle = rgba(colour, 0.1 + 0.5 * level);
+  g.fill();
+  const lw = Math.max(2, Math.min(w, h) * 0.07);
+  const ix = x + 1.5;
+  const iy = y + 1.5;
+  const iw = w - 3;
+  const ih = h - 3;
+  g.save();
+  g.setLineDash([2 * (iw + ih) * level, 2 * (iw + ih)]);
+  g.lineWidth = lw;
+  g.lineJoin = "round";
+  g.strokeStyle = level >= 1 ? GOLD_LIGHT : GOLD;
+  g.beginPath();
+  g.moveTo(ix, iy);
+  g.lineTo(ix + iw, iy);
+  g.lineTo(ix + iw, iy + ih);
+  g.lineTo(ix, iy + ih);
+  g.closePath();
+  g.stroke();
+  g.restore();
+  if (level < 1) {
+    // the bead of molten solder at the head of the run
+    const p = alongRect(ix, iy, iw, ih, level);
+    g.save();
+    g.shadowColor = GOLD_LIGHT;
+    g.shadowBlur = 10;
+    g.fillStyle = "#FFF6DC";
+    g.beginPath();
+    g.arc(p.x, p.y, lw * 0.9 + Math.sin(t / 60) * 0.4, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+}
+
 /** Stone wall, rose window and a slow shaft of light; with a layout, the window frame, its empty panes and the came channel. */
 export function drawStainedGlassBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();

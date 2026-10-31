@@ -183,6 +183,13 @@ Twenty themes:
 - **Nature** (`src/engine/natureSkin.ts`): river stones with sprouts on a
   wooden board, wood-slice buttons, sun, clouds and blowing leaves over a
   meadow, and a log trough.
+  Themes whose timer fills the tray's next well can draw that fill their
+  own way (`Furniture.fill` in `src/engine/backdrops.ts`): Stained Glass
+  solders the next pane into its came with a gold run and a hot bead,
+  Lantern hangs the next lantern dark and brightens it, Origami slides the
+  next sheet up out of the pocket, Knit winds up a ball of yarn and Neon
+  lights the coin slot. The rest show the plain rising colour.
+
 - **Stained Glass** (`src/engine/stainedGlassSkin.ts`): bevelled panes set
   in lead came on a stone wall, a rose window that glows when the pointer
   comes near and after a clear, a light shaft drifting across the scene,
@@ -228,7 +235,8 @@ Twenty themes:
   city on the title, console buttons and an item-bar tray whose wells fill
   in eight ticking steps. Debris is square pixels on an 8 px grid, pops
   play in four stepped frames, mixing is a dither wipe and big chains flash
-  the whole screen. Display text is Press Start 2P, cues are chiptune.
+  the whole screen, and a landing brick is solid white for one frame.
+  Display text is Press Start 2P, cues are chiptune.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -391,8 +399,10 @@ src/
   turns every new treatment off, so the faithful port is unaffected. Each
   theme also names a pop signature (stain, flare, ripple, bouncing chunks or
   the tile floating away), a mix treatment (radial wipe, swirl, paper fold,
-  knitted curtain or dither)
-  and switches for the mix arc, group preview, glyph-shaped rings, impact
+  knitted curtain or dither), what a landing does besides the squash (Neon's
+  tubes flicker on, Pixel flashes), whether pops unravel (Knit pulls a strand
+  out row by row), a chain meter style (Neon's is a VU meter with a falling
+  peak), and switches for the mix arc, group preview, glyph-shaped rings, impact
   frame, debris collisions, board heave, chain bleed, clear wave and lift
   ribbon, and the layer plays its own synthesised cues under mixes, fragments and
   hit-stops. A frame-time governor drops bloom, sparks and fragment detail on

@@ -307,6 +307,46 @@ export function drawOrigamiTray(g: Ctx, x: number, y: number, w: number, h: numb
   g.fillRect(x + 3, y + h - 12, w - 6, 1);
 }
 
+/** The next sheet sliding up out of the pocket as the well fills: coloured paper with a lifted corner, the pocket lip drawn back over its foot. */
+export function drawOrigamiFill(g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string): void {
+  if (level <= 0) return;
+  const r = Math.min(w, h) * 0.04;
+  const lip = y + h * 0.7;
+  const top = lip - (lip - (y + h * 0.04)) * level;
+  const sx = x + w * 0.08;
+  const sw = w * 0.84;
+  g.save();
+  roundRect(g, x, y, w, h, r);
+  g.clip();
+  g.fillStyle = "rgba(58,46,34,0.16)";
+  g.fillRect(sx + 2, top + 3, sw, y + h - top);
+  g.fillStyle = colour;
+  g.fillRect(sx, top, sw, y + h - top);
+  // the lifted corner, folded back to show the paper's white underside
+  const c = w * 0.22;
+  g.fillStyle = rgba(PAPER, 0.85);
+  g.beginPath();
+  g.moveTo(sx + sw, top);
+  g.lineTo(sx + sw, top + c);
+  g.lineTo(sx + sw - c, top);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = "rgba(58,46,34,0.22)";
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(sx, lip + (y + h - lip) * 0.5);
+  g.lineTo(sx + sw - c, top);
+  g.stroke();
+  // the pocket lip comes back over the foot of the sheet
+  g.fillStyle = "#C9AE86";
+  g.fillRect(x, lip, w, y + h - lip);
+  g.fillStyle = "rgba(0,0,0,0.1)";
+  g.fillRect(x, lip, w, 2);
+  g.fillStyle = "rgba(255,247,234,0.3)";
+  g.fillRect(x, lip + 2, w, 1);
+  g.restore();
+}
+
 /** Kraft desk with ruled lines, paper-cut hills along the bottom and a crane top right; with a layout, the mat, cells and folder. */
 export function drawOrigamiBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();

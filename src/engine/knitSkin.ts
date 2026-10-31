@@ -268,6 +268,27 @@ export function drawKnitTray(g: Ctx, x: number, y: number, w: number, h: number)
   drawWicker(g, x, y, w, h, 12);
 }
 
+/** The next ball of yarn winding up in the basket: it grows with the timer, turning as it winds, its loose end waving. */
+export function drawKnitFill(g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string, t: number): void {
+  if (level <= 0.02) return;
+  const r = Math.min(w, h) * (0.08 + 0.3 * level);
+  const cx = x + w / 2;
+  const cy = y + h * 0.56;
+  g.save();
+  g.translate(cx, cy);
+  g.rotate(level * 4);
+  yarnBall(g, 0, 0, r, colour);
+  g.restore();
+  // the end still being wound on, waving in from the side of the basket
+  g.strokeStyle = colour;
+  g.lineWidth = Math.max(1.5, r * 0.14);
+  g.lineCap = "round";
+  g.beginPath();
+  g.moveTo(cx + r * 0.9, cy - r * 0.2);
+  g.bezierCurveTo(cx + r * 1.8, cy - r, cx + w * 0.3, y + h * 0.2 + Math.sin(t / 260) * 3, x + w + 4, y + h * 0.3 + Math.cos(t / 310) * 2);
+  g.stroke();
+}
+
 /** Felt mat with a dot texture, the yarn ball and needles top right unspooling toward the pointer, the basket rim along the bottom. */
 export function drawKnitBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();

@@ -5,14 +5,14 @@ import { drawCrystalsBackdrop, drawCrystalTray, drawCrystalWell } from "./crysta
 import { drawDeliciousBackdrop } from "./deliciousSkin";
 import { drawGooeyBackdrop, drawGooeyTray, drawGooeyWell } from "./gooeySkin";
 import { drawNatureBackdrop, drawNatureTray, drawNatureWell } from "./natureSkin";
-import { drawStainedGlassBackdrop, drawStainedGlassTray, drawStainedGlassWell } from "./stainedGlassSkin";
-import { drawLanternBackdrop, drawLanternTray, drawLanternWell } from "./lanternSkin";
+import { drawStainedGlassBackdrop, drawStainedGlassFill, drawStainedGlassTray, drawStainedGlassWell } from "./stainedGlassSkin";
+import { drawLanternBackdrop, drawLanternFill, drawLanternTray, drawLanternWell } from "./lanternSkin";
 import { drawCircuitBackdrop, drawCircuitTray, drawCircuitWell } from "./circuitSkin";
-import { drawKnitBackdrop, drawKnitTray, drawKnitWell } from "./knitSkin";
-import { drawNeonBackdrop, drawNeonTray, drawNeonWell } from "./neonSkin";
+import { drawKnitBackdrop, drawKnitFill, drawKnitTray, drawKnitWell } from "./knitSkin";
+import { drawNeonBackdrop, drawNeonFill, drawNeonTray, drawNeonWell } from "./neonSkin";
 import { drawSeaBackdrop, drawSeaTray, drawSeaWell } from "./seaGlassSkin";
 import { drawPixelBackdrop, drawPixelTray, drawPixelWell } from "./pixelSkin";
-import { drawOrigamiBackdrop, drawOrigamiTray, drawOrigamiWell } from "./origamiSkin";
+import { drawOrigamiBackdrop, drawOrigamiFill, drawOrigamiTray, drawOrigamiWell } from "./origamiSkin";
 import { drawVintageBackdrop, drawVintageTray, drawVintageWell } from "./vintageSkin";
 import { drawHalloweenBackdrop, drawHalloweenTray, drawHalloweenWell } from "./halloweenSkin";
 import { drawCellWell, drawPaper, drawTray, type Ctx } from "./modernSkin";
@@ -41,10 +41,15 @@ export interface TitleFx {
 }
 export type Backdrop = (g: Ctx, t: number, l?: Layout, flare?: number, fx?: TitleFx | null) => void;
 
+/** How a theme shows the timer in the next well: `level` 0..1 of the incoming `colour`, at game time `t`. */
+export type WellFill = (g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string, t: number) => void;
+
 /** Replenish-line furniture for themes whose timer fills the tray's next well. */
 export interface Furniture {
   well: (g: Ctx, x: number, y: number, w: number, h: number) => void;
   tray: (g: Ctx, x: number, y: number, w: number, h: number) => void;
+  /** Bespoke fill animation; themes without one get the plain rising colour. */
+  fill?: WellFill;
 }
 
 export type BackdropName = Exclude<Palette["backdrop"], "sprites">;
@@ -80,12 +85,12 @@ export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
   gooey: { well: drawGooeyWell, tray: drawGooeyTray },
   vintage: { well: drawVintageWell, tray: drawVintageTray },
   nature: { well: drawNatureWell, tray: drawNatureTray },
-  stainedglass: { well: drawStainedGlassWell, tray: drawStainedGlassTray },
-  lantern: { well: drawLanternWell, tray: drawLanternTray },
+  stainedglass: { well: drawStainedGlassWell, tray: drawStainedGlassTray, fill: drawStainedGlassFill },
+  lantern: { well: drawLanternWell, tray: drawLanternTray, fill: drawLanternFill },
   circuit: { well: drawCircuitWell, tray: drawCircuitTray },
-  knit: { well: drawKnitWell, tray: drawKnitTray },
-  neon: { well: drawNeonWell, tray: drawNeonTray },
+  knit: { well: drawKnitWell, tray: drawKnitTray, fill: drawKnitFill },
+  neon: { well: drawNeonWell, tray: drawNeonTray, fill: drawNeonFill },
   seaglass: { well: drawSeaWell, tray: drawSeaTray },
   pixel: { well: drawPixelWell, tray: drawPixelTray },
-  origami: { well: drawOrigamiWell, tray: drawOrigamiTray },
+  origami: { well: drawOrigamiWell, tray: drawOrigamiTray, fill: drawOrigamiFill },
 };

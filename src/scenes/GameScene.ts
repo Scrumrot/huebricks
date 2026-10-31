@@ -24,6 +24,7 @@ import {
 import { fillScreen } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
 import { drawCellWell, drawStain, drawTray, rgba } from "../engine/modernSkin";
+import { vuLit, vuPeak, type VuPeak } from "../engine/vuMeter";
 import { BACKDROPS, FURNITURE } from "../engine/backdrops";
 import { THEME_ORDER } from "../engine/theme";
 import { drawKeycaps } from "../engine/keycaps";
@@ -76,6 +77,8 @@ const POP_TOTAL_MS = POP_GROW_MS + POP_HOLD_MS + POP_SHRINK_MS;
 const SHOCK_MS = 300;
 const SCORE_MS = 600;
 const LAND_SQUASH_MS = 60;
+/** Tube brightness per 40 ms step after a landing: dark, hot, dark, bright, settle. */
+const LAND_FLICKER = [0.3, 1.3, 0.45, 1.15, 0.85, 1] as const;
 const LAND_SETTLE_MS = 160;
 const ROTATE_ANTICIPATE_MS = 60;
 const ROTATE_MS = 260;
@@ -149,6 +152,8 @@ interface BrickFx {
   noaddT0: number;
   fallFrom: number;
   wasFalling: boolean;
+  /** Game time the brick last landed, or -1 (tube flicker / pixel flash). */
+  landT0: number;
 }
 
 interface DieAnim {
@@ -328,6 +333,8 @@ export class GameScene implements Scene {
   private accel = 1;
 
   // --- chain meter ---
+  /** VU peak marker (Neon). */
+  private vuPeak: VuPeak = { seg: 0, t: 0 };
   /** Scoring pops since the meter last cooled off. */
   private chain = 0;
   /** 1 right after a pop, cooling to 0 at rest. */
@@ -594,7 +601,7 @@ export class GameScene implements Scene {
   private fxOf(b: Brick): BrickFx {
     let f = this.fx.get(b.id);
     if (!f) {
-      f = { s: 1, sx: 1, sy: 1, rot: 0, dx: 0, dy: 0, lift: 0, dim: 1, wipeT0: -1, noaddT0: -1, fallFrom: 0, wasFalling: false };
+      f = { s: 1, sx: 1, sy: 1, rot: 0, dx: 0, dy: 0, lift: 0, dim: 1, wipeT0: -1, noaddT0: -1, fallFrom: 0, wasFalling: false, landT0: -1 };
       this.fx.set(b.id, f);
     }
     return f;
@@ -1803,6 +1810,7 @@ export class GameScene implements Scene {
     const l = this.board.layout;
     const fell = b.y - f.fallFrom;
     f.wasFalling = false;
+    if (this.ctx.palette.fx.landFx !== "none") f.landT0 = this.ctx.clock.t;
     this.tweens.set(f, { sx: 1.15, sy: 0.85 });
     this.tweens.to(f, { sx: 1, sy: 1 }, D(LAND_SETTLE_MS), easeOutBack, { delay: D(LAND_SQUASH_MS) });
     if (fell > l.cellH * 1.5) {
@@ -2413,6 +2421,8 @@ export class GameScene implements Scene {
       drawBlockTransformed(g, brick, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
     }
 
+    if (f.landT0 >= 0) this.renderLanding(g, f, t - f.landT0, p.x + l.cellW / 2 + xo, p.y + l.cellH / 2, xs, ys);
+
     if (f.noaddT0 >= 0) {
       const e = t - f.noaddT0;
       const tint = e < D(100) ? 0.2 * (1 - e / D(100)) : 0;
@@ -2427,6 +2437,48 @@ export class GameScene implements Scene {
     if (b.refined && !wiping) {
       this.drawSpark(g, p.x + l.cellW * 0.78 + xo, p.y + l.cellH * 0.22, l.cellW * 0.085 * s);
     }
+  }
+
+  /**
+   * What a landing brick does besides the squash. Neon's tube strikes: dark,
+   * a hot flash, dark again, then steady. Pixel's brick is solid white for
+   * one frame.
+   */
+  private renderLanding(g: CanvasRenderingContext2D, f: BrickFx, e: number, cx: number, cy: number, xs: number, ys: number): void {
+    const pal = this.ctx.palette;
+    const l = this.board.layout;
+    const kind = pal.fx.landFx;
+    let over: number;
+    let color = "#ffffff";
+    if (kind === "flash") {
+      if (e >= D(40)) {
+        f.landT0 = -1;
+        return;
+      }
+      over = 0.92;
+    } else if (kind === "flicker") {
+      if (e >= D(240)) {
+        f.landT0 = -1;
+        return;
+      }
+      const on = LAND_FLICKER[Math.min(LAND_FLICKER.length - 1, Math.floor(e / D(40)))];
+      if (on < 1) {
+        over = 1 - on;
+        color = pal.background;
+      } else {
+        over = on - 1;
+      }
+    } else {
+      return;
+    }
+    if (over <= 0.01) return;
+    const pad = l.cellW * 0.04;
+    g.save();
+    g.translate(cx, cy);
+    g.scale(xs, ys);
+    g.globalAlpha = over;
+    fillRoundRect(g, -l.cellW / 2 + pad, -l.cellH / 2 + pad, l.cellW - pad * 2, l.cellH - pad * 2, pal.pixelated ? 0 : l.cellW * 0.18, color);
+    g.restore();
   }
 
   /** Four-point star used to mark refined bricks. */
@@ -2457,7 +2509,10 @@ export class GameScene implements Scene {
     const n = this.board.cellNum;
     const start = this.board.replenishList.length;
     const ry = replenishY(l);
-    for (let k = 0; k < PREVIEW_COUNT; k++) {
+    const pal = this.ctx.palette;
+    // a bespoke well fill already shows the next colour, so its ghost would only sit on top of it
+    const bespoke = pal.timer === "wells" && pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]?.fill !== undefined;
+    for (let k = bespoke ? 1 : 0; k < PREVIEW_COUNT; k++) {
       const i = start + k;
       if (i >= n) break;
       const s = 0.58 - k * 0.08;
@@ -2569,6 +2624,10 @@ export class GameScene implements Scene {
       const step = (grow + hold + shrink) / 4;
       e = Math.min(grow + hold + shrink, Math.floor(e / step) * step + 1);
     }
+    if (this.ctx.palette.fx.unravel && e > 0) {
+      this.renderUnravel(g, d, e / (grow + hold + shrink));
+      return;
+    }
     const q = clamp01((e - grow - hold) / shrink);
     const s = e <= 0 ? 1 : e < grow ? 1 + 0.18 * easeOutCubic(e / grow) : e < grow + hold ? 1.18 : 1.18 * (1 - easeInBack(q));
     const rot = e < grow + hold ? 0 : d.spin * 8 * DEG * q;
@@ -2607,6 +2666,48 @@ export class GameScene implements Scene {
       fillRoundRect(g, d.x + l.cellW / 2 - w / 2, d.y + l.cellH / 2 - w / 2 - hop, w, w, w * 0.22, "#ffffff");
       g.globalAlpha = 1;
     }
+  }
+
+  /**
+   * A knitted square comes undone: rows unravel from the top, each pulling
+   * out from its right end as a wavy strand, and what is left fades as the
+   * yarn debris takes over.
+   */
+  private renderUnravel(g: CanvasRenderingContext2D, d: DieAnim, u: number): void {
+    const l = this.board.layout;
+    const sp = this.ctx.sprites;
+    const rows = 4;
+    const rowH = l.cellH / rows;
+    const progress = Math.min(u, 1) * rows;
+    const gone = Math.min(rows - 1, Math.floor(progress));
+    const within = progress - gone;
+    const rowTop = d.y + gone * rowH;
+    const alpha = u > 0.7 ? Math.max(0, 1 - (u - 0.7) / 0.3) : 1;
+    if (alpha <= 0) return;
+    const pad = l.cellW * 0.04;
+    g.save();
+    g.beginPath();
+    // what is still knitted: the rows below, plus the shortening row being pulled out
+    g.rect(d.x - 2, rowTop + rowH, l.cellW + 4, l.cellH - (gone + 1) * rowH + 2);
+    g.rect(d.x - 2, rowTop, l.cellW * (1 - within) + 2 - pad, rowH + 0.5);
+    g.clip();
+    drawBlockTransformed(g, sp.brick_sprite, colorFrame(d.color), d.x, d.y, l.cellW, l.cellH, 1, 1, 0, 0, 0, alpha);
+    g.restore();
+    // the strand: from the end of the row out to the right and up, longer with every row gone
+    const t = this.ctx.clock.t;
+    const sx = d.x + l.cellW * (1 - within);
+    const sy = rowTop + rowH / 2;
+    const len = l.cellW * (0.35 + 0.65 * within + 0.4 * gone);
+    g.save();
+    g.globalAlpha = alpha;
+    g.strokeStyle = this.ctx.palette.brickColors[d.color];
+    g.lineWidth = Math.max(1.5, rowH * 0.32);
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(sx, sy);
+    g.bezierCurveTo(sx + len * 0.4, sy + Math.sin(t / 40) * rowH * 0.6, sx + len * 0.7, sy - len * 0.5, sx + len, sy - len * 0.55 + Math.cos(t / 55) * 2);
+    g.stroke();
+    g.restore();
   }
 
   /** `ReplenishSelector` draw event. */
@@ -2678,7 +2779,7 @@ export class GameScene implements Scene {
         // well fills with the incoming colour as the timer runs. Paper also
         // shows its paint stains.
         const paper = pal.backdrop === "paper";
-        const { well, tray } = (pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]) || { well: drawCellWell, tray: drawTray };
+        const { well, tray, fill } = (pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]) || { well: drawCellWell, tray: drawTray, fill: undefined };
         if (paper) {
           for (let x = 0; x < n; x++) {
             for (let y = 0; y < n; y++) well(g, cellX(l, x) + pad, cellY(l, y) + pad, l.cellW - pad * 2, l.cellH - pad * 2);
@@ -2721,6 +2822,10 @@ export class GameScene implements Scene {
           const wh = l.cellH - pad * 2;
           well(g, wx, wy, ww, wh);
           if (x !== filling || this.readyToPush) continue;
+          if (fill) {
+            fill(g, wx, wy, ww, wh, level, colour, t0);
+            continue;
+          }
           const fh = wh * level;
           if (fh < 0.5) continue;
           g.save();
@@ -2934,6 +3039,46 @@ export class GameScene implements Scene {
     });
   }
 
+  /**
+   * The chain as a VU meter: a row of segments lit in the multiplier colour,
+   * brighter toward the top, with a white peak marker that holds and falls.
+   * From x3 the lit run shimmers like a tube under load.
+   */
+  private renderVuMeter(g: CanvasRenderingContext2D, x: number, cy: number, w: number, mult: number, t: number): void {
+    const pal = this.ctx.palette;
+    const gap = 2;
+    const n = Math.max(8, Math.min(24, Math.floor(w / 8)));
+    const sw = (w - gap * (n - 1)) / n;
+    const h = 7;
+    const lit = vuLit(this.heat, n);
+    this.vuPeak = vuPeak(this.vuPeak, lit, t);
+    const color = pal.multColors[mult];
+    const shimmer = mult >= 3 ? 0.85 + 0.15 * Math.sin(t / 37) : 1;
+    for (let i = 0; i < n; i++) {
+      const sx = x + i * (sw + gap);
+      if (i < lit) {
+        g.save();
+        if (pal.glow) {
+          g.shadowColor = color;
+          g.shadowBlur = 6;
+        }
+        g.globalAlpha = (0.55 + 0.45 * (i / n)) * shimmer;
+        fillRoundRect(g, sx, cy - h / 2, sw, h, 1.5, color);
+        g.restore();
+      } else if (i === this.vuPeak.seg - 1) {
+        g.save();
+        if (pal.glow) {
+          g.shadowColor = "#ffffff";
+          g.shadowBlur = 6;
+        }
+        fillRoundRect(g, sx, cy - h / 2, sw, h, 1.5, "rgba(255,255,255,0.85)");
+        g.restore();
+      } else {
+        fillRoundRect(g, sx, cy - h / 2, sw, h, 1.5, pal.track);
+      }
+    }
+  }
+
   /** `Board` draw event: score, chain meter, level, goal counter and progress bar. */
   private renderHud(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
@@ -2971,8 +3116,10 @@ export class GameScene implements Scene {
       const meterH = 5;
       const meterX = r.scoreCx - meterW / 2;
       const meterY = r.chainY;
-      fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, pal.track);
-      if (this.heat > 0) {
+      if (pal.meter === "vu") {
+        this.renderVuMeter(g, meterX, meterY, meterW, mult, t);
+      } else fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, pal.track);
+      if (this.heat > 0 && pal.meter === "bar") {
         const fillW = Math.max(meterH, meterW * this.heat);
         if (pal.glow) {
           g.save();

@@ -246,6 +246,29 @@ export function drawLanternTray(g: Ctx, x: number, y: number, w: number, h: numb
   g.stroke();
 }
 
+/** The next lantern on the string: it hangs dark in its well and brightens to the incoming colour as the timer fills, swaying as it warms. */
+export function drawLanternFill(g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string, t: number): void {
+  const size = w * 0.4;
+  const drop = h * 0.14;
+  const swing = Math.sin(t / 700 + x * 0.013) * 0.1 * (0.3 + level);
+  g.save();
+  g.translate(x + w / 2, y + h * 0.06);
+  g.rotate(swing);
+  g.strokeStyle = rgba(GOLD, 0.6);
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.lineTo(0, drop);
+  g.stroke();
+  const cy = drop + size * 0.62;
+  miniLantern(g, 0, cy, size, shade(colour, -0.5), 0);
+  if (level > 0) {
+    g.globalAlpha = level;
+    miniLantern(g, 0, cy, size, colour, 0.4 + 0.6 * level);
+  }
+  g.restore();
+}
+
 /** Night sky, stars, lantern strings, fireflies and dark hills; with a layout, the board panel, hooks and the string tray. */
 export function drawLanternBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();

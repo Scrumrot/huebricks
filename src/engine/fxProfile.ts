@@ -54,6 +54,10 @@ export interface FxProfile {
   clearWave: boolean;
   /** A brick carried across the board trails a short ribbon in its colour. */
   liftRibbon: boolean;
+  /** What a landing brick does besides the squash: a tube that flickers on, or a one-frame white flash. */
+  landFx: "none" | "flicker" | "flash";
+  /** A pop unravels row by row from the top, the strand pulling out to the side, before the rest comes apart. */
+  unravel: boolean;
 }
 
 /** Nothing on: the faithful port. */
@@ -79,6 +83,8 @@ export const CLASSIC_FX: FxProfile = {
   chainBleed: false,
   clearWave: false,
   liftRibbon: false,
+  landFx: "none",
+  unravel: false,
 };
 
 /** Baseline for generated themes; each overrides what its material calls for. */
@@ -104,6 +110,8 @@ export const MODERN_FX: FxProfile = {
   chainBleed: true,
   clearWave: true,
   liftRibbon: true,
+  landFx: "none",
+  unravel: false,
 };
 
 export function fxProfile(overrides: Partial<FxProfile> = {}): FxProfile {

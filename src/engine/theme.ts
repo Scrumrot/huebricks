@@ -217,6 +217,8 @@ export interface Palette {
   stainColor: string | null;
   /** Draw sprites with smoothing off (chunky pixels) and snap debris to a grid. */
   pixelated: boolean;
+  /** Chain meter: a draining bar, or a segmented VU meter with a falling peak. */
+  meter: "bar" | "vu";
   /** Settled same-colour neighbours fuse: the seam between them is painted over so a group reads as one piece. */
   fuse: boolean;
   /** Which treatments the shared effects layer applies for this theme. */
@@ -290,6 +292,7 @@ export const CLASSIC: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: CLASSIC_FX,
   sound: null,
@@ -361,6 +364,7 @@ export const PIGMENT: Palette = {
   stains: true,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ fragments: false, vignette: "rgba(70,45,20,1)", signature: "splat" }),
   sound: MATERIALS.paint,
@@ -432,6 +436,7 @@ export const BLOCKY: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ shakeRot: false, mix: "wipe", vignette: "#000000", signature: "bounce" }),
   sound: MATERIALS.toy,
@@ -503,6 +508,7 @@ export const SPECTRA: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.synth,
@@ -574,6 +580,7 @@ export const DELICIOUS: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ vignette: "rgba(90,50,30,1)", signature: "bounce" }),
   sound: MATERIALS.paint,
@@ -645,6 +652,7 @@ export const CRYSTALS: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.glass,
@@ -716,6 +724,7 @@ export const HALLOWEEN: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#ffb347", bloom: true, vignette: "#000000", signature: "splat" }),
   sound: MATERIALS.dark,
@@ -787,6 +796,7 @@ export const WINTER: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", shakeRot: false, vignette: "rgba(40,70,110,1)", signature: "flare" }),
   sound: MATERIALS.snow,
@@ -858,6 +868,7 @@ export const CHRISTMAS: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ sparks: "#fff3b0", bloom: true, vignette: "#000000", signature: "bounce" }),
   sound: MATERIALS.bells,
@@ -929,6 +940,7 @@ export const GOOEY: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ fragments: false, bloom: true, vignette: "#000000", signature: "ripple" }),
   sound: MATERIALS.gel,
@@ -1000,6 +1012,7 @@ export const VINTAGE: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, mix: "wipe", vignette: "rgba(50,35,20,1)", signature: "bounce" }),
   sound: MATERIALS.wood,
@@ -1071,6 +1084,7 @@ export const NATURE: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ vignette: "rgba(20,50,30,1)", signature: "bounce" }),
   sound: MATERIALS.wood,
@@ -1142,6 +1156,7 @@ export const STAINED_GLASS: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: true,
   fx: fxProfile({ sparks: "#FFF3D0", bloom: true, vignette: "#000000", signature: "splat" }),
   sound: MATERIALS.glass,
@@ -1213,6 +1228,7 @@ export const LANTERN: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#FFE3A3", bloom: true, vignette: "#000000", signature: "float" }),
   sound: MATERIALS.bells,
@@ -1284,6 +1300,7 @@ export const ORIGAMI: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "fold", vignette: "rgba(58,46,34,1)", signature: "crane" }),
   sound: MATERIALS.paper,
@@ -1355,6 +1372,7 @@ export const CIRCUIT: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: true,
   fx: fxProfile({ sparks: "#FFFFFF", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.synth,
@@ -1426,8 +1444,9 @@ export const KNIT: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "bar",
   fuse: false,
-  fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "curtain", vignette: "rgba(63,51,43,1)", signature: "bounce" }),
+  fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "curtain", vignette: "rgba(63,51,43,1)", signature: "bounce", popFlash: false, unravel: true }),
   sound: MATERIALS.felt,
 };
 
@@ -1497,8 +1516,9 @@ export const NEON: Palette = {
   stains: false,
   stainColor: null,
   pixelated: false,
+  meter: "vu",
   fuse: false,
-  fx: fxProfile({ sparks: "#FFFFFF", bloom: true, vignette: "#000000", signature: "flare" }),
+  fx: fxProfile({ sparks: "#FFFFFF", bloom: true, vignette: "#000000", signature: "flare", landFx: "flicker" }),
   sound: MATERIALS.synth,
 };
 
@@ -1568,6 +1588,7 @@ export const SEAGLASS: Palette = {
   stains: true,
   stainColor: "#8E7A58",
   pixelated: false,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, vignette: "rgba(60,74,82,1)", signature: "ripple" }),
   sound: MATERIALS.snow,
@@ -1639,6 +1660,7 @@ export const PIXEL: Palette = {
   stains: false,
   stainColor: null,
   pixelated: true,
+  meter: "bar",
   fuse: false,
   fx: fxProfile({
     fragments: false,
@@ -1652,6 +1674,7 @@ export const PIXEL: Palette = {
     mixArc: false,
     liftRibbon: false,
     stepped: true,
+    landFx: "flash",
   }),
   sound: MATERIALS.toy,
 };

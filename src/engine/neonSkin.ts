@@ -245,6 +245,29 @@ export function drawNeonTray(g: Ctx, x: number, y: number, w: number, h: number)
   for (let px = x + 14; px < x + w - 10; px += 22) g.fillRect(px, y + 4, 10, 2);
 }
 
+/** A coin slot lighting in the incoming colour: the tube strikes with a stutter, then its glow swells with the timer. */
+export function drawNeonFill(g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string, t: number): void {
+  if (level <= 0) return;
+  const r = Math.min(w, h) * 0.22;
+  const inset = Math.min(w, h) * 0.1;
+  const strike = level < 0.12 ? (Math.sin(t / 19) > -0.2 ? 1 : 0.2) : 1;
+  const fh = (h - inset * 2) * level;
+  g.save();
+  roundRect(g, x + inset, y + inset, w - inset * 2, h - inset * 2, r);
+  g.clip();
+  g.fillStyle = rgba(colour, 0.3 * strike * (0.4 + 0.6 * level));
+  g.fillRect(x, y + h - inset - fh, w, fh);
+  g.restore();
+  g.save();
+  g.shadowColor = colour;
+  g.shadowBlur = 6 + 12 * level;
+  g.lineWidth = 2;
+  g.strokeStyle = rgba(colour, (0.3 + 0.7 * level) * strike);
+  roundRect(g, x + inset, y + inset, w - inset * 2, h - inset * 2, r);
+  g.stroke();
+  g.restore();
+}
+
 /** Night sky with stars, the striped sun on the horizon, the sliding grid below, scanlines over everything. */
 export function drawNeonBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: TitleFx | null = null): void {
   const sr = screenRect();
