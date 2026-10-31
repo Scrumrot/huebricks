@@ -158,7 +158,7 @@ Switch themes any time: the theme pill in the top-right of the title screen
 opens a picker, the pause card has a swatch strip and an "All" grid, and the
 `T` key cycles. The choice is remembered.
 
-Fifteen themes:
+Nineteen themes:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
   crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
@@ -202,6 +202,26 @@ Fifteen themes:
   mixing folds the new colour over the old along the crease, pops tear into
   paper scraps and a crane in the popped colour flies off. Display text is
   Nunito.
+- **Circuit** (`src/engine/circuitSkin.ts`): LEDs soldered to a green
+  board, copper traces and vias with a light pulse running along the trace
+  nearest the pointer, chip buttons with silkscreen icons and a DIP-socket
+  tray. Same-colour neighbours fuse into one lit run, pops flare and throw
+  hot sparks and dome shards. Display text is Share Tech Mono.
+- **Knit** (`src/engine/knitSkin.ts`): chunky knitted squares with stitched
+  glyphs on a felt mat, sewing-button controls, a yarn ball and needles that
+  unspool toward the pointer, and a wicker basket for the tray. Mixing
+  re-knits the new colour down from the top edge, and pops come apart into
+  loops of yarn. Display text is Baloo 2.
+- **Neon** (`src/engine/neonSkin.ts`): bent glass tubes on a synth horizon:
+  a perspective grid sliding toward a striped sun, stars and scanlines, neon
+  ring buttons and a cabinet coin-slot tray. Pops flicker, flare and throw
+  tube shards and sparks; a level clear blows the sun's stripes outward.
+  Display text is Audiowide.
+- **Sea Glass** (`src/engine/seaGlassSkin.ts`): frosted pebbles on wet sand
+  under a foam line that creeps in and out, shells, a crab that scuttles off
+  when tapped, water-drop buttons and a tide-pool tray. Pops ripple, burst
+  into rising bubbles and leave a wet patch that dries back to sand; a level
+  clear brings the tide up the sand. Display text is Quicksand.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -320,7 +340,8 @@ src/
     deliciousSkin.ts generated "Delicious" sprite set
     crystalsSkin.ts generated "Crystals" sprite set
     skinKit.ts      shared builder the seasonal themes are made from
-    stainedGlassSkin.ts, lanternSkin.ts, origamiSkin.ts  the three newest themes, on the same kit
+    stainedGlassSkin.ts, lanternSkin.ts, origamiSkin.ts  three themes from the design sheets, on the same kit
+    circuitSkin.ts, knitSkin.ts, neonSkin.ts, seaGlassSkin.ts  four more from the sheets
     halloweenSkin.ts, winterSkin.ts, christmasSkin.ts,
     gooeySkin.ts, vintageSkin.ts, natureSkin.ts
     backdrops.ts    backdrop and tray/well registry by theme
@@ -361,7 +382,8 @@ src/
   the theme's `fx` profile and the intensity of the moment. Classic's profile
   turns every new treatment off, so the faithful port is unaffected. Each
   theme also names a pop signature (stain, flare, ripple, bouncing chunks or
-  the tile floating away), a mix treatment (radial wipe, swirl or paper fold)
+  the tile floating away), a mix treatment (radial wipe, swirl, paper fold or
+  knitted curtain)
   and switches for the mix arc, group preview, glyph-shaped rings, impact
   frame, debris collisions, board heave, chain bleed, clear wave and lift
   ribbon, and the layer plays its own synthesised cues under mixes, fragments and

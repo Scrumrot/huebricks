@@ -68,9 +68,54 @@ export function drawFoldMix(g: CanvasRenderingContext2D, w: number, q: number, _
   g.restore();
 }
 
+/**
+ * The "curtain" mix: the new colour is knitted down from the top edge row
+ * by row, a loose strand of the old colour unravelling just ahead of it.
+ */
+export function drawCurtainMix(g: CanvasRenderingContext2D, w: number, q: number, oldColor: string, newColor: string, faces: MixFaces): void {
+  const e = easeInOutSine(clamp01(q));
+  const H = w * 0.78;
+  const edge = -H / 2 + H * e;
+  faces.old();
+  g.save();
+  g.beginPath();
+  g.rect(-H, -H, H * 2, edge + H);
+  g.clip();
+  faces.next();
+  g.restore();
+  if (e <= 0.01 || e >= 0.99) return;
+  const inset = w * 0.46;
+  g.save();
+  g.beginPath();
+  g.roundRect(-inset, -inset, inset * 2, inset * 2, w * 0.12);
+  g.clip();
+  // the row being knitted: a zigzag strand of the new colour over the seam
+  g.strokeStyle = shade(newColor, 1.25);
+  g.lineWidth = Math.max(1.5, w * 0.05);
+  g.lineCap = "round";
+  g.beginPath();
+  const amp = w * 0.035;
+  for (let k = 0; k <= 8; k++) {
+    const px = -inset + (k / 8) * inset * 2;
+    const py = edge + (k % 2 === 0 ? -amp : amp);
+    if (k === 0) g.moveTo(px, py);
+    else g.lineTo(px, py);
+  }
+  g.stroke();
+  // the loose strand of the old colour pulling away below
+  g.strokeStyle = shade(oldColor, 0.85);
+  g.lineWidth = Math.max(1, w * 0.035);
+  g.beginPath();
+  g.moveTo(-inset, edge + amp * 2);
+  g.quadraticCurveTo(0, edge + amp * 2 + w * 0.12 * Math.sin(e * Math.PI), inset + w * 0.1, edge + amp * 3);
+  g.stroke();
+  g.restore();
+}
+
 /** The theme's mix treatment for anything but the plain radial wipe, which callers keep drawing themselves. */
 export function drawMix(g: CanvasRenderingContext2D, mix: FxProfile["mix"], w: number, q: number, oldColor: string, newColor: string, faces: MixFaces): void {
   if (mix === "fold") drawFoldMix(g, w, q, oldColor, newColor, faces);
+  else if (mix === "curtain") drawCurtainMix(g, w, q, oldColor, newColor, faces);
   else drawSwirlMix(g, w, q, oldColor, newColor, faces);
 }
 

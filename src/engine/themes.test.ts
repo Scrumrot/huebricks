@@ -38,10 +38,13 @@ describe("theme registry", () => {
       Object.values(PALETTES)
         .filter((p) => p.fuse)
         .map((p) => p.name),
-    ).toEqual(["stainedglass"]);
+    ).toEqual(["stainedglass", "circuit"]);
     expect(PALETTES.classic.fx.signature).toBe("none");
     expect(PALETTES.classic.fx.mix).toBe("wipe");
     expect(PALETTES.origami.fx.mix).toBe("fold");
     expect(PALETTES.lantern.fx.signature).toBe("float");
+    expect(PALETTES.knit.fx.mix).toBe("curtain");
+    expect(PALETTES.seaglass.stainColor).toBeTruthy();
+    expect(PALETTES.circuit.fuse).toBe(true);
   });
 });

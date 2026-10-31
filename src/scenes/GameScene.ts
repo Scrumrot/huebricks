@@ -29,7 +29,7 @@ import { THEME_ORDER } from "../engine/theme";
 import { drawKeycaps } from "../engine/keycaps";
 import { drawModeGlyph, MODE_COLOR, modeLabel } from "../engine/modeGlyph";
 import { SoundControls, type SoundLayout } from "../engine/soundControls";
-import { drawSwatch, gridHeight, layoutGrid, layoutStrip, stripThemes, swatchAt, type Swatch } from "../engine/themePicker";
+import { drawSwatch, fitSwatch, gridHeight, layoutGrid, layoutStrip, stripThemes, swatchAt, type Swatch } from "../engine/themePicker";
 import { Effects } from "../engine/effects";
 import { hudControls, hudRail, type ControlKind, type Controls, type HudRail } from "../engine/hudLayout";
 import { ICONS } from "../engine/icons";
@@ -986,9 +986,9 @@ export class GameScene implements Scene {
 
   private themesPageLayout(): { x: number; y: number; w: number; h: number; size: number; gap: number; rowGap: number; back: PillButton } {
     const vp = this.ctx.view;
-    const w = Math.min(520, vp.w - 24);
-    const size = vp.w < 440 ? 50 : 56;
+    const w = Math.min(600, vp.w - 24);
     const gap = 10;
+    const size = fitSwatch(THEME_ORDER.length, w - 48, vp.h - 16 - (62 + 24 + 62), vp.w < 440 ? 50 : 56, gap, 0.64);
     const rowGap = size * 0.64;
     const gridH = gridHeight(THEME_ORDER.length, w - 48, size, gap, rowGap);
     const h = 62 + gridH + 24 + 62;
@@ -1189,7 +1189,7 @@ export class GameScene implements Scene {
           x: cxg,
           y: cyg,
           r: ext * 0.55 + l.cellW * 0.45,
-          color: pal.brickColors[g[0].color],
+          color: pal.stainColor ?? pal.brickColors[g[0].color],
           t0: t + D(gi * 40 + 100),
           dur: D(5200),
           seed: Math.floor(Math.random() * 1e6),

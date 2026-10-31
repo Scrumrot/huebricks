@@ -22,8 +22,12 @@ export interface FxProfile {
   popFlash: boolean;
   /** Pop sound, hit-stop, flash and shake land on the burst frame rather than when the pop is decided. */
   stagedPop: boolean;
-  /** Colour mixing: a hard radial wipe, a soft swirl with a highlight sweep, or a paper fold that flips the new colour over the old. */
-  mix: "wipe" | "swirl" | "fold";
+  /**
+   * Colour mixing: a hard radial wipe, a soft swirl with a highlight sweep,
+   * a paper fold that flips the new colour over the old, or a curtain that
+   * re-knits the new colour down from the top edge.
+   */
+  mix: "wipe" | "swirl" | "fold" | "curtain";
   /**
    * The material's own signature on a pop: a wet stain, a light flare, a
    * surface ripple, chunks that bounce on the shelf, the whole tile

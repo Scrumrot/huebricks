@@ -17,6 +17,10 @@ import { buildVintageSprites } from "./engine/vintageSkin";
 import { buildNatureSprites } from "./engine/natureSkin";
 import { buildStainedGlassSprites } from "./engine/stainedGlassSkin";
 import { buildLanternSprites } from "./engine/lanternSkin";
+import { buildCircuitSprites } from "./engine/circuitSkin";
+import { buildKnitSprites } from "./engine/knitSkin";
+import { buildNeonSprites } from "./engine/neonSkin";
+import { buildSeaGlassSprites } from "./engine/seaGlassSkin";
 import { buildOrigamiSprites } from "./engine/origamiSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
@@ -223,6 +227,10 @@ async function boot(): Promise<void> {
     nature: buildNatureSprites,
     stainedglass: buildStainedGlassSprites,
     lantern: buildLanternSprites,
+    circuit: buildCircuitSprites,
+    knit: buildKnitSprites,
+    neon: buildNeonSprites,
+    seaglass: buildSeaGlassSprites,
     origami: buildOrigamiSprites,
   };
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };

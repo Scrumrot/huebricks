@@ -15,7 +15,7 @@ import { nextTheme, THEME_LABELS, THEME_ORDER } from "../engine/theme";
 import { setReducedMotion } from "../engine/fxTuning";
 import { drawModeGlyph } from "../engine/modeGlyph";
 import { drawSpeaker, SoundControls } from "../engine/soundControls";
-import { drawSwatch, gridHeight, layoutGrid, swatchAt, type Swatch } from "../engine/themePicker";
+import { drawSwatch, fitSwatch, gridHeight, layoutGrid, swatchAt, type Swatch } from "../engine/themePicker";
 import { Tweens } from "../engine/tween";
 import { drawTile } from "../engine/tiles";
 import { createArcadeScene } from "./arcade";
@@ -419,9 +419,10 @@ export class TitleScene implements Scene {
   }
 
   private themesLayout(): { x: number; y: number; w: number; h: number; size: number; gap: number; rowGap: number; done: PillButton } {
-    const w = Math.min(560, this.W - 16);
-    const size = this.W < 440 ? 54 : 64;
+    const w = Math.min(640, this.W - 16);
     const gap = 12;
+    // swatches shrink until every theme fits on the card
+    const size = fitSwatch(THEME_ORDER.length, w - 48, this.H - 16 - (66 + 26 + 64), this.W < 440 ? 54 : 64, gap, 0.62);
     const rowGap = size * 0.62;
     const gridH = gridHeight(THEME_ORDER.length, w - 48, size, gap, rowGap);
     const h = 66 + gridH + 26 + 64;

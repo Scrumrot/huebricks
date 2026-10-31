@@ -29,7 +29,7 @@ export interface SoundProfile {
   partials: readonly (readonly [number, number])[];
 }
 
-export type Material = "paint" | "glass" | "paper" | "wood" | "dark" | "gel" | "toy" | "synth" | "bells" | "snow";
+export type Material = "paint" | "glass" | "paper" | "wood" | "dark" | "gel" | "toy" | "synth" | "bells" | "snow" | "felt";
 
 const base: SoundProfile = {
   wave: "triangle",
@@ -93,6 +93,8 @@ export const MATERIALS: Readonly<Record<Material, SoundProfile>> = {
       [4.2, 0.12],
     ],
   }),
+  /** Felt and yarn: soft, short, no ring at all. */
+  felt: material({ attack: 0.006, decay: 0.2, brightness: 2.2, grit: 0.3, spread: 4, bend: -2, space: 0.04 }),
   /** Snow: soft glass, hushed, lots of room. */
   snow: material({ wave: "sine", attack: 0.01, decay: 0.6, brightness: 6, grit: 0.2, spread: 4, bend: 0, space: 0.5, transpose: 7 }),
 };

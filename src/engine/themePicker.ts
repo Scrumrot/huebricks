@@ -53,6 +53,17 @@ export function layoutGrid(names: readonly ThemeName[], x: number, y: number, w:
   return out;
 }
 
+/**
+ * The largest swatch size, stepping down from `size`, whose grid of `count`
+ * swatches fits in `maxH` when wrapped inside `w`; row gaps are `rowGapK`
+ * times the swatch. Pure.
+ */
+export function fitSwatch(count: number, w: number, maxH: number, size: number, gap: number, rowGapK: number, min = 36): number {
+  let s = size;
+  while (s > min && gridHeight(count, w, s, gap, s * rowGapK) > maxH) s -= 2;
+  return s;
+}
+
 export function gridHeight(count: number, w: number, size: number, gap: number, rowGap = gap): number {
   const cols = Math.max(1, Math.floor((w + gap) / (size + gap)));
   const rows = Math.ceil(count / cols);
