@@ -121,28 +121,6 @@ export type SoundEvent =
   | "star"
   | "charge";
 
-export const SOUND_EVENTS: readonly SoundEvent[] = [
-  "select",
-  "combine",
-  "noadd",
-  "landing",
-  "pop",
-  "push",
-  "fill",
-  "rotate",
-  "fall",
-  "tap",
-  "achieve",
-  "lose",
-  "toggleOn",
-  "toggleOff",
-  "cardIn",
-  "cardOut",
-  "toast",
-  "star",
-  "charge",
-];
-
 export interface EventOptions {
   volume?: number;
   /** Pitch multiplier (1.0595 per semitone); the synth also reads `chain`. */
@@ -178,3 +156,6 @@ export const SAMPLE_FOR: Readonly<Record<SoundEvent, SoundName | null>> = {
   star: null,
   charge: null,
 };
+
+/** Every event, in the order of the sample map. */
+export const SOUND_EVENTS = Object.keys(SAMPLE_FOR) as SoundEvent[];

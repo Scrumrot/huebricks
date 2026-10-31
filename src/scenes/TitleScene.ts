@@ -600,7 +600,6 @@ export class TitleScene implements Scene {
       this.ctx.save.muted = this.ctx.audio.toggleMute();
       if (!this.ctx.save.muted) this.ctx.audio.event("toggleOn");
       this.ctx.persist();
-      if (!this.ctx.audio.muted) this.ctx.audio.event("tap");
       return;
     }
 

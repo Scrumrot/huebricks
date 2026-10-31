@@ -1,4 +1,5 @@
 import { BLACK, BLUE, GREEN, ORANGE, PURPLE, RED, YELLOW, type Color } from "../core/color";
+import { isSubtract } from "./colorNotes";
 import { mixColors } from "./colorUtil";
 
 /**
@@ -66,7 +67,7 @@ const primariesOf = (bits: number): Color[] => [RED, BLUE, YELLOW].filter((p) =>
  * one end, so they sweep a full turn and darken (or brighten) along it.
  */
 export function arcPlan(oldColor: Color, newColor: Color): ArcPlan {
-  const subtract = (newColor & oldColor) === newColor && newColor !== oldColor;
+  const subtract = isSubtract(oldColor, newColor);
   const changed = subtract ? oldColor & ~newColor : newColor & ~oldColor;
   const a0 = wheelAngle(oldColor);
   const a1 = wheelAngle(newColor);

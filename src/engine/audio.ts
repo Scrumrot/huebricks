@@ -56,6 +56,7 @@ export function shouldCoalesce(last: number | undefined, now: number, windowMs =
 
 interface MusicVoice {
   el: HTMLAudioElement;
+  src: MediaElementAudioSourceNode | null;
   gain: GainNode | null;
 }
 
@@ -90,6 +91,15 @@ export class AudioSystem implements AudioPort {
       this.ctx = null;
     }
     for (const name of SOUND_NAMES) void this.load(name);
+    // A track started before the first gesture played on its own; route it through the mixer now.
+    if (this.music && !this.music.gain) {
+      const voice = this.attach(this.music.el);
+      if (voice.gain) {
+        voice.gain.gain.value = this.musicVolume;
+        voice.el.volume = 1;
+        this.music = voice;
+      }
+    }
     if (this.music && this.music.el.paused && !this.muted) void this.music.el.play().catch(() => undefined);
   }
 
@@ -184,8 +194,9 @@ export class AudioSystem implements AudioPort {
     playCue(this.ctx, name, volume, rate, this.sfxBus);
   }
 
-  /** Start a track, crossfading out whatever was playing. */
+  /** Start a track, crossfading out whatever was playing. A new track always starts with the pause lifted. */
   playMusic(name: MusicName): void {
+    this.setPaused(false);
     if (this.musicName === name && this.music) return;
     const old = this.music;
     const el = new Audio(audioUrl(name));
@@ -206,6 +217,7 @@ export class AudioSystem implements AudioPort {
   }
 
   stopMusic(): void {
+    this.setPaused(false);
     if (this.music) this.fadeOut(this.music);
     this.music = null;
     this.musicName = null;
@@ -213,14 +225,14 @@ export class AudioSystem implements AudioPort {
 
   /** Route an element through the music bus when the mixer is up; otherwise it plays on its own. */
   private attach(el: HTMLAudioElement): MusicVoice {
-    if (!this.ctx || !this.musicBus) return { el, gain: null };
+    if (!this.ctx || !this.musicBus) return { el, src: null, gain: null };
     try {
       const src = this.ctx.createMediaElementSource(el);
       const gain = this.ctx.createGain();
       src.connect(gain).connect(this.musicBus);
-      return { el, gain };
+      return { el, src, gain };
     } catch {
-      return { el, gain: null };
+      return { el, src: null, gain: null };
     }
   }
 
@@ -228,6 +240,8 @@ export class AudioSystem implements AudioPort {
     const stop = () => {
       voice.el.pause();
       voice.el.src = "";
+      voice.src?.disconnect();
+      voice.gain?.disconnect();
     };
     if (voice.gain && this.ctx) {
       const t = this.ctx.currentTime;

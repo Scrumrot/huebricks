@@ -38,6 +38,12 @@ describe("landing on solids", () => {
     expect(chunk.vx).toBeLessThan(100);
     f.update(100);
     expect(chunk.y).toBeLessThan(100);
+    // falling back onto the shelf, the second touch brings it to rest instead of bouncing forever
+    chunk.y = 95;
+    chunk.vy = 300;
+    f.update(100, shelf);
+    expect(chunk.vy).toBe(0);
+    expect(chunk.y).toBe(100);
   });
 
   it("particles bounce too, and fall straight through with no collider", () => {

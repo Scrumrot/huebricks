@@ -125,23 +125,19 @@ export class Fragments {
       const yPrev = f.y;
       f.y += f.vy * s;
       f.rot += f.vr * s;
+      // Landing on a solid the scene reports, or on the shelf: one bounce, then rest on the second touch.
       const hit = landOn(solid, f.x, yPrev, f.y, f.vy);
-      if (hit) {
-        f.y = hit.y;
-        f.vy = hit.vy;
-        f.vx *= BOUNCE_SLIDE;
-        f.vr *= 0.6;
-      } else if (f.vy > 0 && f.y >= f.floor) {
-        f.y = f.floor;
+      const onFloor = !hit && f.vy > 0 && f.y >= f.floor;
+      if (hit || onFloor) {
+        f.y = hit ? hit.y : f.floor;
         if (f.bounced) {
-          // second touch: come to rest on the shelf
           f.vy = 0;
           f.vx *= 0.85;
           f.vr *= 0.7;
         } else {
           f.bounced = true;
-          f.vy = -f.vy * 0.42;
-          f.vx *= 0.6;
+          f.vy = hit ? hit.vy : -f.vy * 0.42;
+          f.vx *= hit ? BOUNCE_SLIDE : 0.6;
           f.vr *= 0.5;
         }
       }

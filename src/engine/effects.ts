@@ -1,6 +1,7 @@
 import type { Color } from "../core/color";
 import { arcPlan, wheelColorAt } from "./colorWheel";
 import type { AudioPort } from "./audio";
+import type { CueName } from "./synth";
 import type { Clock } from "./clock";
 import { debrisFor } from "./debris";
 import { clamp01, easeOutCubic, lerp } from "./easing";
@@ -221,6 +222,7 @@ export class Effects {
   /** Smoothed wall milliseconds per frame, for the lab readout. */
   frameMs = 16;
   private readonly ctx: EffectsContext;
+  private lastCue = new Map<string, number>();
 
   constructor(ctx: EffectsContext, particleCap = 500) {
     this.ctx = ctx;
@@ -229,6 +231,15 @@ export class Effects {
 
   private get pal(): Palette {
     return this.ctx.palette;
+  }
+
+  /** A synth cue, played once even when every brick of a group asks for it on the same frame. */
+  private cue(name: CueName, volume: number, rate: number): void {
+    const now = this.ctx.clock.now;
+    const last = this.lastCue.get(name);
+    if (last !== undefined && now - last < 28) return;
+    this.lastCue.set(name, now);
+    this.ctx.audio.cue(name, volume, rate);
   }
 
   get ringCount(): number {
@@ -458,7 +469,7 @@ export class Effects {
     const sc = popScale(k);
     this.ctx.clock.freeze(baseFreezeMs ?? sc.freezeMs);
     if (sc.slowmo && this.pal.fx.slowmo) this.ctx.clock.slow(TUNING.slowmo, TUNING.slowmoMs);
-    if (this.pal.fx.stagedPop && k >= 0.3) this.ctx.audio.cue("thump", 0.5 + 0.5 * k, 1 - 0.2 * k);
+    if (this.pal.fx.stagedPop && k >= 0.3) this.cue("thump", 0.5 + 0.5 * k, 1 - 0.2 * k);
   }
 
   /** A stain on the surface, drawn under the tiles. */
@@ -542,7 +553,7 @@ export class Effects {
         bias: spec.dir === undefined ? 0 : 0.5,
         floor: bounce ? spec.floor : undefined,
       });
-      this.ctx.audio.cue("crunch", 0.35 + 0.4 * spec.k, 0.9 + Math.random() * 0.2);
+      this.cue("crunch", 0.35 + 0.4 * spec.k, 0.9 + Math.random() * 0.2);
     }
     if (fx.sparks && !low) {
       const hot = fx.sparks;
@@ -585,7 +596,7 @@ export class Effects {
     switch (fx.signature) {
       case "float":
         if (draw) this.float(draw, cx, cy, cell, cell, paint, 900 + 400 * k);
-        if (k >= 0.3) this.ctx.audio.cue("sparkle", 0.3 + 0.3 * k, 0.8 + 0.2 * k);
+        if (k >= 0.3) this.cue("sparkle", 0.3 + 0.3 * k, 0.8 + 0.2 * k);
         break;
       case "crane":
         this.fly(cx, cy, cell * 0.9, paint, 1100 + 300 * k);
@@ -595,7 +606,7 @@ export class Effects {
         break;
       case "flare":
         this.flare(cx, cy, cell * (0.9 + 0.8 * k), "#ffffff", 200 + 120 * k);
-        if (k >= 0.3) this.ctx.audio.cue("sparkle", 0.4 + 0.4 * k, 1 + 0.3 * k);
+        if (k >= 0.3) this.cue("sparkle", 0.4 + 0.4 * k, 1 + 0.3 * k);
         break;
       case "ripple":
         this.ripple(cx, cy, cell * 0.35, cell * (1.05 + 0.6 * k), paint, 360 + 140 * k);
@@ -621,7 +632,7 @@ export class Effects {
       area: [cell * 0.5, cell * 0.5],
       ...(dir === undefined ? {} : { dir, spread: 1.4 }),
     });
-    this.ctx.audio.cue("whoosh", 0.45, 0.9 + Math.random() * 0.25);
+    this.cue("whoosh", 0.45, 0.9 + Math.random() * 0.25);
   }
 
   /** Level clear: a fountain of debris from each column, rolling across them when `stagger` is set, plus sparks and a vignette pulse where the theme allows. */
@@ -1000,10 +1011,11 @@ export class Effects {
       g.fillStyle = halo;
       g.fillRect(x - r, y - r, r * 2, r * 2);
       g.globalAlpha = alpha;
+      g.save();
       g.translate(x, y);
       g.scale(s, s);
       f.draw(g, f.w, f.h);
-      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.restore();
     }
     g.restore();
   }

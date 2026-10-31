@@ -1,5 +1,5 @@
 import type { ArcadeMode } from "../core/arcade";
-import type { ThemeName } from "./theme";
+import { THEME_ORDER, type ThemeName } from "./theme";
 
 /**
  * Persistent player data (`save_game.gml` / `load_game.gml`), stored in
@@ -52,28 +52,6 @@ const DEFAULTS: SaveData = {
   v: SAVE_VERSION,
 };
 
-const THEMES: readonly string[] = [
-  "classic",
-  "pigment",
-  "delicious",
-  "crystals",
-  "halloween",
-  "winter",
-  "christmas",
-  "gooey",
-  "vintage",
-  "nature",
-  "stainedglass",
-  "lantern",
-  "origami",
-  "circuit",
-  "knit",
-  "neon",
-  "seaglass",
-  "blocky",
-  "spectra",
-];
-
 export function loadGame(): SaveData {
   try {
     const raw = localStorage.getItem(KEY);
@@ -86,7 +64,7 @@ export function loadGame(): SaveData {
       parsed.sfx = DEFAULTS.sfx;
       parsed.music = DEFAULTS.music;
     }
-    if (!THEMES.includes(parsed.theme as string)) parsed.theme = DEFAULTS.theme;
+    if (!THEME_ORDER.includes(parsed.theme as ThemeName)) parsed.theme = DEFAULTS.theme;
     return { ...DEFAULTS, ...parsed, arcadeBest: { ...(parsed.arcadeBest ?? {}) }, v: SAVE_VERSION };
   } catch {
     return { ...DEFAULTS, arcadeBest: {} };
