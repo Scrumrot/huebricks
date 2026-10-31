@@ -2541,11 +2541,19 @@ export class GameScene implements Scene {
     const x = r.cx - r.slot / 2;
     const y = r.holdY - r.slot / 2;
     const active = this.holdHover && (this.selectedBrick !== null || this.held !== null);
+    // an empty slot invites a selected brick with a slow pulse of its active edge
+    const invite = pal.kind === "generated" && !this.held && this.selectedBrick !== null && !active && TUNING.motion > 0;
+    const pulse = invite ? 0.5 + 0.5 * Math.sin(this.ctx.clock.t / 260) : 0;
     if (pal.kind === "generated") {
       // Dashed while empty, so it reads as a place to put something.
       g.save();
       if (!this.held) g.setLineDash([6, 5]);
       fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, this.held ? 1.5 : 2);
+      if (pulse > 0) {
+        g.globalAlpha = pulse * 0.7;
+        fillRoundRect(g, x, y, r.slot, r.slot, 10, "rgba(0,0,0,0)", pal.overlayAccent, 2);
+        g.globalAlpha = 1;
+      }
       g.restore();
       drawText(g, "HOLD", r.holdLabelX, r.holdLabelY, { size: Math.max(10, r.textSize * 0.62), color: pal.hudMuted, weight: 700, align: r.holdLabelAlign });
       if (this.keyboardUsed && !l.portrait) this.drawKeycap(g, "H", r.holdLabelX + r.side * 11, r.holdLabelY - 22);
@@ -2560,6 +2568,12 @@ export class GameScene implements Scene {
         g.strokeStyle = pal.wellHint;
         g.fillStyle = pal.wellHint;
         ICONS.hold(g, r.cx, r.holdY, r.slot * 0.27);
+        if (pulse > 0) {
+          g.globalAlpha = pulse * 0.5;
+          g.strokeStyle = pal.overlayAccent;
+          g.fillStyle = pal.overlayAccent;
+          ICONS.hold(g, r.cx, r.holdY, r.slot * 0.27);
+        }
         g.restore();
       } else {
         drawText(g, "H", r.cx, r.holdY, { size: r.slot * 0.4, color: pal.wellHint, bold: true });

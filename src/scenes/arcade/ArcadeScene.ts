@@ -8,7 +8,7 @@ import { Effects } from "../../engine/effects";
 import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton, type TextStyle } from "../../engine/draw";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
 import { rgba } from "../../engine/modernSkin";
-import { popScale } from "../../engine/fxTuning";
+import { popScale, TUNING } from "../../engine/fxTuning";
 import { drawTile, type TileOptions, type TileShape } from "../../engine/tiles";
 import { nextTheme, THEME_LABELS } from "../../engine/theme";
 import { Tweens } from "../../engine/tween";
@@ -83,6 +83,8 @@ interface SpriteButton {
 export type ArcadeState = "play" | "menu" | "lost" | "won" | "intro";
 
 const FADE_MS = 180;
+/** The HUD settles in over this long as a mode opens (generated themes). */
+const ARRIVE_MS = 420;
 const CARD_MS = 420;
 const CARD_EASE = backOut(1.2);
 const COUNT_MS = 500;
@@ -638,7 +640,15 @@ export abstract class ArcadeScene implements Scene {
     this.effects.renderWash(g, this.L.x, this.L.y, this.L.w, this.L.h);
     this.effects.renderFlash(g, this.L.x, this.L.y, this.L.w, this.L.h);
     this.renderCallouts(g);
-    this.renderHud(g);
+    {
+      // the HUD settles down into place as the mode opens (generated themes)
+      const a = pal.kind === "generated" ? (1 - easeOutCubic(clamp01((t - this.fadeT0) / ARRIVE_MS))) * TUNING.motion : 0;
+      g.save();
+      g.translate(0, -a * 24);
+      g.globalAlpha = 1 - a * 0.6;
+      this.renderHud(g);
+      g.restore();
+    }
     this.effects.renderVignette(g);
     g.restore();
 
