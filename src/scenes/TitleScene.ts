@@ -96,6 +96,8 @@ const WALL_COLS = 12;
 const WALL_SIZE = BTN_H / 2;
 /** The title's pieces settle into place over this long after it opens (generated themes). */
 const INTRO_MS = 520;
+/** A sub-menu's card and buttons rise in over this long. */
+const MENU_MS = 220;
 /** Rows of the original 760 x 507 wall; the classic world-select card is sized from it. */
 const WALL_ROWS = Math.ceil((WALL_COLS * 2) / 3);
 const FLIP_FRAMES = 16;
@@ -115,6 +117,20 @@ const SCATTER_EASE = backOut(1.4);
 export class TitleScene implements Scene {
   private readonly ctx: GameContext;
   private menu: MenuState = "main";
+  /** Game time the current menu opened, for its entrance. */
+  private menuT0 = -1e9;
+
+  private setMenu(m: MenuState): void {
+    if (this.menu === m) return;
+    this.menu = m;
+    this.menuT0 = this.ctx.clock.t;
+  }
+
+  /** Entrance progress of the open sub-menu: its card and buttons rise and fade in (generated themes). */
+  private menuIn(): number {
+    if (!this.generated || this.menu === "main" || this.menu === "launch") return 1;
+    return easeOutCubic(clamp01((this.ctx.clock.t - this.menuT0) / MENU_MS));
+  }
   private buttons: MenuButton[] = [];
   private wall: WallBrick[] = [];
   private chips: ScatterChip[] = [];
@@ -379,7 +395,7 @@ export class TitleScene implements Scene {
   }
 
   private showMain(): void {
-    this.menu = "main";
+    this.setMenu("main");
     const lg = this.ctx.sprites.logo_sprite;
     const logoW = Math.min(this.W - 40, BTN_W * (this.ctx.palette.name === "blocky" ? 2.1 : 1.5) * (this.ctx.view.portrait ? 1.2 : 1));
     const logo = this.generated
@@ -388,10 +404,10 @@ export class TitleScene implements Scene {
     this.buttons = [
       logo,
       this.button("info", "info_button_sprite", BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => {
-        this.menu = "credits";
+        this.setMenu("credits");
       }),
       this.button("settings", "settings_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => {
-        this.menu = "settings";
+        this.setMenu("settings");
         this.buttons = [];
       }),
     ];
@@ -419,7 +435,7 @@ export class TitleScene implements Scene {
 
   /** The theme picker: every theme as a swatch on a card. */
   private showThemes(): void {
-    this.menu = "themes";
+    this.setMenu("themes");
     this.buttons = [];
     this.pills = [];
     const L = this.themesLayout();
@@ -464,7 +480,7 @@ export class TitleScene implements Scene {
   }
 
   private showModes(): void {
-    this.menu = "mode";
+    this.setMenu("mode");
     const stacked = this.ctx.view.portrait || this.W < BTN_W * 2 + 40;
     const vGap = BTN_H * 1.22;
     const gap = this.generated ? BTN_W * 1.04 : BTN_W + 8;
@@ -483,7 +499,7 @@ export class TitleScene implements Scene {
 
   /** The arcade grid: one tile per mode, as many across as fit. */
   private showArcade(): void {
-    this.menu = "arcade";
+    this.setMenu("arcade");
     this.heldTile = null;
     this.buttons = [this.button("back", "back_button_sprite", this.W - BTN_H / 2, this.H - BTN_H / 2, BTN_H, BTN_H, () => this.showModes())];
     const card = this.arcadeCard();
@@ -518,13 +534,13 @@ export class TitleScene implements Scene {
   private launchArcade(mode: ArcadeMode): void {
     this.ctx.session.score = 0;
     this.pendingArcade = mode;
-    this.menu = "launch";
+    this.setMenu("launch");
     this.buttons = [];
     this.launchT0 = this.ctx.clock.t;
   }
 
   private showWorlds(type: GameType): void {
-    this.menu = "world";
+    this.setMenu("world");
     this.pendingType = type;
     this.buttons = [];
     const modern = this.generated;
@@ -547,7 +563,7 @@ export class TitleScene implements Scene {
     s.level = 0;
     s.score = 0;
     this.pendingArcade = null;
-    this.menu = "launch";
+    this.setMenu("launch");
     this.buttons = [];
     this.launchT0 = this.ctx.clock.t;
   }
@@ -1225,7 +1241,12 @@ export class TitleScene implements Scene {
       if (pal.titleDeco === "chips") this.renderScatter(g);
       else this.renderBubbles(g);
       // Push the decoration back so the menu reads as the foreground.
-      if (subMenu) fillScreen(g, pal.titleDim);
+      if (subMenu) {
+        g.save();
+        g.globalAlpha = this.menuIn();
+        fillScreen(g, pal.titleDim);
+        g.restore();
+      }
     } else if (pal.name === "blocky") {
       drawBlockyBackdrop(g, this.ctx.clock.t);
       // Staggered wall of toy bricks, every other row shifted half a brick.
@@ -1237,7 +1258,10 @@ export class TitleScene implements Scene {
         drawSprite(g, wallSprite, b.frame, b.cx + ox - WALL_SIZE / 2, b.cy - WALL_SIZE / 2 - 10 * b.hop, WALL_SIZE, WALL_SIZE);
       }
       if (subMenu) {
+        g.save();
+        g.globalAlpha = this.menuIn();
         fillScreen(g, "rgba(18,24,38,0.72)");
+        g.restore();
       }
     } else {
       const wallSprite = sp.brick_noicon_sprite;
@@ -1301,6 +1325,13 @@ export class TitleScene implements Scene {
       g.restore();
     }
 
+    // sub-menus rise and fade in; the main menu has its own entrance above
+    const menuIn = this.menuIn();
+    g.save();
+    if (menuIn < 1) {
+      g.globalAlpha = menuIn;
+      g.translate(0, (1 - menuIn) * 18 * TUNING.motion);
+    }
     if (this.menu === "world") {
       if (modern) {
         const w = Math.min(520, this.W - 16);
@@ -1380,6 +1411,7 @@ export class TitleScene implements Scene {
     }
     if (this.menu === "settings") this.renderSettings(g);
     if (this.menu === "themes") this.renderThemes(g);
+    g.restore();
 
     // Scene fades: in from the background on entry, out to it on launch.
     const e = this.ctx.clock.t - this.enterT0;
