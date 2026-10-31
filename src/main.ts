@@ -21,6 +21,7 @@ import { buildCircuitSprites } from "./engine/circuitSkin";
 import { buildKnitSprites } from "./engine/knitSkin";
 import { buildNeonSprites } from "./engine/neonSkin";
 import { buildSeaGlassSprites } from "./engine/seaGlassSkin";
+import { buildPixelSprites } from "./engine/pixelSkin";
 import { buildOrigamiSprites } from "./engine/origamiSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
@@ -231,6 +232,7 @@ async function boot(): Promise<void> {
     knit: buildKnitSprites,
     neon: buildNeonSprites,
     seaglass: buildSeaGlassSprites,
+    pixel: buildPixelSprites,
     origami: buildOrigamiSprites,
   };
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
@@ -308,6 +310,8 @@ async function boot(): Promise<void> {
     }
     if (steps === 5) acc = 0;
     clock.alpha = clock.frozen ? clock.alpha : Math.min(1, acc / STEP);
+    // Pixel themes scale their small sprites up with no smoothing, so every edge stays a crisp block.
+    g.imageSmoothingEnabled = !ctx.palette.pixelated;
     scene.render(g);
     const cursor = scene.cursor?.() ?? "default";
     if (cursor !== lastCursor) {

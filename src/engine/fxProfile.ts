@@ -27,7 +27,9 @@ export interface FxProfile {
    * a paper fold that flips the new colour over the old, or a curtain that
    * re-knits the new colour down from the top edge.
    */
-  mix: "wipe" | "swirl" | "fold" | "curtain";
+  mix: "wipe" | "swirl" | "fold" | "curtain" | "dither";
+  /** Pops play in four stepped frames instead of a tween. */
+  stepped: boolean;
   /**
    * The material's own signature on a pop: a wet stain, a light flare, a
    * surface ripple, chunks that bounce on the shelf, the whole tile
@@ -71,6 +73,7 @@ export const CLASSIC_FX: FxProfile = {
   mixArc: false,
   impactFrame: false,
   groupPreview: false,
+  stepped: false,
   debrisCollide: false,
   boardHeave: false,
   chainBleed: false,
@@ -95,6 +98,7 @@ export const MODERN_FX: FxProfile = {
   mixArc: true,
   impactFrame: true,
   groupPreview: true,
+  stepped: false,
   debrisCollide: true,
   boardHeave: true,
   chainBleed: true,

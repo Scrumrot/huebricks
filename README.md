@@ -158,7 +158,7 @@ Switch themes any time: the theme pill in the top-right of the title screen
 opens a picker, the pause card has a swatch strip and an "All" grid, and the
 `T` key cycles. The choice is remembered.
 
-Nineteen themes:
+Twenty themes:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
   crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
@@ -222,6 +222,13 @@ Nineteen themes:
   when tapped, water-drop buttons and a tide-pool tray. Pops ripple, burst
   into rising bubbles and leave a wet patch that dries back to sand; a level
   clear brings the tide up the sand. Display text is Quicksand.
+- **Pixel** (`src/engine/pixelSkin.ts`): sixteen-colour bevelled bricks
+  drawn at 32 px and scaled up with smoothing off, a 4 px dithered night
+  sky over a blocky skyline with blinking stars and scanlines, a parallax
+  city on the title, console buttons and an item-bar tray whose wells fill
+  in eight ticking steps. Debris is square pixels on an 8 px grid, pops
+  play in four stepped frames, mixing is a dither wipe and big chains flash
+  the whole screen. Display text is Press Start 2P, cues are chiptune.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -342,6 +349,7 @@ src/
     skinKit.ts      shared builder the seasonal themes are made from
     stainedGlassSkin.ts, lanternSkin.ts, origamiSkin.ts  three themes from the design sheets, on the same kit
     circuitSkin.ts, knitSkin.ts, neonSkin.ts, seaGlassSkin.ts  four more from the sheets
+    pixelSkin.ts    the console theme: low-res sprites, dither, stepped pops
     halloweenSkin.ts, winterSkin.ts, christmasSkin.ts,
     gooeySkin.ts, vintageSkin.ts, natureSkin.ts
     backdrops.ts    backdrop and tray/well registry by theme
@@ -382,8 +390,8 @@ src/
   the theme's `fx` profile and the intensity of the moment. Classic's profile
   turns every new treatment off, so the faithful port is unaffected. Each
   theme also names a pop signature (stain, flare, ripple, bouncing chunks or
-  the tile floating away), a mix treatment (radial wipe, swirl, paper fold or
-  knitted curtain)
+  the tile floating away), a mix treatment (radial wipe, swirl, paper fold,
+  knitted curtain or dither)
   and switches for the mix arc, group preview, glyph-shaped rings, impact
   frame, debris collisions, board heave, chain bleed, clear wave and lift
   ribbon, and the layer plays its own synthesised cues under mixes, fragments and

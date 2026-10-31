@@ -46,6 +46,8 @@ export interface SpawnOptions {
 
 export class Particles {
   readonly cap: number;
+  /** When set, square particles draw on this grid in two sizes, for pixel themes. */
+  snap = 0;
   private n = 0;
   private readonly x: Float32Array;
   private readonly y: Float32Array;
@@ -180,6 +182,14 @@ export class Particles {
       g.fillStyle = ramp ? ramp[rampIndex(k)] : this.color[i];
       const shape = this.shape[i];
       const stretched = this.stretch[i] > 0 && (shape === 0 || shape === 1 || shape === 9);
+      if (this.snap > 0 && shape === 0) {
+        const q = this.snap;
+        const px = Math.round(this.x[i] / q) * q;
+        const py = Math.round(this.y[i] / q) * q;
+        const ss = s > q * 0.75 ? q : q / 2;
+        g.fillRect(px - ss / 2, py - ss / 2, ss, ss);
+        continue;
+      }
       if (shape === 9 || stretched) {
         // Along the velocity: a capsule whose length grows with speed.
         const speed = Math.hypot(this.vx[i], this.vy[i]);

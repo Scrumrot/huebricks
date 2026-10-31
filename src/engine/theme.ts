@@ -25,6 +25,7 @@ export type ThemeName =
   | "knit"
   | "neon"
   | "seaglass"
+  | "pixel"
   | "blocky"
   | "spectra";
 
@@ -46,6 +47,7 @@ export const THEME_ORDER: readonly ThemeName[] = [
   "knit",
   "neon",
   "seaglass",
+  "pixel",
   "spectra",
   "blocky",
   "classic",
@@ -74,6 +76,7 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   knit: "Knit",
   neon: "Neon",
   seaglass: "Sea Glass",
+  pixel: "Pixel",
   blocky: "Blocky",
   spectra: "Spectra",
 };
@@ -118,13 +121,29 @@ export interface Palette {
     | "circuit"
     | "knit"
     | "neon"
-    | "seaglass";
+    | "seaglass"
+    | "pixel";
   /** How bricks are drawn around their face sprite. */
   brickStyle: "flat" | "chip" | "extruded" | "gel";
   /** Fill timer: a bar under the grid, or the next tray well filling with the incoming colour. */
   timer: "bar" | "wells";
   /** What flies out of a popped brick. */
-  popStyle: "flecks" | "dots" | "cubes" | "splat" | "sprinkles" | "shards" | "bats" | "snow" | "confetti" | "leaves" | "scraps" | "embers" | "bubbles" | "yarn";
+  popStyle:
+    | "flecks"
+    | "dots"
+    | "cubes"
+    | "splat"
+    | "sprinkles"
+    | "shards"
+    | "bats"
+    | "snow"
+    | "confetti"
+    | "leaves"
+    | "scraps"
+    | "embers"
+    | "bubbles"
+    | "yarn"
+    | "pixels";
   /** Title-screen decoration: scattered tiles, tiles floating up, or the flipping brick wall. */
   titleDeco: "chips" | "bubbles" | "wall";
   /** Veil over the decoration while a sub-menu is open. */
@@ -196,6 +215,8 @@ export interface Palette {
   stains: boolean;
   /** The stain's colour; null stains in the popped brick's colour. */
   stainColor: string | null;
+  /** Draw sprites with smoothing off (chunky pixels) and snap debris to a grid. */
+  pixelated: boolean;
   /** Settled same-colour neighbours fuse: the seam between them is painted over so a group reads as one piece. */
   fuse: boolean;
   /** Which treatments the shared effects layer applies for this theme. */
@@ -268,6 +289,7 @@ export const CLASSIC: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: CLASSIC_FX,
   sound: null,
@@ -338,6 +360,7 @@ export const PIGMENT: Palette = {
   particlesAdditive: false,
   stains: true,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ fragments: false, vignette: "rgba(70,45,20,1)", signature: "splat" }),
   sound: MATERIALS.paint,
@@ -408,6 +431,7 @@ export const BLOCKY: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ shakeRot: false, mix: "wipe", vignette: "#000000", signature: "bounce" }),
   sound: MATERIALS.toy,
@@ -478,6 +502,7 @@ export const SPECTRA: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.synth,
@@ -548,6 +573,7 @@ export const DELICIOUS: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ vignette: "rgba(90,50,30,1)", signature: "bounce" }),
   sound: MATERIALS.paint,
@@ -618,6 +644,7 @@ export const CRYSTALS: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.glass,
@@ -688,6 +715,7 @@ export const HALLOWEEN: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#ffb347", bloom: true, vignette: "#000000", signature: "splat" }),
   sound: MATERIALS.dark,
@@ -758,6 +786,7 @@ export const WINTER: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ sparks: "#ffffff", shakeRot: false, vignette: "rgba(40,70,110,1)", signature: "flare" }),
   sound: MATERIALS.snow,
@@ -828,6 +857,7 @@ export const CHRISTMAS: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ sparks: "#fff3b0", bloom: true, vignette: "#000000", signature: "bounce" }),
   sound: MATERIALS.bells,
@@ -898,6 +928,7 @@ export const GOOEY: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ fragments: false, bloom: true, vignette: "#000000", signature: "ripple" }),
   sound: MATERIALS.gel,
@@ -968,6 +999,7 @@ export const VINTAGE: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, mix: "wipe", vignette: "rgba(50,35,20,1)", signature: "bounce" }),
   sound: MATERIALS.wood,
@@ -1038,6 +1070,7 @@ export const NATURE: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ vignette: "rgba(20,50,30,1)", signature: "bounce" }),
   sound: MATERIALS.wood,
@@ -1108,6 +1141,7 @@ export const STAINED_GLASS: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: true,
   fx: fxProfile({ sparks: "#FFF3D0", bloom: true, vignette: "#000000", signature: "splat" }),
   sound: MATERIALS.glass,
@@ -1178,6 +1212,7 @@ export const LANTERN: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ fragments: false, sparks: "#FFE3A3", bloom: true, vignette: "#000000", signature: "float" }),
   sound: MATERIALS.bells,
@@ -1248,6 +1283,7 @@ export const ORIGAMI: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "fold", vignette: "rgba(58,46,34,1)", signature: "crane" }),
   sound: MATERIALS.paper,
@@ -1318,6 +1354,7 @@ export const CIRCUIT: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: true,
   fx: fxProfile({ sparks: "#FFFFFF", bloom: true, shakeRot: false, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.synth,
@@ -1388,6 +1425,7 @@ export const KNIT: Palette = {
   particlesAdditive: false,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, mix: "curtain", vignette: "rgba(63,51,43,1)", signature: "bounce" }),
   sound: MATERIALS.felt,
@@ -1458,6 +1496,7 @@ export const NEON: Palette = {
   particlesAdditive: true,
   stains: false,
   stainColor: null,
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ sparks: "#FFFFFF", bloom: true, vignette: "#000000", signature: "flare" }),
   sound: MATERIALS.synth,
@@ -1528,9 +1567,93 @@ export const SEAGLASS: Palette = {
   particlesAdditive: false,
   stains: true,
   stainColor: "#8E7A58",
+  pixelated: false,
   fuse: false,
   fx: fxProfile({ doubleRing: false, shakeRot: false, slowmo: false, vignette: "rgba(60,74,82,1)", signature: "ripple" }),
   sound: MATERIALS.snow,
+};
+
+/** "Pixel": sixteen-colour chunky bricks, bevelled like an old console. */
+export const PIXEL: Palette = {
+  name: "pixel",
+  popStyle: "pixels",
+  kind: "generated",
+  backdrop: "pixel",
+  brickStyle: "flat",
+  timer: "wells",
+  titleDeco: "chips",
+  titleDim: "rgba(11,12,32,0.72)",
+  background: "#1A1C3C",
+  hudText: "#F6F3FF",
+  hudMuted: "#9A98C2",
+  gridLine: "#F6F3FF",
+  gridAlpha: 0,
+  crosshair: "rgba(246,243,255,0.6)",
+  titleText: "#F6F3FF",
+  titleMuted: "#9A98C2",
+  overlayText: "#F6F3FF",
+  overlayAccent: "#F7C62B",
+  tutorialText: "#F6F3FF",
+  tutorialShadow: "#0B0C20",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: '"Press Start 2P", "Courier New", monospace',
+  ui: {
+    card: "#14163A",
+    cardEdge: "#8C8FD8",
+    cardShadow: "#0B0C20",
+    dim: "rgba(11,12,32,0.65)",
+    primary: "#E8433F",
+    primaryHover: "#F26560",
+    primaryText: "#F6F3FF",
+    secondary: "#2A2E5A",
+    secondaryHover: "#3A3F8C",
+    secondaryEdge: "#8C8FD8",
+    secondaryText: "#F6F3FF",
+  },
+  brickShadow: null,
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#F6F3FF",
+  flashAlpha: 0.3,
+  callout: "#F6F3FF",
+  calloutShadow: "#0B0C20",
+  multColors: ["", "#F6F3FF", "#F7C62B", "#F08A26", "#E8433F", "#9A4BE8"],
+  brickColors: { 1: "#E8433F", 2: "#2F62E6", 3: "#9A4BE8", 4: "#F7C62B", 5: "#F08A26", 6: "#3FB24B", 7: "#4A4A5C" },
+  well: "#12142E",
+  wellEdge: "#2A2E5A",
+  wellActive: "rgba(247,198,43,0.2)",
+  wellActiveEdge: "#F7C62B",
+  wellHint: "rgba(246,243,255,0.25)",
+  pill: "#2A2E5A",
+  pillEdge: "#8C8FD8",
+  track: "rgba(246,243,255,0.14)",
+  trackMax: "rgba(246,243,255,0.3)",
+  barFlash: "#F6F3FF",
+  goalAccent: "#3FB24B",
+  ring: "#F6F3FF",
+  dust: ["rgba(246,243,255,0.9)", "rgba(140,143,216,0.6)"],
+  glow: false,
+  flashFromBrick: true,
+  particlesAdditive: false,
+  stains: false,
+  stainColor: null,
+  pixelated: true,
+  fuse: false,
+  fx: fxProfile({
+    fragments: false,
+    doubleRing: false,
+    shakeRot: false,
+    slowmo: false,
+    mix: "dither",
+    vignette: "#000000",
+    signature: "none",
+    ringShape: "circle",
+    mixArc: false,
+    liftRibbon: false,
+    stepped: true,
+  }),
+  sound: MATERIALS.toy,
 };
 
 export const PALETTES: Record<ThemeName, Palette> = {
@@ -1551,6 +1674,7 @@ export const PALETTES: Record<ThemeName, Palette> = {
   knit: KNIT,
   neon: NEON,
   seaglass: SEAGLASS,
+  pixel: PIXEL,
   blocky: BLOCKY,
   spectra: SPECTRA,
 };

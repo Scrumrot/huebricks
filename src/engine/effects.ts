@@ -298,6 +298,7 @@ export class Effects {
     const { clock } = this.ctx;
     this.governor(clock.now);
     const solid = this.pal.fx.debrisCollide ? this.collider : null;
+    this.particles.snap = this.pal.pixelated ? 8 : 0;
     this.particles.update(clock.dt, solid);
     this.fragments.update(clock.dt, solid);
     const t = clock.t;
@@ -627,7 +628,7 @@ export class Effects {
       life: [260, 420],
       gravity: 700,
       drag: 0.2,
-      shape: 1,
+      shape: this.pal.pixelated ? 0 : 1,
       stretch: 0.6,
       area: [cell * 0.5, cell * 0.5],
       ...(dir === undefined ? {} : { dir, spread: 1.4 }),

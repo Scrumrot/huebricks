@@ -112,10 +112,44 @@ export function drawCurtainMix(g: CanvasRenderingContext2D, w: number, q: number
   g.restore();
 }
 
+/** The 4x4 Bayer matrix, normalised to 0..1: the order cells turn on in an ordered dither. */
+const BAYER4 = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+].map((row) => row.map((v) => (v + 0.5) / 16));
+
+/** Which cells of an n-by-n grid show the new colour at progress `q` under an ordered dither. Pure. */
+export function ditherCells(q: number, n: number): boolean[][] {
+  return Array.from({ length: n }, (_, iy) => Array.from({ length: n }, (_, ix) => BAYER4[iy % 4][ix % 4] < q));
+}
+
+/** The "dither" mix: the new colour arrives as an ordered-dither checker that fills in cell by cell. */
+export function drawDitherMix(g: CanvasRenderingContext2D, w: number, q: number, _oldColor: string, _newColor: string, faces: MixFaces): void {
+  const e = clamp01(q) * 1.02;
+  faces.old();
+  if (e <= 0) return;
+  const n = 8;
+  const cell = w / n;
+  const cells = ditherCells(e, n);
+  g.save();
+  g.beginPath();
+  for (let iy = 0; iy < n; iy++) {
+    for (let ix = 0; ix < n; ix++) {
+      if (cells[iy][ix]) g.rect(-w / 2 + ix * cell, -w / 2 + iy * cell, cell + 0.5, cell + 0.5);
+    }
+  }
+  g.clip();
+  faces.next();
+  g.restore();
+}
+
 /** The theme's mix treatment for anything but the plain radial wipe, which callers keep drawing themselves. */
 export function drawMix(g: CanvasRenderingContext2D, mix: FxProfile["mix"], w: number, q: number, oldColor: string, newColor: string, faces: MixFaces): void {
   if (mix === "fold") drawFoldMix(g, w, q, oldColor, newColor, faces);
   else if (mix === "curtain") drawCurtainMix(g, w, q, oldColor, newColor, faces);
+  else if (mix === "dither") drawDitherMix(g, w, q, oldColor, newColor, faces);
   else drawSwirlMix(g, w, q, oldColor, newColor, faces);
 }
 

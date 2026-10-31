@@ -46,5 +46,12 @@ describe("theme registry", () => {
     expect(PALETTES.knit.fx.mix).toBe("curtain");
     expect(PALETTES.seaglass.stainColor).toBeTruthy();
     expect(PALETTES.circuit.fuse).toBe(true);
+    expect(PALETTES.pixel.fx.mix).toBe("dither");
+    expect(PALETTES.pixel.fx.stepped).toBe(true);
+    expect(
+      Object.values(PALETTES)
+        .filter((p) => p.pixelated)
+        .map((p) => p.name),
+    ).toEqual(["pixel"]);
   });
 });

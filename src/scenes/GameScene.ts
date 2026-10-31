@@ -356,6 +356,8 @@ export class GameScene implements Scene {
   private readonly tally = { pops: 0, chain: 0, subtract: 0 };
   private bestChain = 1;
   private toasts: Toast[] = [];
+  /** The last eight-step well level that ticked (pixel themes). */
+  private wellStep = 0;
   private chargeBlipT = -1e9;
   /** How many level-card stars have chimed so far. */
   private starsSounded = 0;
@@ -2558,10 +2560,15 @@ export class GameScene implements Scene {
   private renderDieAnim(g: CanvasRenderingContext2D, d: DieAnim): void {
     const l = this.board.layout;
     const sp = this.ctx.sprites;
-    const e = this.ctx.clock.t - d.t0;
     const grow = D(POP_GROW_MS);
     const hold = D(POP_HOLD_MS);
     const shrink = D(POP_SHRINK_MS);
+    let e = this.ctx.clock.t - d.t0;
+    if (this.ctx.palette.fx.stepped && e > 0) {
+      // four stepped frames instead of a tween
+      const step = (grow + hold + shrink) / 4;
+      e = Math.min(grow + hold + shrink, Math.floor(e / step) * step + 1);
+    }
     const q = clamp01((e - grow - hold) / shrink);
     const s = e <= 0 ? 1 : e < grow ? 1 + 0.18 * easeOutCubic(e / grow) : e < grow + hold ? 1.18 : 1.18 * (1 - easeInBack(q));
     const rot = e < grow + hold ? 0 : d.spin * 8 * DEG * q;
@@ -2698,7 +2705,14 @@ export class GameScene implements Scene {
         }
         const filling = this.board.replenishList.length;
         const rewinding = t0 < this.rewindUntil;
-        const level = this.readyToPush ? 0 : rewinding ? this.levelFx.v : clamp01(this.replenishLine / this.replenishTimer);
+        const smooth = this.readyToPush ? 0 : rewinding ? this.levelFx.v : clamp01(this.replenishLine / this.replenishTimer);
+        // pixel themes fill in eight steps, with a tick on each
+        const level = pal.pixelated ? Math.floor(smooth * 8) / 8 : smooth;
+        if (pal.pixelated) {
+          const step = Math.round(level * 8);
+          if (step > this.wellStep && step > 0) this.ctx.audio.cue("tick", 0.35, 0.9 + step * 0.04);
+          this.wellStep = step;
+        }
         const colour = pal.brickColors[this.nextColors[0] ?? 1];
         for (let x = 0; x < n; x++) {
           const wx = cellX(l, x) + pad;

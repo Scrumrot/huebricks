@@ -137,6 +137,8 @@ export interface SkinSpec {
   /** Empty replenish slot. */
   well: (g: Ctx, x: number, y: number, w: number, h: number) => void;
   slides: SlideStyle;
+  /** Resolution of the square sprites (bricks, buttons); small values with smoothing off give a pixel look. */
+  size?: number;
 }
 
 const S = 256;
@@ -170,7 +172,8 @@ function modeGlyphDefault(g: Ctx, glyph: Glyph, cx: number, cy: number, r: numbe
 export function buildSkin(classic: SpriteMap, spec: SkinSpec): SpriteMap {
   const C = spec.colors;
   const noicon = [C[1], C[2], C[3], C[4], C[5], C[6], C[7], spec.neutral];
-  const round = (name: SpriteName, draw: (g: Ctx, i: number, w: number, h: number) => void) => sprite(name, S, S, draw);
+  const res = spec.size ?? S;
+  const round = (name: SpriteName, draw: (g: Ctx, i: number, w: number, h: number) => void) => sprite(name, res, res, draw);
 
   const skin: Partial<SpriteMap> = {
     brick_sprite: round("brick_sprite", (g, i, w, h) => {
