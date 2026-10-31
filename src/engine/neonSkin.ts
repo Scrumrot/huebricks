@@ -328,8 +328,9 @@ export function drawNeonBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: T
   if (!l) return;
   const n = l.cellNum;
   const gridBottom = cellY(l, n) - l.cellSep;
+  // opaque enough that the sun behind reads as a glow, not as stripes across the bricks
   roundRect(g, l.boardX - 12, l.boardY - 12, l.boardW + 24, gridBottom - l.boardY + 18, 12);
-  g.fillStyle = rgba(NIGHT, 0.75);
+  g.fillStyle = rgba(NIGHT, 0.9);
   g.fill();
   g.save();
   g.shadowColor = CYAN;

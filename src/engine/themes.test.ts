@@ -50,10 +50,10 @@ describe("theme registry", () => {
     expect(PALETTES.pixel.fx.stepped).toBe(true);
     expect(PALETTES.pixel.fx.landFx).toBe("flash");
     expect(PALETTES.neon.fx.landFx).toBe("flicker");
-    expect(PALETTES.neon.meter).toBe("vu");
+    expect(PALETTES.neon.fx.meter).toBe("vu");
     expect(PALETTES.knit.fx.unravel).toBe(true);
     expect(PALETTES.classic.fx.landFx).toBe("none");
-    expect(PALETTES.classic.meter).toBe("bar");
+    expect(PALETTES.classic.fx.meter).toBe("bar");
     for (const name of ["stainedglass", "lantern", "origami", "knit", "neon"] as const) expect(FURNITURE[name]?.fill).toBeTypeOf("function");
     expect(
       Object.values(PALETTES)

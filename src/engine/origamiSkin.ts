@@ -307,21 +307,24 @@ export function drawOrigamiTray(g: Ctx, x: number, y: number, w: number, h: numb
   g.fillRect(x + 3, y + h - 12, w - 6, 1);
 }
 
-/** The next sheet sliding up out of the pocket as the well fills: coloured paper with a lifted corner, the pocket lip drawn back over its foot. */
+/** The next sheet sliding up out of the pocket as the well fills: coloured paper with a lifted corner, rising from a slot across the well. */
 export function drawOrigamiFill(g: Ctx, x: number, y: number, w: number, h: number, level: number, colour: string): void {
-  if (level <= 0) return;
-  const r = Math.min(w, h) * 0.04;
   const lip = y + h * 0.7;
+  // the slot the sheet rises from is there whether or not anything shows yet
+  g.fillStyle = "rgba(58,46,34,0.2)";
+  g.fillRect(x + w * 0.06, lip, w * 0.88, 1.5);
+  if (level <= 0) return;
   const top = lip - (lip - (y + h * 0.04)) * level;
   const sx = x + w * 0.08;
   const sw = w * 0.84;
   g.save();
-  roundRect(g, x, y, w, h, r);
+  g.beginPath();
+  g.rect(x, y, w, lip - y);
   g.clip();
   g.fillStyle = "rgba(58,46,34,0.16)";
-  g.fillRect(sx + 2, top + 3, sw, y + h - top);
+  g.fillRect(sx + 2, top + 3, sw, lip - top);
   g.fillStyle = colour;
-  g.fillRect(sx, top, sw, y + h - top);
+  g.fillRect(sx, top, sw, lip - top + 2);
   // the lifted corner, folded back to show the paper's white underside
   const c = w * 0.22;
   g.fillStyle = rgba(PAPER, 0.85);
@@ -334,16 +337,9 @@ export function drawOrigamiFill(g: Ctx, x: number, y: number, w: number, h: numb
   g.strokeStyle = "rgba(58,46,34,0.22)";
   g.lineWidth = 1;
   g.beginPath();
-  g.moveTo(sx, lip + (y + h - lip) * 0.5);
+  g.moveTo(sx, lip);
   g.lineTo(sx + sw - c, top);
   g.stroke();
-  // the pocket lip comes back over the foot of the sheet
-  g.fillStyle = "#C9AE86";
-  g.fillRect(x, lip, w, y + h - lip);
-  g.fillStyle = "rgba(0,0,0,0.1)";
-  g.fillRect(x, lip, w, 2);
-  g.fillStyle = "rgba(255,247,234,0.3)";
-  g.fillRect(x, lip + 2, w, 1);
   g.restore();
 }
 

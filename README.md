@@ -183,13 +183,6 @@ Twenty themes:
 - **Nature** (`src/engine/natureSkin.ts`): river stones with sprouts on a
   wooden board, wood-slice buttons, sun, clouds and blowing leaves over a
   meadow, and a log trough.
-  Themes whose timer fills the tray's next well can draw that fill their
-  own way (`Furniture.fill` in `src/engine/backdrops.ts`): Stained Glass
-  solders the next pane into its came with a gold run and a hot bead,
-  Lantern hangs the next lantern dark and brightens it, Origami slides the
-  next sheet up out of the pocket, Knit winds up a ball of yarn and Neon
-  lights the coin slot. The rest show the plain rising colour.
-
 - **Stained Glass** (`src/engine/stainedGlassSkin.ts`): bevelled panes set
   in lead came on a stone wall, a rose window that glows when the pointer
   comes near and after a clear, a light shaft drifting across the scene,
@@ -408,6 +401,13 @@ src/
   hit-stops. A frame-time governor drops bloom, sparks and fragment detail on
   devices that cannot keep up. Tune numbers in the lab (`?fx` on the URL),
   which shows frame and render times, then write them into `fxTuning.ts`.
+- **Tray furniture is per theme.** `furnitureOf(palette)` in
+  `engine/backdrops.ts` gives the wells, the tray and an optional fill
+  animation for the next well: Stained Glass solders the next pane into
+  its came with a gold run and a hot bead, Lantern hangs the next lantern
+  dark and brightens it, Origami slides the next sheet up out of a slot,
+  Knit winds up a ball of yarn and Neon lights the coin slot. Themes
+  without a fill show the plain rising colour.
 - `npm run check` is what CI runs; keep it green.
 
 ## Differences from the GameMaker version

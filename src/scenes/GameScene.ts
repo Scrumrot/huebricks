@@ -23,9 +23,9 @@ import {
 } from "../engine/draw";
 import { fillScreen } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
-import { drawCellWell, drawStain, drawTray, rgba } from "../engine/modernSkin";
+import { drawStain, rgba } from "../engine/modernSkin";
 import { vuLit, vuPeak, type VuPeak } from "../engine/vuMeter";
-import { BACKDROPS, FURNITURE } from "../engine/backdrops";
+import { BACKDROPS, furnitureOf } from "../engine/backdrops";
 import { THEME_ORDER } from "../engine/theme";
 import { drawKeycaps } from "../engine/keycaps";
 import { drawModeGlyph, MODE_COLOR, modeLabel } from "../engine/modeGlyph";
@@ -1828,6 +1828,14 @@ export class GameScene implements Scene {
     }
   }
 
+  /** Timer level 0..1 shown in the next well: nothing while a push is pending, the rewind tween while rewinding, eight steps when pixelated. */
+  private wellLevel(): number {
+    if (this.readyToPush) return 0;
+    const rewinding = this.ctx.clock.t < this.rewindUntil;
+    const smooth = rewinding ? this.levelFx.v : clamp01(this.replenishLine / this.replenishTimer);
+    return this.ctx.palette.pixelated ? Math.floor(smooth * 8) / 8 : smooth;
+  }
+
   /** `BrickDieAnim` step event: a pop is over once its last brick has shrunk away. */
   private stepDieAnims(): void {
     if (this.dieAnims.length === 0) return;
@@ -2421,7 +2429,7 @@ export class GameScene implements Scene {
       drawBlockTransformed(g, brick, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
     }
 
-    if (f.landT0 >= 0) this.renderLanding(g, f, t - f.landT0, p.x + l.cellW / 2 + xo, p.y + l.cellH / 2, xs, ys);
+    if (f.landT0 >= 0) this.renderLanding(g, f, t - f.landT0, p.x + l.cellW / 2 + xo, p.y + l.cellH / 2, xs, ys, f.rot, alpha);
 
     if (f.noaddT0 >= 0) {
       const e = t - f.noaddT0;
@@ -2444,7 +2452,7 @@ export class GameScene implements Scene {
    * a hot flash, dark again, then steady. Pixel's brick is solid white for
    * one frame.
    */
-  private renderLanding(g: CanvasRenderingContext2D, f: BrickFx, e: number, cx: number, cy: number, xs: number, ys: number): void {
+  private renderLanding(g: CanvasRenderingContext2D, f: BrickFx, e: number, cx: number, cy: number, xs: number, ys: number, rot: number, alpha: number): void {
     const pal = this.ctx.palette;
     const l = this.board.layout;
     const kind = pal.fx.landFx;
@@ -2475,8 +2483,9 @@ export class GameScene implements Scene {
     const pad = l.cellW * 0.04;
     g.save();
     g.translate(cx, cy);
+    g.rotate(rot);
     g.scale(xs, ys);
-    g.globalAlpha = over;
+    g.globalAlpha = over * alpha;
     fillRoundRect(g, -l.cellW / 2 + pad, -l.cellH / 2 + pad, l.cellW - pad * 2, l.cellH - pad * 2, pal.pixelated ? 0 : l.cellW * 0.18, color);
     g.restore();
   }
@@ -2510,8 +2519,8 @@ export class GameScene implements Scene {
     const start = this.board.replenishList.length;
     const ry = replenishY(l);
     const pal = this.ctx.palette;
-    // a bespoke well fill already shows the next colour, so its ghost would only sit on top of it
-    const bespoke = pal.timer === "wells" && pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]?.fill !== undefined;
+    // while a bespoke well fill is showing the next colour, its ghost would only sit on top of it
+    const bespoke = pal.timer === "wells" && furnitureOf(pal).fill !== undefined && this.wellLevel() > 0;
     for (let k = bespoke ? 1 : 0; k < PREVIEW_COUNT; k++) {
       const i = start + k;
       if (i >= n) break;
@@ -2689,7 +2698,7 @@ export class GameScene implements Scene {
     g.beginPath();
     // what is still knitted: the rows below, plus the shortening row being pulled out
     g.rect(d.x - 2, rowTop + rowH, l.cellW + 4, l.cellH - (gone + 1) * rowH + 2);
-    g.rect(d.x - 2, rowTop, l.cellW * (1 - within) + 2 - pad, rowH + 0.5);
+    g.rect(d.x - 2, rowTop, Math.max(0, l.cellW * (1 - within) + 2 - pad), rowH + 0.5);
     g.clip();
     drawBlockTransformed(g, sp.brick_sprite, colorFrame(d.color), d.x, d.y, l.cellW, l.cellH, 1, 1, 0, 0, 0, alpha);
     g.restore();
@@ -2779,7 +2788,7 @@ export class GameScene implements Scene {
         // well fills with the incoming colour as the timer runs. Paper also
         // shows its paint stains.
         const paper = pal.backdrop === "paper";
-        const { well, tray, fill } = (pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]) || { well: drawCellWell, tray: drawTray, fill: undefined };
+        const { well, tray, fill } = furnitureOf(pal);
         if (paper) {
           for (let x = 0; x < n; x++) {
             for (let y = 0; y < n; y++) well(g, cellX(l, x) + pad, cellY(l, y) + pad, l.cellW - pad * 2, l.cellH - pad * 2);
@@ -2805,10 +2814,8 @@ export class GameScene implements Scene {
           );
         }
         const filling = this.board.replenishList.length;
-        const rewinding = t0 < this.rewindUntil;
-        const smooth = this.readyToPush ? 0 : rewinding ? this.levelFx.v : clamp01(this.replenishLine / this.replenishTimer);
+        const level = this.wellLevel();
         // pixel themes fill in eight steps, with a tick on each
-        const level = pal.pixelated ? Math.floor(smooth * 8) / 8 : smooth;
         if (pal.pixelated) {
           const step = Math.round(level * 8);
           if (step > this.wellStep && step > 0) this.ctx.audio.cue("tick", 0.35, 0.9 + step * 0.04);
@@ -3052,30 +3059,32 @@ export class GameScene implements Scene {
     const h = 7;
     const lit = vuLit(this.heat, n);
     this.vuPeak = vuPeak(this.vuPeak, lit, t);
+    const peak = this.vuPeak.seg - 1;
     const color = pal.multColors[mult];
     const shimmer = mult >= 3 ? 0.85 + 0.15 * Math.sin(t / 37) : 1;
-    for (let i = 0; i < n; i++) {
-      const sx = x + i * (sw + gap);
-      if (i < lit) {
-        g.save();
-        if (pal.glow) {
-          g.shadowColor = color;
-          g.shadowBlur = 6;
-        }
-        g.globalAlpha = (0.55 + 0.45 * (i / n)) * shimmer;
-        fillRoundRect(g, sx, cy - h / 2, sw, h, 1.5, color);
-        g.restore();
-      } else if (i === this.vuPeak.seg - 1) {
-        g.save();
-        if (pal.glow) {
-          g.shadowColor = "#ffffff";
-          g.shadowBlur = 6;
-        }
-        fillRoundRect(g, sx, cy - h / 2, sw, h, 1.5, "rgba(255,255,255,0.85)");
-        g.restore();
-      } else {
-        fillRoundRect(g, sx, cy - h / 2, sw, h, 1.5, pal.track);
+    const seg = (i: number, fill: string) => fillRoundRect(g, x + i * (sw + gap), cy - h / 2, sw, h, 1.5, fill);
+    for (let i = lit; i < n; i++) if (i !== peak) seg(i, pal.track);
+    if (lit > 0) {
+      // the lit run shares one glow pass: shadow blur is the expensive part
+      g.save();
+      if (pal.glow) {
+        g.shadowColor = color;
+        g.shadowBlur = 6;
       }
+      for (let i = 0; i < lit; i++) {
+        g.globalAlpha = (0.55 + 0.45 * (i / n)) * shimmer;
+        seg(i, color);
+      }
+      g.restore();
+    }
+    if (peak >= lit) {
+      g.save();
+      if (pal.glow) {
+        g.shadowColor = "#ffffff";
+        g.shadowBlur = 6;
+      }
+      seg(peak, "rgba(255,255,255,0.85)");
+      g.restore();
     }
   }
 
@@ -3116,10 +3125,10 @@ export class GameScene implements Scene {
       const meterH = 5;
       const meterX = r.scoreCx - meterW / 2;
       const meterY = r.chainY;
-      if (pal.meter === "vu") {
+      if (pal.fx.meter === "vu") {
         this.renderVuMeter(g, meterX, meterY, meterW, mult, t);
       } else fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, pal.track);
-      if (this.heat > 0 && pal.meter === "bar") {
+      if (this.heat > 0 && pal.fx.meter === "bar") {
         const fillW = Math.max(meterH, meterW * this.heat);
         if (pal.glow) {
           g.save();

@@ -58,6 +58,8 @@ export interface FxProfile {
   landFx: "none" | "flicker" | "flash";
   /** A pop unravels row by row from the top, the strand pulling out to the side, before the rest comes apart. */
   unravel: boolean;
+  /** Chain meter: a draining bar, or a segmented VU meter with a falling peak. */
+  meter: "bar" | "vu";
 }
 
 /** Nothing on: the faithful port. */
@@ -85,6 +87,7 @@ export const CLASSIC_FX: FxProfile = {
   liftRibbon: false,
   landFx: "none",
   unravel: false,
+  meter: "bar",
 };
 
 /** Baseline for generated themes; each overrides what its material calls for. */
@@ -112,6 +115,7 @@ export const MODERN_FX: FxProfile = {
   liftRibbon: true,
   landFx: "none",
   unravel: false,
+  meter: "bar",
 };
 
 export function fxProfile(overrides: Partial<FxProfile> = {}): FxProfile {

@@ -76,6 +76,14 @@ export const BACKDROPS: Record<BackdropName, Backdrop> = {
   origami: drawOrigamiBackdrop,
 };
 
+/** Paper's furniture, which any theme without its own falls back to. */
+const PLAIN_FURNITURE: Furniture = { well: drawCellWell, tray: drawTray };
+
+/** The furniture a palette's tray uses: its backdrop's own, or the plain wells and tray. */
+export function furnitureOf(pal: Palette): Furniture {
+  return (pal.backdrop !== "sprites" && FURNITURE[pal.backdrop]) || PLAIN_FURNITURE;
+}
+
 export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
   paper: { well: drawCellWell, tray: drawTray },
   crystals: { well: drawCrystalWell, tray: drawCrystalTray },
