@@ -229,7 +229,10 @@ Twenty themes:
   in eight ticking steps. Debris is square pixels on an 8 px grid, pops
   play in four stepped frames, mixing is a dither wipe and big chains flash
   the whole screen, and a landing brick is solid white for one frame.
-  Display text is Press Start 2P, cues are chiptune.
+  Display text is Press Start 2P, cues are chiptune. Its chrome is square
+  (`ui.radius` in the palette squares every pill, toggle and card), and
+  its world tiles bake no text: the title letters them live, at screen
+  resolution, since 32 px sprites cannot carry a word.
 - **Spectra** (`src/engine/spectraSkin.ts`): glowing gel tiles on a
   near-black field. Each brick has an inner glow, a crisp inner edge and a
   soft outer bloom so same-colour groups read as one light; pops flare to
@@ -408,6 +411,14 @@ src/
   dark and brightens it, Origami slides the next sheet up out of a slot,
   Knit winds up a ball of yarn and Neon lights the coin slot. Themes
   without a fill show the plain rising colour.
+- **Hero ornaments keep clear of the chrome.** A backdrop's set piece
+  (Halloween's moon, Nature's sun, the rose window, the yarn ball, the
+  crane) is placed by `heroSpot(r, inPlay)` in `engine/view.ts`: top-right
+  under the corner controls held sideways, top-centre between the score
+  and the pause button held upright. `TOP_CHROME` is the one number that
+  says how far down the corner controls reach. Mode buttons, world tiles
+  and arcade tiles fit their labels to the room they have, so a wide
+  display face shrinks instead of running under a glyph or off a tile.
 - **Scenes dissolve, HUDs arrive.** On the generated themes a scene or
   theme change keeps a snapshot of the outgoing frame and cross-dissolves
   it over the incoming one (`engine/transition.ts`, driven from the frame

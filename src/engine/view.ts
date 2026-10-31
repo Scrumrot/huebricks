@@ -30,6 +30,25 @@ export function screenRect(): { x: number; y: number; w: number; h: number } {
   return { x: 0, y: 0, w: view.w, h: view.h };
 }
 
+/**
+ * How far down from the top edge the corner chrome reaches on every screen:
+ * the title's theme pill and toggles, the board's pause and sound. Backdrop
+ * ornaments stay below it so nothing sits under a button.
+ */
+export const TOP_CHROME = 84;
+
+/**
+ * Where a backdrop parks its hero ornament of radius `r`. Held sideways it
+ * sits top-right, tucked under the corner chrome. Held upright it sits
+ * top-centre: on the board (`inPlay`) between the score and the pause
+ * button, where the stacked HUD leaves a gap; on the title, under the
+ * theme pill that occupies that gap.
+ */
+export function heroSpot(r: number, inPlay = false): { x: number; y: number } {
+  if (view.portrait) return { x: view.w / 2, y: inPlay ? r + 18 : TOP_CHROME + r };
+  return { x: view.w * 0.84, y: Math.max(view.h * 0.2, TOP_CHROME + r + 10) };
+}
+
 /** Fill the whole visible canvas with `style`. */
 export function fillScreen(g: CanvasRenderingContext2D, style: string | CanvasGradient | CanvasPattern): void {
   g.fillStyle = style;

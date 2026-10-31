@@ -41,6 +41,7 @@ import { drawMix } from "../engine/mixFx";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
+import { pillRadius, cardRadius } from "../engine/draw";
 
 type State = "rest" | "animation" | "menu" | "tutorial" | "lost";
 type Animation = "none" | "fall" | "rotate" | "pop" | "combine" | "noadd" | "begin" | "push" | "fadeout";
@@ -2548,10 +2549,11 @@ export class GameScene implements Scene {
       // Dashed while empty, so it reads as a place to put something.
       g.save();
       if (!this.held) g.setLineDash([6, 5]);
-      fillRoundRect(g, x, y, r.slot, r.slot, 10, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, this.held ? 1.5 : 2);
+      const slotR = cardRadius(pal.ui, 10);
+      fillRoundRect(g, x, y, r.slot, r.slot, slotR, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, this.held ? 1.5 : 2);
       if (pulse > 0) {
         g.globalAlpha = pulse * 0.7;
-        fillRoundRect(g, x, y, r.slot, r.slot, 10, "rgba(0,0,0,0)", pal.overlayAccent, 2);
+        fillRoundRect(g, x, y, r.slot, r.slot, slotR, "rgba(0,0,0,0)", pal.overlayAccent, 2);
         g.globalAlpha = 1;
       }
       g.restore();
@@ -2982,7 +2984,7 @@ export class GameScene implements Scene {
   /** The rotate pair as one segmented control: turn left, the board, turn right. */
   private renderRotatePill(g: CanvasRenderingContext2D, pill: { x: number; y: number; w: number; h: number }): void {
     const ui = this.ctx.palette.ui;
-    const r = pill.h / 2;
+    const r = pillRadius(ui, pill.h);
     fillRoundRect(g, pill.x, pill.y + 3, pill.w, pill.h, r, ui.cardShadow);
     fillRoundRect(g, pill.x, pill.y, pill.w, pill.h, r, ui.card, ui.cardEdge, 1.5);
     g.save();
@@ -3182,14 +3184,14 @@ export class GameScene implements Scene {
       const meterY = r.chainY;
       if (pal.fx.meter === "vu") {
         this.renderVuMeter(g, meterX, meterY, meterW, mult, t);
-      } else fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, meterH / 2, pal.track);
+      } else fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, pillRadius(pal.ui, meterH), pal.track);
       if (this.heat > 0 && pal.fx.meter === "bar") {
         const fillW = Math.max(meterH, meterW * this.heat);
         if (pal.glow) {
           g.save();
           g.shadowColor = pal.multColors[mult];
           g.shadowBlur = 8;
-          fillRoundRect(g, meterX, meterY - meterH / 2, fillW, meterH, meterH / 2, pal.multColors[mult]);
+          fillRoundRect(g, meterX, meterY - meterH / 2, fillW, meterH, pillRadius(pal.ui, meterH), pal.multColors[mult]);
           g.restore();
           if (mult >= 3) {
             // travelling highlight
@@ -3200,14 +3202,14 @@ export class GameScene implements Scene {
             hl.addColorStop(1, "rgba(255,255,255,0)");
             g.save();
             g.beginPath();
-            g.roundRect(meterX, meterY - meterH / 2, fillW, meterH, meterH / 2);
+            g.roundRect(meterX, meterY - meterH / 2, fillW, meterH, pillRadius(pal.ui, meterH));
             g.clip();
             g.fillStyle = hl;
             g.fillRect(hx - 18, meterY - meterH / 2, 36, meterH);
             g.restore();
           }
         } else {
-          fillRoundRect(g, meterX, meterY - meterH / 2, fillW, meterH, meterH / 2, pal.multColors[mult]);
+          fillRoundRect(g, meterX, meterY - meterH / 2, fillW, meterH, pillRadius(pal.ui, meterH), pal.multColors[mult]);
         }
       }
       // caption on the left, the multiplier as a badge on the right so x3 reads without watching the bar
@@ -3222,7 +3224,7 @@ export class GameScene implements Scene {
           g.shadowColor = pal.multColors[mult];
           g.shadowBlur = 8;
         }
-        fillRoundRect(g, -bw / 2, -bh / 2, bw, bh, bh / 2, pal.multColors[mult]);
+        fillRoundRect(g, -bw / 2, -bh / 2, bw, bh, pillRadius(pal.ui, bh), pal.multColors[mult]);
         g.shadowBlur = 0;
         drawText(g, `x${mult}`, 0, 1, { size: textSize * 0.7, color: "#ffffff", weight: 800, tabular: true });
         g.restore();
@@ -3231,7 +3233,7 @@ export class GameScene implements Scene {
       const pillW = r.pillW;
       const pillH = textSize * 1.5;
       const pillY = r.levelY;
-      fillRoundRect(g, r.pillCx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillH / 2, pal.pill, pal.pillEdge);
+      fillRoundRect(g, r.pillCx - pillW / 2, pillY - pillH / 2, pillW, pillH, pillRadius(pal.ui, pillH), pal.pill, pal.pillEdge);
       {
         // the mode's brick glyph before its name, matching the title and the pause card;
         // the long form when the pill is wide enough for it
@@ -3436,8 +3438,9 @@ export class GameScene implements Scene {
       const cy = l.boardY + 16 + i * (h + 6) - (1 - enter) * 24;
       g.save();
       g.globalAlpha = alpha;
-      fillRoundRect(g, cx - w / 2, cy - h / 2 + 2, w, h, h / 2, pal.ui.cardShadow);
-      fillRoundRect(g, cx - w / 2, cy - h / 2, w, h, h / 2, pal.ui.card, c.color, 1.5);
+      const tr = pillRadius(pal.ui, h);
+      fillRoundRect(g, cx - w / 2, cy - h / 2 + 2, w, h, tr, pal.ui.cardShadow);
+      fillRoundRect(g, cx - w / 2, cy - h / 2, w, h, tr, pal.ui.card, c.color, 1.5);
       drawText(g, c.text, cx, cy + 1, { ...style, color: c.color });
       g.restore();
     });
@@ -3573,7 +3576,17 @@ export class GameScene implements Scene {
       const hv = inp.inCentered(L.help.cx, L.help.cy, L.help.d, L.help.d) && inp.x >= 0;
       const sc = this.feel.scale("menu:help", hv, hv && inp.down);
       const d = L.help.d * sc;
-      fillRoundRect(g, L.help.cx - d / 2, L.help.cy - d / 2, d, d, d / 2, hv ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+      fillRoundRect(
+        g,
+        L.help.cx - d / 2,
+        L.help.cy - d / 2,
+        d,
+        d,
+        pillRadius(pal.ui, d),
+        hv ? pal.ui.secondaryHover : pal.ui.secondary,
+        pal.ui.secondaryEdge,
+        1.5,
+      );
       drawText(g, "?", L.help.cx, L.help.cy + 1, { size: 15 * sc, color: pal.ui.secondaryText, weight: 800 });
     }
     pill(L.resume, "menu:resume");

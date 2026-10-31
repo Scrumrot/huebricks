@@ -95,6 +95,8 @@ export interface UiPalette {
   secondaryHover: string;
   secondaryEdge: string;
   secondaryText: string;
+  /** Corner radius of pills, toggles and cards; absent means fully round pills and softly rounded cards. */
+  radius?: number;
 }
 
 export interface Palette {
@@ -1612,6 +1614,7 @@ export const PIXEL: Palette = {
     secondaryHover: "#3A3F8C",
     secondaryEdge: "#8C8FD8",
     secondaryText: "#F6F3FF",
+    radius: 3,
   },
   brickShadow: null,
   brickSide: null,

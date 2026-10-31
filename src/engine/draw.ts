@@ -192,10 +192,21 @@ export function fillRoundRect(
   }
 }
 
+/** Corner radius for a pill of height `h`: fully round unless the palette squares its chrome. */
+export function pillRadius(ui: UiPalette, h: number): number {
+  return ui.radius ?? h / 2;
+}
+
+/** Corner radius for a card that would otherwise use `r`: the palette's own when it squares its chrome. */
+export function cardRadius(ui: UiPalette, r: number): number {
+  return ui.radius === undefined ? r : Math.min(r, ui.radius);
+}
+
 /** Overlay card in the theme's colours with a hard offset shadow. */
 export function drawCard(ctx: CanvasRenderingContext2D, ui: UiPalette, x: number, y: number, w: number, h: number, r = 18): void {
-  fillRoundRect(ctx, x, y + 6, w, h, r, ui.cardShadow);
-  fillRoundRect(ctx, x, y, w, h, r, ui.card, ui.cardEdge, 1);
+  const cr = cardRadius(ui, r);
+  fillRoundRect(ctx, x, y + 6, w, h, cr, ui.cardShadow);
+  fillRoundRect(ctx, x, y, w, h, cr, ui.card, ui.cardEdge, 1);
 }
 
 export interface PillButton {
@@ -217,10 +228,11 @@ export function drawPillButton(ctx: CanvasRenderingContext2D, ui: UiPalette, b: 
   const h = b.h * scale;
   const x = b.cx - w / 2;
   const y = b.cy - h / 2;
+  const r = pillRadius(ui, h);
   if (b.primary) {
-    fillRoundRect(ctx, x, y, w, h, h / 2, hover ? ui.primaryHover : ui.primary);
+    fillRoundRect(ctx, x, y, w, h, r, hover ? ui.primaryHover : ui.primary);
   } else {
-    fillRoundRect(ctx, x, y, w, h, h / 2, hover ? ui.secondaryHover : ui.secondary, ui.secondaryEdge, 1.5);
+    fillRoundRect(ctx, x, y, w, h, r, hover ? ui.secondaryHover : ui.secondary, ui.secondaryEdge, 1.5);
   }
   drawText(ctx, b.label, b.cx, b.cy + 1, { size: h * 0.4, color: b.primary ? ui.primaryText : ui.secondaryText, weight: 700, font });
 }

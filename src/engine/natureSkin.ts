@@ -6,7 +6,7 @@ import type { TitleFx } from "./backdrops";
 import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
-import { fillScreen, screenRect } from "./view";
+import { fillScreen, screenRect, heroSpot } from "./view";
 
 /**
  * "Nature": smooth river stones on a wooden board in a sunny meadow. Stone
@@ -296,10 +296,30 @@ export function drawNatureBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx:
   sky.addColorStop(0.6, SKY);
   sky.addColorStop(1, "#E6F2E0");
   fillScreen(g, sky);
+  // clouds drifting
+  const cloud = (cx: number, cy: number, s: number) => {
+    g.fillStyle = "rgba(255,255,255,0.9)";
+    for (const [ox, oy, orr] of [
+      [0, 0, 1],
+      [-1.1, 0.25, 0.7],
+      [1.1, 0.2, 0.75],
+      [0.4, -0.4, 0.7],
+      [-0.5, -0.3, 0.6],
+    ]) {
+      g.beginPath();
+      g.arc(cx + ox * s, cy + oy * s, orr * s, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillRect(cx - s * 1.4, cy, s * 2.8, s * 0.7);
+  };
+  for (let k = 0; k < 3; k++) {
+    const ph = ((t / (90000 + k * 20000) + k * 0.33) % 1) * 1.3 - 0.15;
+    cloud(sr.w * ph, sr.h * (0.12 + k * 0.1), 14 + k * 5);
+  }
   // sun with rays
-  const sx = sr.w * 0.82;
-  const sy = sr.h * 0.18;
   const srad = Math.min(sr.w, sr.h) * 0.07;
+  // the rays reach almost three radii, so the spot is asked for the ray span
+  const { x: sx, y: sy } = heroSpot(srad * 2.2, l !== undefined);
   const glow = g.createRadialGradient(sx, sy, srad, sx, sy, srad * 4);
   glow.addColorStop(0, `rgba(255,226,122,${0.35 + flare * 0.4})`);
   glow.addColorStop(1, "rgba(255,226,122,0)");
@@ -323,26 +343,6 @@ export function drawNatureBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx:
   g.arc(sx, sy, srad, 0, Math.PI * 2);
   g.fillStyle = SUN;
   g.fill();
-  // clouds drifting
-  const cloud = (cx: number, cy: number, s: number) => {
-    g.fillStyle = "rgba(255,255,255,0.9)";
-    for (const [ox, oy, orr] of [
-      [0, 0, 1],
-      [-1.1, 0.25, 0.7],
-      [1.1, 0.2, 0.75],
-      [0.4, -0.4, 0.7],
-      [-0.5, -0.3, 0.6],
-    ]) {
-      g.beginPath();
-      g.arc(cx + ox * s, cy + oy * s, orr * s, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.fillRect(cx - s * 1.4, cy, s * 2.8, s * 0.7);
-  };
-  for (let k = 0; k < 3; k++) {
-    const ph = ((t / (90000 + k * 20000) + k * 0.33) % 1) * 1.3 - 0.15;
-    cloud(sr.w * ph, sr.h * (0.12 + k * 0.1), 14 + k * 5);
-  }
   // hills
   for (const [k, yy, col] of [
     [0.8, 0.68, HILL_FAR],

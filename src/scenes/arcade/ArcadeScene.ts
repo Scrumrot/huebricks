@@ -5,7 +5,7 @@ import type { MusicName, SpriteName } from "../../engine/assets";
 import { BACKDROPS } from "../../engine/backdrops";
 import { ButtonFeel } from "../../engine/buttonFeel";
 import { Effects } from "../../engine/effects";
-import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton, type TextStyle } from "../../engine/draw";
+import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton, type TextStyle, pillRadius } from "../../engine/draw";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
 import { rgba } from "../../engine/modernSkin";
 import { popScale, TUNING } from "../../engine/fxTuning";
@@ -810,7 +810,17 @@ export abstract class ArcadeScene implements Scene {
       const hover = c.hilite && inp.x >= 0;
       const scale = this.feel.scale(`ctl:${c.id}`, hover, c.pressed);
       const d = c.d * scale;
-      fillRoundRect(g, c.cx - d / 2, c.cy - d / 2, d, d, d / 2, c.pressed ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+      fillRoundRect(
+        g,
+        c.cx - d / 2,
+        c.cy - d / 2,
+        d,
+        d,
+        pillRadius(pal.ui, d),
+        c.pressed ? pal.ui.secondaryHover : pal.ui.secondary,
+        pal.ui.secondaryEdge,
+        1.5,
+      );
       this.drawIcon(g, c.icon, c.cx, c.cy, d * 0.26, classic ? "#f0f0f0" : pal.ui.secondaryText);
     }
   }

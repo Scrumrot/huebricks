@@ -2,7 +2,7 @@ import { ARCADE_MODES, type ArcadeInfo, type ArcadeMode } from "../core/arcade";
 import { BTN_H, BTN_W, MAX_WORLD, type GameType } from "../core/constants";
 import type { SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
-import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton } from "../engine/draw";
+import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton, cardRadius, pillRadius } from "../engine/draw";
 import { fillScreen, screenRect } from "../engine/view";
 import { backOut, clamp01, easeOutBack, easeOutCubic } from "../engine/easing";
 import { drawBlockyBackdrop } from "../engine/blockySkin";
@@ -145,6 +145,27 @@ export class TitleScene implements Scene {
   private readonly tweens = new Tweens();
   private readonly feel: ButtonFeel;
   private enterT0 = 0;
+
+  /**
+   * The world number (or "Tutorial") over a world tile, for pixel themes whose
+   * low-res tiles bake no text. Drawn at screen resolution so the display face stays crisp.
+   */
+  private renderWorldLabel(g: CanvasRenderingContext2D, id: string, cx: number, cy: number, size: number): void {
+    const m = /^world(\d)$/.exec(id);
+    if (!m) return;
+    const pal = this.ctx.palette;
+    const world = Number(m[1]);
+    const color = pal.ui.primaryText;
+    const shadow = "rgba(0,0,0,0.45)";
+    if (world === 0) {
+      const sz = Math.max(8, Math.round(size * 0.11));
+      const tw = measureText(g, "Tutorial", { size: sz, weight: 700, font: pal.display });
+      drawText(g, "Tutorial", cx, cy, { size: Math.min(sz, (sz * (size - 24)) / Math.max(1, tw)), color, weight: 700, font: pal.display, shadow });
+    } else {
+      drawText(g, "WORLD", cx, cy - size * 0.14, { size: Math.max(7, Math.round(size * 0.08)), color, weight: 700, font: pal.display, shadow });
+      drawText(g, String(world), cx, cy + size * 0.12, { size: Math.round(size * 0.34), color, weight: 700, font: pal.display, shadow });
+    }
+  }
 
   /** Entrance progress for a piece that starts `delay` ms after the title opens (generated themes; classic is always 1). */
   private intro(delay: number): number {
@@ -806,10 +827,15 @@ export class TitleScene implements Scene {
       const x = tile.x + tile.w / 2 - w / 2;
       const y = tile.y + tile.h / 2 - h / 2;
       const accent = pal.brickColors[tile.info.color];
-      fillRoundRect(g, x, y + 3, w, h, 16, pal.ui.cardShadow);
-      fillRoundRect(g, x, y, w, h, 16, hover ? pal.ui.secondaryHover : pal.ui.secondary, hover ? accent : pal.ui.secondaryEdge, hover ? 2 : 1.5);
+      const tr = cardRadius(pal.ui, 16);
+      fillRoundRect(g, x, y + 3, w, h, tr, pal.ui.cardShadow);
+      fillRoundRect(g, x, y, w, h, tr, hover ? pal.ui.secondaryHover : pal.ui.secondary, hover ? accent : pal.ui.secondaryEdge, hover ? 2 : 1.5);
       this.renderArcadeIcon(g, tile.info.id, x + w / 2, y + h * 0.36, Math.min(w, h) * 0.5);
-      drawText(g, tile.info.name, x + w / 2, y + h - 44, { size: Math.min(19, w * 0.11), color: textC, weight: 600, font: pal.display });
+      // a wide display face (Pixel's) shrinks the name to the tile rather than running past its edges
+      const nameSize = Math.min(19, w * 0.11);
+      const nameW = measureText(g, tile.info.name, { size: nameSize, weight: 600, font: pal.display });
+      const fitName = Math.min(nameSize, (nameSize * (w - 20)) / Math.max(1, nameW));
+      drawText(g, tile.info.name, x + w / 2, y + h - 44, { size: fitName, color: textC, weight: 600, font: pal.display });
       drawText(g, tile.info.tagline, x + w / 2, y + h - 24, { size: 11, color: mutedC, weight: 500 });
       const best = this.ctx.save.arcadeBest[tile.info.id];
       if (best) drawText(g, `Best ${best}`, x + w / 2, y + h - 10, { size: 10, color: accent, weight: 700, tabular: true });
@@ -991,7 +1017,7 @@ export class TitleScene implements Scene {
     const hover = inp.inCentered(t.cx, t.cy, t.w, t.h) && inp.x >= 0;
     const scale = this.feel.scale("title:sound", hover, hover && inp.down);
     const d = t.h * scale;
-    fillRoundRect(g, t.cx - d / 2, t.cy - d / 2, d, d, d / 2, hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+    fillRoundRect(g, t.cx - d / 2, t.cy - d / 2, d, d, pillRadius(pal.ui, d), hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
     drawSpeaker(g, t.cx, t.cy, d * 0.2, pal.titleText, muted);
     if (hover) drawText(g, muted ? "Sound off (M)" : "Sound on (M)", t.cx, t.cy + d / 2 + 12, { size: 11, color: pal.titleMuted, weight: 600 });
   }
@@ -1005,7 +1031,7 @@ export class TitleScene implements Scene {
     const scale = this.feel.scale("theme", hover, hover && inp.down);
     const w = t.w * scale;
     const h = t.h * scale;
-    fillRoundRect(g, t.cx - w / 2, t.cy - h / 2, w, h, h / 2, hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+    fillRoundRect(g, t.cx - w / 2, t.cy - h / 2, w, h, pillRadius(pal.ui, h), hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
     const labelled = this.generated && t.w > 60;
     // half-filled circle: "contrast"
     const r = h * (labelled ? 0.2 : 0.28);
@@ -1054,7 +1080,7 @@ export class TitleScene implements Scene {
     const scale = this.feel.scale("fullscreen", hover, hover && inp.down);
     const w = t.w * scale;
     const h = t.h * scale;
-    fillRoundRect(g, t.cx - w / 2, t.cy - h / 2, w, h, h / 2, hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
+    fillRoundRect(g, t.cx - w / 2, t.cy - h / 2, w, h, pillRadius(pal.ui, h), hover ? pal.ui.secondaryHover : pal.ui.secondary, pal.ui.secondaryEdge, 1.5);
     // Four corner brackets: at the corners to enter, pulled inward to exit.
     const r = h * 0.3;
     const a = r * 0.55;
@@ -1341,7 +1367,7 @@ export class TitleScene implements Scene {
         drawCard(g, pal.ui, x, y, w, h, 24);
         drawText(g, "Select a world", this.W / 2, y + 32, { size: 22, color: pal.titleText, weight: 600, font: pal.display });
         const chip = `${this.pendingType[0].toUpperCase()}${this.pendingType.slice(1)} mode`;
-        fillRoundRect(g, this.W / 2 - 60, y + 50, 120, 24, 12, pal.ui.secondary, pal.ui.secondaryEdge, 1);
+        fillRoundRect(g, this.W / 2 - 60, y + 50, 120, 24, pillRadius(pal.ui, 24), pal.ui.secondary, pal.ui.secondaryEdge, 1);
         drawText(g, chip, this.W / 2, y + 63, { size: 12, color: pal.titleText, weight: 700 });
         drawText(g, "Tutorial teaches the colour rules in a minute", this.W / 2, y + h - 24, { size: 12, color: pal.titleMuted, weight: 500 });
       } else {
@@ -1399,6 +1425,7 @@ export class TitleScene implements Scene {
       g.save();
       g.globalAlpha = alpha;
       drawSprite(g, sprite, frame, b.cx - (b.w * scale) / 2, b.cy + dy - (b.h * scale) / 2, b.w * scale, b.h * scale);
+      if (pal.pixelated) this.renderWorldLabel(g, b.id, b.cx, b.cy + dy, b.w * scale);
       g.restore();
     }
 

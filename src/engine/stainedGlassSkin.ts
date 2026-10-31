@@ -6,7 +6,7 @@ import type { TitleFx } from "./backdrops";
 import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
-import { fillScreen, screenRect } from "./view";
+import { fillScreen, screenRect, heroSpot } from "./view";
 
 /**
  * "Stained Glass": leaded panes in a dark stone chapel. Every brick is a
@@ -410,9 +410,8 @@ export function drawStainedGlassBackdrop(g: Ctx, t: number, l?: Layout, flare = 
     }
   }
   // rose window, top right, glowing brighter when the pointer is near and after a clear
-  const rx = sr.w * 0.84;
-  const ry = sr.h * 0.17;
   const rr = Math.min(sr.w, sr.h) * 0.09;
+  const { x: rx, y: ry } = heroSpot(rr, l !== undefined);
   let near = 0;
   if (fx?.pointer) near = Math.max(0, 1 - Math.hypot(fx.pointer.x - rx, fx.pointer.y - ry) / (rr * 4));
   for (const tap of fx?.taps ?? []) {

@@ -1,5 +1,5 @@
 import type { Color } from "../core/color";
-import { drawText, fillRoundRect } from "./draw";
+import { drawText, fillRoundRect, cardRadius, pillRadius } from "./draw";
 import { PALETTES, THEME_LABELS, THEME_ORDER, type Palette, type ThemeName } from "./theme";
 
 /**
@@ -81,7 +81,7 @@ export function drawSwatch(g: CanvasRenderingContext2D, sw: Swatch, host: Palett
   const h = sw.h * scale;
   const x = sw.x + sw.w / 2 - w / 2;
   const y = sw.y + sw.h / 2 - h / 2;
-  const r = w * 0.2;
+  const r = cardRadius(host.ui, w * 0.2);
   const idx = THEME_ORDER.indexOf(sw.name);
   const color = SWATCH_COLORS[((idx % SWATCH_COLORS.length) + SWATCH_COLORS.length) % SWATCH_COLORS.length];
   fillRoundRect(g, x, y + 2, w, h, r, host.ui.cardShadow);
@@ -109,7 +109,7 @@ export function drawSwatch(g: CanvasRenderingContext2D, sw: Swatch, host: Palett
   if (tag) {
     const tagW = w * 0.5;
     const tagH = Math.max(10, h * 0.2);
-    fillRoundRect(g, x + w - tagW + 4, y - tagH * 0.35, tagW, tagH, tagH / 2, host.goalAccent);
+    fillRoundRect(g, x + w - tagW + 4, y - tagH * 0.35, tagW, tagH, pillRadius(host.ui, tagH), host.goalAccent);
     drawText(g, tag, x + w - tagW / 2 + 4, y - tagH * 0.35 + tagH / 2 + 0.5, { size: tagH * 0.68, color: "#ffffff", weight: 800 });
   }
   if (label) {

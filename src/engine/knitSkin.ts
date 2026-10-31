@@ -6,7 +6,7 @@ import type { TitleFx } from "./backdrops";
 import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
-import { fillScreen, screenRect } from "./view";
+import { fillScreen, screenRect, heroSpot } from "./view";
 
 /**
  * "Knit": chunky knitted squares on a felt mat. Every brick is a square of
@@ -300,8 +300,7 @@ export function drawKnitBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx: T
     for (let x = (y / 12) % 2 === 0 ? 6 : 12; x < sr.w; x += 12) g.fillRect(x, y, 1.5, 1.5);
   }
   // the yarn ball and its thread, pulled toward the pointer
-  const bx = sr.w - 70;
-  const by = 58;
+  const { x: bx, y: by } = heroSpot(34, l !== undefined);
   const pointer = fx?.pointer ?? null;
   const tx = pointer ? pointer.x : bx - 120 - Math.sin(t / 2600) * 30;
   const ty = pointer ? pointer.y : by + 70 + Math.cos(t / 2100) * 20;

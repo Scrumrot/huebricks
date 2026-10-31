@@ -5,7 +5,7 @@ import type { SpriteMap } from "./assets";
 import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
-import { fillScreen, screenRect } from "./view";
+import { fillScreen, screenRect, heroSpot } from "./view";
 import type { TitleFx } from "./backdrops";
 
 /**
@@ -268,9 +268,8 @@ export function drawHalloweenBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, 
     g.fillRect(x, y, 1.5, 1.5);
   }
   // moon
-  const mx = sr.w * 0.82;
-  const my = sr.h * 0.2;
   const mr = Math.min(sr.w, sr.h) * 0.11;
+  const { x: mx, y: my } = heroSpot(mr, l !== undefined);
   const glow = g.createRadialGradient(mx, my, mr * 0.8, mx, my, mr * 3);
   glow.addColorStop(0, `rgba(255,230,160,${0.25 + flare * 0.45})`);
   glow.addColorStop(1, "rgba(255,230,160,0)");

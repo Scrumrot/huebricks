@@ -1,6 +1,6 @@
 import type { GameContext } from "../scenes/Scene";
 import type { ButtonFeel } from "./buttonFeel";
-import { drawText, fillRoundRect } from "./draw";
+import { drawText, fillRoundRect, pillRadius } from "./draw";
 
 /**
  * The sound controls shared by the title's settings card and the pause card:
@@ -110,7 +110,17 @@ export class SoundControls {
     const hover = inp.inCentered(tg.cx, tg.cy, tg.d, tg.d) && inp.x >= 0;
     const scale = feel.scale("sound:toggle", hover, hover && inp.down);
     const d = tg.d * scale;
-    fillRoundRect(g, tg.cx - d / 2, tg.cy - d / 2, d, d, d / 2, muted ? pal.ui.secondary : pal.ui.primary, muted ? pal.ui.secondaryEdge : undefined, 1.5);
+    fillRoundRect(
+      g,
+      tg.cx - d / 2,
+      tg.cy - d / 2,
+      d,
+      d,
+      pillRadius(pal.ui, d),
+      muted ? pal.ui.secondary : pal.ui.primary,
+      muted ? pal.ui.secondaryEdge : undefined,
+      1.5,
+    );
     drawSpeaker(g, tg.cx, tg.cy, d * 0.22, muted ? pal.ui.secondaryText : pal.ui.primaryText, muted);
     for (const sl of L.sliders) {
       const v = sl.id === "music" ? ctx.save.music : ctx.save.sfx;

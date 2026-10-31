@@ -6,7 +6,7 @@ import type { TitleFx } from "./backdrops";
 import { rgba, roundRect, shade, type Ctx } from "./modernSkin";
 import type { SlideStyle } from "./modernSlides";
 import { buildSkin, makeGlyphs, seeded, type ButtonFn, type SkinSpec, type TileFn } from "./skinKit";
-import { fillScreen, screenRect } from "./view";
+import { fillScreen, screenRect, heroSpot } from "./view";
 
 /**
  * "Origami": folded paper squares on a kraft desk. Every brick is a flat
@@ -377,9 +377,8 @@ export function drawOrigamiBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx
     g.restore();
   }
   // the crane, perched top right, flapping after a clear and when the pointer comes close
-  const cxr = sr.w * 0.86;
-  const cyr = sr.h * 0.14;
   const cs = Math.min(sr.w, sr.h) * 0.07;
+  const { x: cxr, y: cyr } = heroSpot(cs, l !== undefined);
   let near = 0;
   if (fx?.pointer) near = Math.max(0, 1 - Math.hypot(fx.pointer.x - cxr, fx.pointer.y - cyr) / (cs * 3));
   for (const tap of fx?.taps ?? []) {

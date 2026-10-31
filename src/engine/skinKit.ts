@@ -155,6 +155,13 @@ function flat(name: SpriteName, color: string): Sprite {
   });
 }
 
+/** The largest size at or under `size` at which `label` in `font` fits within `room`. */
+function fitSize(g: Ctx, label: string, size: number, room: number, font: string): number {
+  g.font = `700 ${size}px ${font}`;
+  const tw = g.measureText(label).width;
+  return tw > room ? size * (room / tw) : size;
+}
+
 function modeGlyphDefault(g: Ctx, glyph: Glyph, cx: number, cy: number, r: number): void {
   g.save();
   g.lineWidth = r * 0.2;
@@ -371,7 +378,11 @@ export function buildSkin(classic: SpriteMap, spec: SkinSpec): SpriteMap {
       g.shadowColor = spec.worldTextShadow;
       g.shadowBlur = 4;
       g.shadowOffsetY = 2;
-      text(g, label, w * 0.6, h / 2 + 1, h * 0.3, spec.worldText, 700, "center", spec.display);
+      // the label fills the room right of the glyph; a wide display face (Pixel's) shrinks to fit rather than running under it
+      const labelCx = w * 0.6;
+      const room = 2 * Math.min(labelCx - (w * 0.2 + h * 0.15 + 14), w - pad - 12 - labelCx);
+      const size = fitSize(g, label, h * 0.3, room, spec.display);
+      text(g, label, labelCx, h / 2 + 1, size, spec.worldText, 700, "center", spec.display);
       g.restore();
     });
   skin.normal_button_sprite = mode("normal_button_sprite", "Normal", C[YELLOW], "diamond");
@@ -385,12 +396,14 @@ export function buildSkin(classic: SpriteMap, spec: SkinSpec): SpriteMap {
     skin[`world${world}_sprite` as SpriteName] = round(`world${world}_sprite` as SpriteName, (g, i, w, h) => {
       const pad = w * 0.07;
       spec.tile(g, pad, pad, w - pad * 2, h - pad * 2, base, { lift: i === 1 ? 0.15 : 0, seed: 40 + world });
+      // a low-res (pixel) sprite cannot carry text; the title letters those tiles live, at screen resolution
+      if (spec.size) return;
       g.save();
       g.shadowColor = spec.worldTextShadow;
       g.shadowBlur = 5;
       g.shadowOffsetY = 2;
       if (world === 0) {
-        text(g, "Tutorial", w / 2, h / 2, w * 0.18, spec.worldText, 700, "center", spec.display);
+        text(g, "Tutorial", w / 2, h / 2, fitSize(g, "Tutorial", w * 0.18, w - pad * 2 - 16, spec.display), spec.worldText, 700, "center", spec.display);
       } else {
         text(g, "WORLD", w / 2, h * 0.37, w * 0.12, rgba(spec.worldText, 0.9), 700, "center", spec.font);
         text(g, String(world), w / 2, h * 0.61, w * 0.36, spec.worldText, 700, "center", spec.display);

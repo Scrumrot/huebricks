@@ -61,4 +61,11 @@ describe("theme registry", () => {
         .map((p) => p.name),
     ).toEqual(["pixel"]);
   });
+
+  it("pixel squares its chrome and nothing else does", () => {
+    for (const pal of Object.values(PALETTES)) {
+      if (pal.name === "pixel") expect(pal.ui.radius).toBeLessThanOrEqual(4);
+      else expect(pal.ui.radius).toBeUndefined();
+    }
+  });
 });
