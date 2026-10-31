@@ -2833,16 +2833,24 @@ export class GameScene implements Scene {
             fill(g, wx, wy, ww, wh, level, colour, t0);
             continue;
           }
-          const fh = wh * level;
+          // the plain fill: the colour rises inside the well, brightest at its surface, inset so it
+          // stays within every theme's well art
+          const inset = l.cellW * 0.07;
+          const fw = ww - inset * 2;
+          const fh = (wh - inset * 2) * level;
           if (fh < 0.5) continue;
+          const top = wy + wh - inset - fh;
           g.save();
           g.beginPath();
-          g.roundRect(wx, wy, ww, wh, l.cellW * 0.18);
+          g.roundRect(wx + inset, wy + inset, fw, wh - inset * 2, l.cellW * 0.14);
           g.clip();
-          g.fillStyle = rgba(colour, 0.4);
-          g.fillRect(wx, wy + wh - fh, ww, fh);
-          g.fillStyle = rgba(colour, 0.75);
-          g.fillRect(wx, wy + wh - fh, ww, 1.5);
+          const grad = g.createLinearGradient(0, top, 0, wy + wh - inset);
+          grad.addColorStop(0, rgba(colour, 0.55));
+          grad.addColorStop(1, rgba(colour, 0.25));
+          g.fillStyle = grad;
+          g.fillRect(wx + inset, top, fw, fh);
+          g.fillStyle = rgba(colour, 0.9);
+          g.fillRect(wx + inset, top, fw, 1.5);
           g.restore();
         }
         const t = this.ctx.clock.t;

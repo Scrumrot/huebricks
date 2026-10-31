@@ -946,10 +946,14 @@ export class TitleScene implements Scene {
     ];
     const pitch = Math.min(190, (this.W - BTN_H * 2 - 20) / 3);
     const size = pitch < 130 ? 22 : 30;
+    const accent = pal.titleAccent ?? pal.ui.primary;
     stats.forEach((st, i) => {
       const x = this.W / 2 + (i - 1) * pitch;
       drawText(g, st.label, x, barY - 18, { size: 11, color: pal.titleMuted, weight: 700 });
-      drawText(g, st.value, x, barY + 10, { size, color: st.accent ? pal.ui.primary : pal.titleText, weight: 600, font: pal.display, tabular: true });
+      // wide display faces (Press Start 2P) shrink to their slot instead of running into the neighbours
+      const tw = measureText(g, st.value, { size, weight: 600, font: pal.display });
+      const fit = Math.min(size, (size * (pitch - 16)) / Math.max(1, tw));
+      drawText(g, st.value, x, barY + 10, { size: fit, color: st.accent ? accent : pal.titleText, weight: 600, font: pal.display, tabular: true });
     });
   }
 
@@ -1266,7 +1270,7 @@ export class TitleScene implements Scene {
       } else {
         drawText(g, `High Score: ${this.ctx.save.hiscore}`, this.W / 2, barY, { size: 18, color: pal.titleText, tabular: true });
         if (this.ctx.audio.muted) {
-          drawText(g, "muted", this.W - BTN_H / 2, this.H - BTN_H - 12, { size: 12, color: pal.titleMuted, weight: 500 });
+          drawText(g, "muted", this.W - 38, 74, { size: 12, color: pal.titleMuted, weight: 500 });
         }
       }
       this.renderThemeToggle(g);

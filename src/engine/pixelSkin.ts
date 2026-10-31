@@ -165,7 +165,7 @@ function logo(g: Ctx, i: number, w: number, h: number): void {
 function menuFrame(g: Ctx, w: number, h: number): void {
   g.fillStyle = skyDither(g);
   g.fillRect(0, 8, w, h - 8);
-  drawSkyline(g, 0, h, w, h * 0.7, INK, 11, LAVENDER);
+  drawSkyline(g, 0, h, w, h * 0.32, INK, 11, LAVENDER);
   g.fillStyle = LAVENDER;
   g.fillRect(0, 8, w, 2);
 }

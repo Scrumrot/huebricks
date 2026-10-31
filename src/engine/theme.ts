@@ -158,6 +158,8 @@ export interface Palette {
   crosshair: string;
   titleText: string;
   titleMuted: string;
+  /** Accent for the title's furthest-world stat when the button colour would vanish on the bottom band. */
+  titleAccent?: string;
   overlayText: string;
   overlayAccent: string;
   tutorialText: string;
@@ -1008,6 +1010,7 @@ export const VINTAGE: Palette = {
 /** "Nature: river stones on wood in a meadow". */
 export const NATURE: Palette = {
   name: "nature",
+  titleAccent: "#5B3F27",
   popStyle: "leaves",
   kind: "generated",
   backdrop: "nature",

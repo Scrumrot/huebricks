@@ -237,9 +237,6 @@ function logo(g: Ctx, i: number, w: number, h: number): void {
     g.closePath();
     g.fill();
   }
-  g.strokeStyle = DEEP;
-  g.lineWidth = size * 0.03;
-  g.strokeText("HueBricks", w / 2, y);
   const mini = size * 0.2;
   [WINTER_COLORS[RED], WINTER_COLORS[BLUE], WINTER_COLORS[YELLOW]].forEach((c, k) => {
     cube(g, w / 2 - mini * 1.9 + k * mini * 1.3, y + size * 0.74, mini, mini, c, {});
