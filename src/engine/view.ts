@@ -39,14 +39,15 @@ export const TOP_CHROME = 84;
 
 /**
  * Where a backdrop parks its hero ornament of radius `r`. Held sideways it
- * sits top-right, tucked under the corner chrome. Held upright it sits
+ * sits against the right edge, tucked under the corner chrome. Held upright it sits
  * top-centre: on the board (`inPlay`) between the score and the pause
  * button, where the stacked HUD leaves a gap; on the title, under the
  * theme pill that occupies that gap.
  */
 export function heroSpot(r: number, inPlay = false): { x: number; y: number } {
   if (view.portrait) return { x: view.w / 2, y: inPlay ? r + 18 : TOP_CHROME + r };
-  return { x: view.w * 0.84, y: Math.max(view.h * 0.2, TOP_CHROME + r + 10) };
+  // hugging the right edge keeps it inside the side rail even on a 4:3 screen, where that rail is narrow
+  return { x: view.w - r - 24, y: Math.max(view.h * 0.2, TOP_CHROME + r + 10) };
 }
 
 /** Fill the whole visible canvas with `style`. */

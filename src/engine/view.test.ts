@@ -11,6 +11,16 @@ describe("hero ornament spot", () => {
     expect(spot.x + r).toBeLessThanOrEqual(view.w);
   });
 
+  it("hugs the right edge so a narrow 4:3 side rail still holds it", () => {
+    view.w = 676;
+    view.h = 507;
+    view.portrait = false;
+    const r = 56;
+    const spot = heroSpot(r);
+    expect(spot.x - r).toBeGreaterThan(view.w - 140);
+    expect(spot.x + r).toBeLessThanOrEqual(view.w);
+  });
+
   it("drops to a fifth of the height when a wide screen is tall enough for that to clear the chrome", () => {
     view.w = 1400;
     view.h = 1100;
