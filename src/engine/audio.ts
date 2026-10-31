@@ -66,6 +66,8 @@ export class AudioSystem implements AudioPort {
   private pending = new Map<SoundName, Promise<void>>();
   private lastPlay = new Map<string, number>();
   private profile: SoundProfile | null = null;
+  /** Where the music filter sits when not paused: the material's tone. */
+  private openCutoff = OPEN_CUTOFF;
   private spaceIn: GainNode | null = null;
   private sfxBus: GainNode | null = null;
   private musicBus: GainNode | null = null;
@@ -139,6 +141,12 @@ export class AudioSystem implements AudioPort {
 
   setProfile(profile: SoundProfile | null): void {
     this.profile = profile;
+    this.openCutoff = profile?.tone ?? OPEN_CUTOFF;
+    if (this.paused || !this.ctx || !this.musicFilter) return;
+    const t = this.ctx.currentTime;
+    this.musicFilter.frequency.cancelScheduledValues(t);
+    this.musicFilter.frequency.setValueAtTime(Math.max(1, this.musicFilter.frequency.value), t);
+    this.musicFilter.frequency.exponentialRampToValueAtTime(this.openCutoff, t + 0.4);
   }
 
   event(name: SoundEvent, opts: EventOptions = {}): void {
@@ -275,7 +283,7 @@ export class AudioSystem implements AudioPort {
     this.musicBus.gain.linearRampToValueAtTime(on ? PAUSE_GAIN : 1, t + 0.25);
     this.musicFilter.frequency.cancelScheduledValues(t);
     this.musicFilter.frequency.setValueAtTime(Math.max(1, this.musicFilter.frequency.value), t);
-    this.musicFilter.frequency.exponentialRampToValueAtTime(on ? PAUSE_CUTOFF : OPEN_CUTOFF, t + 0.3);
+    this.musicFilter.frequency.exponentialRampToValueAtTime(on ? PAUSE_CUTOFF : this.openCutoff, t + 0.3);
   }
 
   setSfxVolume(v: number): void {

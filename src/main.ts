@@ -241,6 +241,7 @@ async function boot(): Promise<void> {
   let scene: Scene;
   // The outgoing frame, kept while the next scene dissolves in.
   let transition: { snap: HTMLCanvasElement; t0: number } | null = null;
+  let booted = false;
   const snapCanvas = document.createElement("canvas");
   function snapshot(): HTMLCanvasElement | null {
     if (canvas.width === 0 || canvas.height === 0) return null;
@@ -275,6 +276,11 @@ async function boot(): Promise<void> {
       next.enter?.();
     },
     setTheme(theme: ThemeName) {
+      // a live theme change dissolves like a scene change (not the boot-time call, which has nothing to show yet)
+      if (booted && theme !== ctx.palette.name && (theme !== "classic" || ctx.palette.kind === "generated")) {
+        const snap = snapshot();
+        if (snap) transition = { snap, t0: performance.now() };
+      }
       if (theme !== "classic") {
         skins[theme] ??= builders[theme](classicSprites);
         // A skin bakes its wordmark and glyphs with the theme's display face. On a cold load that face
@@ -377,6 +383,7 @@ async function boot(): Promise<void> {
     } else {
       scene.render(g);
     }
+    booted = true;
     const cursor = scene.cursor?.() ?? "default";
     if (cursor !== lastCursor) {
       lastCursor = cursor;

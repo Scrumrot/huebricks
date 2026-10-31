@@ -2468,7 +2468,7 @@ export class GameScene implements Scene {
       }
       over = 0.92;
     } else if (kind === "flicker") {
-      if (e >= D(240)) {
+      if (e >= D(240) || TUNING.motion < 1) {
         f.landT0 = -1;
         return;
       }
@@ -3092,7 +3092,7 @@ export class GameScene implements Scene {
     this.vuPeak = vuPeak(this.vuPeak, lit, t);
     const peak = this.vuPeak.seg - 1;
     const color = pal.multColors[mult];
-    const shimmer = mult >= 3 ? 0.85 + 0.15 * Math.sin(t / 37) : 1;
+    const shimmer = mult >= 3 && TUNING.motion >= 1 ? 0.85 + 0.15 * Math.sin(t / 37) : 1;
     const seg = (i: number, fill: string) => fillRoundRect(g, x + i * (sw + gap), cy - h / 2, sw, h, 1.5, fill);
     for (let i = lit; i < n; i++) if (i !== peak) seg(i, pal.track);
     if (lit > 0) {

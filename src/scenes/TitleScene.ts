@@ -12,7 +12,7 @@ import { drawStain, rgba as rgbaOf } from "../engine/modernSkin";
 import { Particles } from "../engine/particles";
 import type { Color } from "../core/color";
 import { nextTheme, THEME_LABELS, THEME_ORDER } from "../engine/theme";
-import { setReducedMotion } from "../engine/fxTuning";
+import { setReducedMotion, TUNING } from "../engine/fxTuning";
 import { drawModeGlyph } from "../engine/modeGlyph";
 import { drawSpeaker, SoundControls } from "../engine/soundControls";
 import { drawSwatch, fitSwatch, gridHeight, layoutGrid, swatchAt, type Swatch } from "../engine/themePicker";
@@ -94,6 +94,8 @@ interface ScatterChip {
 
 const WALL_COLS = 12;
 const WALL_SIZE = BTN_H / 2;
+/** The title's pieces settle into place over this long after it opens (generated themes). */
+const INTRO_MS = 520;
 /** Rows of the original 760 x 507 wall; the classic world-select card is sized from it. */
 const WALL_ROWS = Math.ceil((WALL_COLS * 2) / 3);
 const FLIP_FRAMES = 16;
@@ -127,6 +129,12 @@ export class TitleScene implements Scene {
   private readonly tweens = new Tweens();
   private readonly feel: ButtonFeel;
   private enterT0 = 0;
+
+  /** Entrance progress for a piece that starts `delay` ms after the title opens (generated themes; classic is always 1). */
+  private intro(delay: number): number {
+    if (!this.generated) return 1;
+    return easeOutCubic(clamp01((this.ctx.clock.t - this.enterT0 - delay) / INTRO_MS));
+  }
   private readonly sound = new SoundControls();
   /** Pill buttons on the modern main menu (Play, Continue). */
   private pills: PillButton[] = [];
@@ -1257,26 +1265,40 @@ export class TitleScene implements Scene {
     this.renderTapRings(g);
 
     if (this.menu === "main") {
+      const barY = this.H - BTN_H / 2;
       if (modern) {
+        // the band rises in, the pills settle up a beat after the logo, the corner toggles fade in last
+        const band = this.intro(120);
+        g.save();
+        g.translate(0, (1 - band) * BTN_H * 0.35 * TUNING.motion);
+        g.globalAlpha = band;
         // Generated bands are uniform, so they can run out to the screen edge.
         const sr = screenRect();
         drawSprite(g, sp.menu_frame_sprite, 0, sr.x, this.H - BTN_H, sr.w, BTN_H);
+        this.renderBottomStats(g, barY);
+        g.restore();
+        const pillsIn = this.intro(60);
+        g.save();
+        g.translate(0, (1 - pillsIn) * 22 * TUNING.motion);
+        g.globalAlpha = pillsIn;
+        this.renderPills(g);
+        g.restore();
+        g.save();
+        g.globalAlpha = this.intro(220);
+        this.renderSoundToggle(g);
+        g.restore();
       } else {
         drawSprite(g, sp.menu_frame_sprite, 0, 0, this.H - BTN_H, this.W, BTN_H);
-      }
-      const barY = this.H - BTN_H / 2;
-      if (modern) {
-        this.renderBottomStats(g, barY);
-        this.renderPills(g);
-        this.renderSoundToggle(g);
-      } else {
         drawText(g, `High Score: ${this.ctx.save.hiscore}`, this.W / 2, barY, { size: 18, color: pal.titleText, tabular: true });
         if (this.ctx.audio.muted) {
           drawText(g, "muted", this.W - 38, 74, { size: 12, color: pal.titleMuted, weight: 500 });
         }
       }
+      g.save();
+      g.globalAlpha = this.intro(220);
       this.renderThemeToggle(g);
       if (this.ctx.fullscreen.supported) this.renderFullscreenToggle(g);
+      g.restore();
     }
 
     if (this.menu === "world") {
@@ -1328,8 +1350,25 @@ export class TitleScene implements Scene {
       const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
       const pressed = this.held === b && hover;
       const frame = pressed ? Math.min(sprite.frames.length - 1, b.pressedFrame) : 0;
-      const scale = this.feel.scale(b.id, hover, pressed);
-      drawSprite(g, sprite, frame, b.cx - (b.w * scale) / 2, b.cy - (b.h * scale) / 2, b.w * scale, b.h * scale);
+      let scale = this.feel.scale(b.id, hover, pressed);
+      let dy = 0;
+      let alpha = 1;
+      if (modern && this.menu === "main") {
+        // the logo pops in first; the corner buttons ride up with the band
+        if (b.id === "logo") {
+          const k = this.intro(0);
+          scale *= 1 - 0.1 * (1 - easeOutBack(k)) * TUNING.motion;
+          alpha = k;
+        } else if (b.id === "info" || b.id === "settings") {
+          const k = this.intro(120);
+          dy = (1 - k) * BTN_H * 0.35 * TUNING.motion;
+          alpha = k;
+        }
+      }
+      g.save();
+      g.globalAlpha = alpha;
+      drawSprite(g, sprite, frame, b.cx - (b.w * scale) / 2, b.cy + dy - (b.h * scale) / 2, b.w * scale, b.h * scale);
+      g.restore();
     }
 
     if (this.menu === "credits") {

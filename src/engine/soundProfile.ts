@@ -27,6 +27,8 @@ export interface SoundProfile {
   transpose: number;
   /** Extra partials for bell-like materials, as [multiple, gain]; empty for a plain tone. */
   partials: readonly (readonly [number, number])[];
+  /** Lowpass on the music bus in Hz: 20000 leaves the track open, lower sits it back into a soft material. */
+  tone: number;
 }
 
 export type Material = "paint" | "glass" | "paper" | "wood" | "dark" | "gel" | "toy" | "synth" | "bells" | "snow" | "felt";
@@ -42,6 +44,7 @@ const base: SoundProfile = {
   space: 0.15,
   transpose: 0,
   partials: [],
+  tone: 20000,
 };
 
 const material = (over: Partial<SoundProfile>): SoundProfile => ({ ...base, ...over });
@@ -65,15 +68,15 @@ export const MATERIALS: Readonly<Record<Material, SoundProfile>> = {
     ],
   }),
   /** Folded paper: mostly noise, short and muted. */
-  paper: material({ attack: 0.004, decay: 0.14, brightness: 2.5, grit: 0.8, spread: 0, bend: -1, space: 0.05 }),
+  paper: material({ attack: 0.004, decay: 0.14, brightness: 2.5, grit: 0.8, spread: 0, bend: -1, space: 0.05, tone: 9000 }),
   /** Knocked wood: warm and short, a low thud under everything. */
-  wood: material({ attack: 0.003, decay: 0.18, brightness: 3, grit: 0.45, spread: 2, bend: -4, space: 0.12, transpose: -12 }),
+  wood: material({ attack: 0.003, decay: 0.18, brightness: 3, grit: 0.45, spread: 2, bend: -4, space: 0.12, transpose: -12, tone: 7000 }),
   /** Wood after dark: lower and longer, for the haunted theme. */
-  dark: material({ attack: 0.003, decay: 0.32, brightness: 2.5, grit: 0.4, spread: 5, bend: -5, space: 0.3, transpose: -7 }),
+  dark: material({ attack: 0.003, decay: 0.32, brightness: 2.5, grit: 0.4, spread: 5, bend: -5, space: 0.3, transpose: -7, tone: 4500 }),
   /** Gel: round sine with a wobble and a drop. */
-  gel: material({ wave: "sine", attack: 0.01, decay: 0.4, brightness: 2, grit: 0.1, spread: 9, bend: -7, space: 0.2, transpose: -5 }),
+  gel: material({ wave: "sine", attack: 0.01, decay: 0.4, brightness: 2, grit: 0.1, spread: 9, bend: -7, space: 0.2, transpose: -5, tone: 11000 }),
   /** Toy plastic: square waves, short, no room. */
-  toy: material({ wave: "square", attack: 0.002, decay: 0.12, brightness: 6, grit: 0.05, spread: 0, bend: 0, space: 0 }),
+  toy: material({ wave: "square", attack: 0.002, decay: 0.12, brightness: 6, grit: 0.05, spread: 0, bend: 0, space: 0, tone: 9000 }),
   /** Light and synth: saw with a filter, chorus-thick, plenty of space. */
   synth: material({ wave: "sawtooth", attack: 0.005, decay: 0.35, brightness: 5, grit: 0.05, spread: 10, bend: 2, space: 0.4 }),
   /** Little bells: harmonic partials, long decay, an octave up. */
@@ -94,9 +97,9 @@ export const MATERIALS: Readonly<Record<Material, SoundProfile>> = {
     ],
   }),
   /** Felt and yarn: soft, short, no ring at all. */
-  felt: material({ attack: 0.006, decay: 0.2, brightness: 2.2, grit: 0.3, spread: 4, bend: -2, space: 0.04 }),
+  felt: material({ attack: 0.006, decay: 0.2, brightness: 2.2, grit: 0.3, spread: 4, bend: -2, space: 0.04, tone: 6500 }),
   /** Snow: soft glass, hushed, lots of room. */
-  snow: material({ wave: "sine", attack: 0.01, decay: 0.6, brightness: 6, grit: 0.2, spread: 4, bend: 0, space: 0.5, transpose: 7 }),
+  snow: material({ wave: "sine", attack: 0.01, decay: 0.6, brightness: 6, grit: 0.2, spread: 4, bend: 0, space: 0.5, transpose: 7, tone: 6000 }),
 };
 
 /** Everything a scene can ask the sound system for. */
