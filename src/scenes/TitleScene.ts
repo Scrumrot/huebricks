@@ -1051,7 +1051,16 @@ export class TitleScene implements Scene {
     g.fill();
     g.restore();
     if (labelled) {
-      drawText(g, THEME_LABELS[pal.name], iconX + 14 * scale, t.cy + 1, { size: 13 * scale, color: pal.titleText, weight: 700, align: "left" });
+      // the name fits between the icon and the chevron; "Stained Glass" shrinks a point rather than running under it
+      const name = THEME_LABELS[pal.name];
+      const room = (w - 58) * scale;
+      const nameW = measureText(g, name, { size: 13, weight: 700 });
+      drawText(g, name, iconX + 14 * scale, t.cy + 1, {
+        size: Math.min(13, (13 * room) / Math.max(1, nameW)) * scale,
+        color: pal.titleText,
+        weight: 700,
+        align: "left",
+      });
       // chevron
       const cx = t.cx + w / 2 - 14 * scale;
       g.save();

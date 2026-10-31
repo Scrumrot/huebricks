@@ -307,7 +307,13 @@ export abstract class ArcadeScene implements Scene {
     }
     const d = Math.min(L.right.w * 0.5, L.vh / 6);
     const cx = L.right.x + L.right.w / 2;
-    this.spriteButtons = [mk("pause", "pause_button_sprite", cx, L.y + d / 2, d), mk("sound", "sound_button_sprite", cx, L.y + d + 12 + d * 0.3, d * 0.6)];
+    // pause in the top-right corner with the sound toggle beside it, the same corner band the game board uses,
+    // so the backdrop's hero ornament (placed under that band) stays clear of both
+    const pauseCx = L.right.x + L.right.w - 16 - d / 2;
+    this.spriteButtons = [
+      mk("pause", "pause_button_sprite", pauseCx, L.y + d / 2, d),
+      mk("sound", "sound_button_sprite", pauseCx - d * 0.5 - 12 - d * 0.3, L.y + d / 2, d * 0.6),
+    ];
     const cd = Math.min(58, L.right.w * 0.42);
     const cols = Math.max(1, Math.floor((L.right.w - 12) / (cd + 10)));
     const rowsN = Math.ceil(spec.length / cols);
@@ -765,10 +771,13 @@ export abstract class ArcadeScene implements Scene {
     if (L.portrait) {
       const band = L.left;
       const cy = band.h / 2;
-      // name pill on the left, score centred, stats on the right
-      drawText(g, this.info.name.toUpperCase(), L.x, cy - 14, { size: 11, color: mutedC, weight: 700, align: "left" });
-      drawText(g, shown, L.x, cy + 12, { size: 30, color: textC, weight: 600, font: pal.display, tabular: true, align: "left" });
-      let sx = L.x + L.w;
+      // name and score on the left, the next piece centred, stats on the right: all inside the sound and pause buttons
+      const pauseBtn = this.spriteButtons.find((b) => b.kind === "pause");
+      const soundBtn = this.spriteButtons.find((b) => b.kind === "sound");
+      const leftX = soundBtn ? Math.max(L.x, soundBtn.cx + soundBtn.d / 2 + 12) : L.x;
+      drawText(g, this.info.name.toUpperCase(), leftX, cy - 14, { size: 11, color: mutedC, weight: 700, align: "left" });
+      drawText(g, shown, leftX, cy + 12, { size: 30, color: textC, weight: 600, font: pal.display, tabular: true, align: "left" });
+      let sx = pauseBtn ? Math.min(L.x + L.w, pauseBtn.cx - pauseBtn.d / 2 - 12) : L.x + L.w;
       for (let i = stats.length - 1; i >= 0; i--) {
         const st = stats[i];
         drawText(g, st.label.toUpperCase(), sx, cy - 14, { size: 10, color: mutedC, weight: 700, align: "right" });

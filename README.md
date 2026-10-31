@@ -416,9 +416,11 @@ src/
   crane) is placed by `heroSpot(r, inPlay)` in `engine/view.ts`: top-right
   under the corner controls held sideways, top-centre between the score
   and the pause button held upright. `TOP_CHROME` is the one number that
-  says how far down the corner controls reach. Mode buttons, world tiles
-  and arcade tiles fit their labels to the room they have, so a wide
-  display face shrinks instead of running under a glyph or off a tile.
+  says how far down the corner controls reach, and the Arcade scenes keep
+  their pause and sound toggle in that same corner band. Mode buttons,
+  world tiles, arcade tiles and the title's theme pill fit their labels to
+  the room they have, so a wide display face or a long theme name shrinks
+  instead of running under a glyph, off a tile or into the chevron.
 - **Scenes dissolve, HUDs arrive.** On the generated themes a scene or
   theme change keeps a snapshot of the outgoing frame and cross-dissolves
   it over the incoming one (`engine/transition.ts`, driven from the frame
