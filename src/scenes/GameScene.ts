@@ -36,7 +36,7 @@ import { hudControls, hudRail, type ControlKind, type Controls, type HudRail } f
 import { ICONS } from "../engine/icons";
 import { clearWave } from "../engine/clearWave";
 import { ageRibbon, drawRibbon, pushRibbon, type RibbonPoint } from "../engine/ribbon";
-import { intensityFor, popScale } from "../engine/fxTuning";
+import { intensityFor, popScale, TUNING } from "../engine/fxTuning";
 import { drawMix } from "../engine/mixFx";
 import { Tweens } from "../engine/tween";
 import type { GameContext, Scene } from "./Scene";
@@ -85,6 +85,8 @@ const ROTATE_MS = 260;
 const PUSH_ANTICIPATE_MS = 110;
 const PUSH_MS = 220;
 const FADE_MS = 180;
+/** The HUD slides in from its edge over this long when a level opens (generated themes). */
+const ARRIVE_MS = 420;
 const CARD_MS = 420;
 const COUNT_MS = 500;
 const DESAT_MS = 400;
@@ -2134,6 +2136,7 @@ export class GameScene implements Scene {
 
   /** Fade from the background colour when the scene starts. */
   private renderFade(g: CanvasRenderingContext2D): void {
+    if (this.ctx.palette.kind !== "classic") return;
     const e = this.ctx.clock.t - this.fadeT0;
     if (e >= D(FADE_MS)) return;
     g.globalAlpha = 1 - clamp01(e / D(FADE_MS));
@@ -2921,7 +2924,27 @@ export class GameScene implements Scene {
     drawSprite(g, sp.sidebar_sprite, 1, Math.floor(l.boardX) + l.boardW, l.stackY, l.railW, l.boardH);
   }
 
+  /**
+   * How far the HUD still has to travel in from its edge as the scene opens:
+   * 0 once it has arrived. Classic never moves.
+   */
+  private arrival(): number {
+    if (this.ctx.palette.kind !== "generated") return 0;
+    const p = clamp01((this.ctx.clock.t - this.fadeT0) / D(ARRIVE_MS));
+    return (1 - easeOutCubic(p)) * TUNING.motion;
+  }
+
   private renderButtons(g: CanvasRenderingContext2D): void {
+    const a = this.arrival();
+    if (a <= 0) return this.drawButtons(g);
+    g.save();
+    if (this.ctx.view.portrait) g.translate(0, a * 28);
+    else g.translate(a * 36, 0);
+    this.drawButtons(g);
+    g.restore();
+  }
+
+  private drawButtons(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
     const pal = this.ctx.palette;
     const generated = pal.kind === "generated";
@@ -3098,6 +3121,16 @@ export class GameScene implements Scene {
 
   /** `Board` draw event: score, chain meter, level, goal counter and progress bar. */
   private renderHud(g: CanvasRenderingContext2D): void {
+    const a = this.arrival();
+    if (a <= 0) return this.drawHud(g);
+    g.save();
+    if (this.ctx.view.portrait) g.translate(0, -a * 28);
+    else g.translate(-a * 36, 0);
+    this.drawHud(g);
+    g.restore();
+  }
+
+  private drawHud(g: CanvasRenderingContext2D): void {
     const sp = this.ctx.sprites;
     const l = this.board.layout;
     const n = l.cellNum;

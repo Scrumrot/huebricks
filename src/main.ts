@@ -25,7 +25,8 @@ import { buildPixelSprites } from "./engine/pixelSkin";
 import { buildOrigamiSprites } from "./engine/origamiSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
 import { loadGame, saveGame } from "./engine/save";
-import { setReducedMotion } from "./engine/fxTuning";
+import { setReducedMotion, TUNING } from "./engine/fxTuning";
+import { dissolve } from "./engine/transition";
 import { nextTheme, PALETTES, type ThemeName } from "./engine/theme";
 import type { GameContext, Scene } from "./scenes/Scene";
 import { TitleScene } from "./scenes/TitleScene";
@@ -238,6 +239,23 @@ async function boot(): Promise<void> {
   const skins: Partial<Record<ThemeName, SpriteMap>> = { classic: classicSprites };
 
   let scene: Scene;
+  // The outgoing frame, kept while the next scene dissolves in.
+  let transition: { snap: HTMLCanvasElement; t0: number } | null = null;
+  const snapCanvas = document.createElement("canvas");
+  function snapshot(): HTMLCanvasElement | null {
+    if (canvas.width === 0 || canvas.height === 0) return null;
+    snapCanvas.width = canvas.width;
+    snapCanvas.height = canvas.height;
+    const sg = snapCanvas.getContext("2d");
+    if (!sg) return null;
+    sg.drawImage(canvas, 0, 0);
+    return snapCanvas;
+  }
+  /** The first family of a font stack, for `document.fonts`. */
+  function displayFamily(stack: string): string {
+    return (stack.split(",")[0] ?? "").trim().replace(/^["']|["']$/g, "");
+  }
+  const rebaked = new Set<ThemeName>();
   const ctx: GameContext = {
     sprites,
     palette: PALETTES[save.theme] ?? PALETTES.pigment,
@@ -249,11 +267,30 @@ async function boot(): Promise<void> {
     save,
     session: { gameType: "normal", world: 1, level: 0, score: 0 },
     setScene(next: Scene) {
+      if (ctx.palette.kind === "generated") {
+        const snap = snapshot();
+        transition = snap ? { snap, t0: performance.now() } : null;
+      }
       scene = next;
       next.enter?.();
     },
     setTheme(theme: ThemeName) {
-      if (theme !== "classic") skins[theme] ??= builders[theme](classicSprites);
+      if (theme !== "classic") {
+        skins[theme] ??= builders[theme](classicSprites);
+        // A skin bakes its wordmark and glyphs with the theme's display face. On a cold load that face
+        // may still be downloading, so bake again once it arrives.
+        const spec = `700 32px "${displayFamily(PALETTES[theme].display)}"`;
+        if ("fonts" in document && !rebaked.has(theme) && !document.fonts.check(spec)) {
+          rebaked.add(theme);
+          document.fonts
+            .load(spec)
+            .then(() => {
+              skins[theme] = builders[theme](classicSprites);
+              if (ctx.palette.name === theme) ctx.sprites = skins[theme]!;
+            })
+            .catch(() => undefined);
+        }
+      }
       ctx.sprites = skins[theme]!;
       ctx.palette = PALETTES[theme];
       audio.setProfile(ctx.palette.sound);
@@ -279,6 +316,7 @@ async function boot(): Promise<void> {
       get scene() {
         return scene;
       },
+      tuning: TUNING,
     };
   }
 
@@ -312,7 +350,33 @@ async function boot(): Promise<void> {
     clock.alpha = clock.frozen ? clock.alpha : Math.min(1, acc / STEP);
     // Pixel themes scale their small sprites up with no smoothing, so every edge stays a crisp block.
     g.imageSmoothingEnabled = !ctx.palette.pixelated;
-    scene.render(g);
+    if (transition) {
+      const p = (now - transition.t0) / TUNING.transitionMs;
+      if (p >= 1) {
+        transition = null;
+        scene.render(g);
+      } else {
+        const d = dissolve(p, TUNING.motion);
+        const cx = view.w / 2;
+        const cy = view.h / 2;
+        fillScreen(g, ctx.palette.background);
+        g.save();
+        g.translate(cx, cy);
+        g.scale(d.inScale, d.inScale);
+        g.translate(-cx, -cy);
+        scene.render(g);
+        g.restore();
+        g.save();
+        g.globalAlpha = d.outAlpha;
+        g.translate(cx, cy);
+        g.scale(d.outScale, d.outScale);
+        g.translate(-cx, -cy);
+        g.drawImage(transition.snap, 0, 0, view.w, view.h);
+        g.restore();
+      }
+    } else {
+      scene.render(g);
+    }
     const cursor = scene.cursor?.() ?? "default";
     if (cursor !== lastCursor) {
       lastCursor = cursor;

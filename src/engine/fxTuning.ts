@@ -32,6 +32,8 @@ export interface FxTuning {
   bloom: number;
   /** Player preference: 1 is the full feel layer, 0.5 is "reduce motion" (half shake, hit-stop and debris, no slow motion). */
   motion: number;
+  /** Scene cross-dissolve length in ms (generated themes). */
+  transitionMs: number;
 }
 
 export const DEFAULT_TUNING: Readonly<FxTuning> = {
@@ -48,6 +50,7 @@ export const DEFAULT_TUNING: Readonly<FxTuning> = {
   slowmoAt: 0.7,
   bloom: 0.55,
   motion: 1,
+  transitionMs: 360,
 };
 
 export const TUNING: FxTuning = { ...DEFAULT_TUNING };

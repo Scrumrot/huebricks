@@ -651,7 +651,7 @@ export abstract class ArcadeScene implements Scene {
     if (this.state === "won") this.renderCard(g, "Level clear", this.wonLines(), undefined);
 
     const e = t - this.fadeT0;
-    if (e < FADE_MS) {
+    if (e < FADE_MS && pal.kind === "classic") {
       g.globalAlpha = 1 - clamp01(e / FADE_MS);
       fillScreen(g, pal.background);
       g.globalAlpha = 1;

@@ -555,7 +555,9 @@ export class TitleScene implements Scene {
     this.updateWall();
 
     if (this.menu === "launch") {
-      if (this.ctx.clock.t - this.launchT0 >= FADE_MS) {
+      // classic fades to its background first; the generated themes dissolve straight into the game
+      const wait = this.ctx.palette.kind === "classic" ? FADE_MS : 60;
+      if (this.ctx.clock.t - this.launchT0 >= wait) {
         this.ctx.setScene(this.pendingArcade ? createArcadeScene(this.ctx, this.pendingArcade) : new GameScene(this.ctx));
       }
       return;
@@ -1342,12 +1344,12 @@ export class TitleScene implements Scene {
 
     // Scene fades: in from the background on entry, out to it on launch.
     const e = this.ctx.clock.t - this.enterT0;
-    if (e < FADE_MS) {
+    if (e < FADE_MS && pal.kind === "classic") {
       g.globalAlpha = 1 - clamp01(e / FADE_MS);
       fillScreen(g, pal.background);
       g.globalAlpha = 1;
     }
-    if (this.menu === "launch") {
+    if (this.menu === "launch" && pal.kind === "classic") {
       g.globalAlpha = clamp01((this.ctx.clock.t - this.launchT0) / FADE_MS);
       fillScreen(g, pal.background);
       g.globalAlpha = 1;
