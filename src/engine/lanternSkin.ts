@@ -302,6 +302,9 @@ export function drawLanternBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx
   // lantern strings across the top, swaying, dipping toward the pointer
   const cols = [LANTERN_COLORS[1], LANTERN_COLORS[4], LANTERN_COLORS[2], LANTERN_COLORS[5], LANTERN_COLORS[6], LANTERN_COLORS[3]];
   const pointer = fx?.pointer ?? null;
+  // in play the strings sit behind the HUD band, so they step back
+  g.save();
+  if (l) g.globalAlpha = 0.45;
   for (let s = 0; s < 2; s++) {
     const baseY = sr.h * (0.07 + s * 0.08);
     const sag = sr.h * 0.05;
@@ -328,6 +331,7 @@ export function drawLanternBackdrop(g: Ctx, t: number, l?: Layout, flare = 0, fx
       miniLantern(g, x + swing, yAt(x) + 16, 12 + (k % 2) * 2, cols[(k + s * 3) % cols.length], glow);
     }
   }
+  g.restore();
   // fireflies drifting low, more after a level clear; taps scatter them
   const flies = 14 + Math.round(flare * 16);
   const rnd2 = seeded(41);

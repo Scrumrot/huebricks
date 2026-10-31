@@ -408,6 +408,14 @@ src/
   dark and brightens it, Origami slides the next sheet up out of a slot,
   Knit winds up a ball of yarn and Neon lights the coin slot. Themes
   without a fill show the plain rising colour.
+- **Scenes dissolve, HUDs arrive.** On the generated themes a scene or
+  theme change keeps a snapshot of the outgoing frame and cross-dissolves
+  it over the incoming one (`engine/transition.ts`, driven from the frame
+  loop in `main.ts`), the game HUD slides in from its edges as a level
+  opens, and the title's logo, pills and band settle in with a short
+  stagger. Classic keeps its plain colour fades. Each sound material also
+  names a music tone, a lowpass the music bus sits at, so the track
+  follows the theme.
 - `npm run check` is what CI runs; keep it green.
 
 ## Differences from the GameMaker version

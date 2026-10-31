@@ -36,4 +36,11 @@ describe("sound profiles", () => {
     expect(pop?.opts).toMatchObject({ color: 5, chain: 3 });
     expect(h.audio.played).toHaveLength(0);
   });
+
+  it("every material names a music tone the filter can sit at", () => {
+    for (const m of Object.values(MATERIALS)) {
+      expect(m.tone).toBeGreaterThanOrEqual(3000);
+      expect(m.tone).toBeLessThanOrEqual(20000);
+    }
+  });
 });

@@ -1025,7 +1025,7 @@ export const NATURE: Palette = {
   gridAlpha: 0,
   crosshair: "rgba(46,58,38,0.5)",
   titleText: "#2E3A26",
-  titleMuted: "#6F8260",
+  titleMuted: "#55653F",
   overlayText: "#2E3A26",
   overlayAccent: "#E8893A",
   tutorialText: "#2E3A26",
