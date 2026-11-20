@@ -1,11 +1,26 @@
 import { Board, POP_GROUP_SIZE, type PopResult } from "../core/Board";
 import { groupIfPlaced } from "../core/preview";
 import { Brick } from "../core/Brick";
-import { BLUE, BLACK, colorFrame, COLOR_NAMES, GREEN, ORANGE, PURPLE, randomSpawnColor, RED, YELLOW, type Color } from "../core/color";
+import { BLACK, colorFrame, randomSpawnColor, type Color } from "../core/color";
 import { DEFAULT_CELL_NUM, FPS, LEVELS_PER_WORLD, MAX_WORLD } from "../core/constants";
 import { cellX, cellY, gridBottom, NO_SPACING, replenishY, screenToGrid, type LayoutSpacing, type Viewport } from "../core/layout";
 import { levelParams } from "../core/level";
 import { levelStars, MAX_STARS, thirdStarHint } from "../core/rating";
+import {
+  barFill,
+  lineProgress,
+  linePushed,
+  lineShortened,
+  lineState,
+  pushCountdown,
+  rewindLine,
+  stepLine,
+  tickThroughAnimation,
+  wellLevel,
+  type LineState,
+} from "../core/replenish";
+import { COLD_CHAIN, coolChain, EMPTY_TALLY, GOAL_BONUS, heatChain, multiplier, scorePop, type ChainState, type GoalState, type Tally } from "../core/scoring";
+import { acceptsTarget, TUTORIAL_CELLS, TUTORIAL_LEVELS, tutorialBrick, tutorialSpec, tutorialText } from "../core/tutorial";
 import type { MusicName, Sprite, SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
 import {
@@ -114,19 +129,6 @@ const LEVEL_CARD_FRAMES = frames(2800);
 
 /** `selected` value meaning "the brick in the hold slot". */
 const HOLD = -1;
-/** Frames at rest before a chain cools off completely. */
-const CHAIN_DECAY_FRAMES = FPS * 2.5;
-const MAX_MULTIPLIER = 5;
-/** Bonus for popping a group that contains a refined (subtracted) brick. */
-const REFINED_BONUS = 150;
-/** One-time bonus for completing the level's subtract goal. */
-const GOAL_BONUS = 500;
-/**
- * Once the replenish line is full the push counts down for this fraction of a
- * replenish period. The original waited a full period to arm the push and
- * another to fire it; this arms it at once and fires sooner.
- */
-const PUSH_COUNTDOWN = 0.6;
 /** Upcoming replenish colours shown as ghosts in the empty slots. */
 const PREVIEW_COUNT = 3;
 
@@ -220,16 +222,6 @@ interface SideButton {
   pressed: boolean;
 }
 
-/** Replenish / board colours for the six tutorial exercises (`board_populate_tutorial.gml`). */
-const TUTORIAL_LEVELS: Array<{ board: Color; target: Color; replenish: Color; canAdd: boolean; canSubtract: boolean }> = [
-  { board: GREEN, target: YELLOW, replenish: BLUE, canAdd: true, canSubtract: false },
-  { board: ORANGE, target: YELLOW, replenish: RED, canAdd: true, canSubtract: false },
-  { board: PURPLE, target: BLUE, replenish: RED, canAdd: true, canSubtract: false },
-  { board: RED, target: ORANGE, replenish: YELLOW, canAdd: false, canSubtract: true },
-  { board: YELLOW, target: GREEN, replenish: BLUE, canAdd: false, canSubtract: true },
-  { board: RED, target: BLUE, replenish: PURPLE, canAdd: false, canSubtract: true },
-];
-
 const DEG = Math.PI / 180;
 const ROTATE_EASE = backOut(0.95);
 const PUSH_EASE = backOut(0.6);
@@ -307,11 +299,9 @@ export class GameScene implements Scene {
   private animFrame = 0;
 
   // --- replenish line ---
-  private replenishTimer = 180;
-  private replenishLine = 0;
-  private replenishNum = 0;
-  private readyToPush = false;
+  private line: LineState = lineState(180);
   private comboRemaining = 0;
+  /** High-water mark of the line's progress, which the classic bar drains from during a push. */
   private maxPercentage = 0;
   private currentPercentage = 0;
 
@@ -338,10 +328,7 @@ export class GameScene implements Scene {
   // --- chain meter ---
   /** VU peak marker (Neon). */
   private vuPeak: VuPeak = { seg: 0, t: 0 };
-  /** Scoring pops since the meter last cooled off. */
-  private chain = 0;
-  /** 1 right after a pop, cooling to 0 at rest. */
-  private heat = 0;
+  private meter: ChainState = COLD_CHAIN;
 
   // --- hold slot and preview ---
   private held: Brick | null = null;
@@ -358,12 +345,12 @@ export class GameScene implements Scene {
   private nextColors: Color[] = [];
 
   // --- subtract goal ---
-  private subtractGoal = 0;
+  private goal: GoalState = { subtractGoal: 0, subtractDone: 0, goalAwarded: false };
   /** What the goal ring fills toward: the level's pop quota, or the bricks a puzzle started with. */
   private popsTotal = 0;
   private bricksTotal = 0;
   /** Where this level's points came from, for the level-complete breakdown. */
-  private readonly tally = { pops: 0, chain: 0, subtract: 0 };
+  private tally: Tally = EMPTY_TALLY;
   private bestChain = 1;
   private toasts: Toast[] = [];
   /** The last eight-step well level that ticked (pixel themes). */
@@ -372,8 +359,6 @@ export class GameScene implements Scene {
   /** How many level-card stars have chimed so far. */
   private starsSounded = 0;
   private hiToasted = false;
-  private subtractDone = 0;
-  private goalAwarded = false;
 
   private levelCompleteDelay = LEVEL_CARD_FRAMES;
   private levelCompleteSounded = false;
@@ -458,7 +443,7 @@ export class GameScene implements Scene {
       this.state = "tutorial";
       this.tutorialPhase = "intro";
       this.tutorialState = 0;
-      this.board.resize(4);
+      this.board.resize(TUTORIAL_CELLS);
       this.selected = this.board.cellNum;
       this.selX = cellX(this.board.layout, this.selected);
       this.layoutButtons();
@@ -592,13 +577,8 @@ export class GameScene implements Scene {
     };
   }
 
-  /** Sim steps the push countdown lasts once the line is full. */
-  private pushCountdown(): number {
-    return this.replenishTimer * PUSH_COUNTDOWN;
-  }
-
   private chainMultiplier(): number {
-    return Math.max(1, Math.min(MAX_MULTIPLIER, this.chain));
+    return multiplier(this.meter.chain);
   }
 
   private fxOf(b: Brick): BrickFx {
@@ -628,11 +608,11 @@ export class GameScene implements Scene {
       brick.enterDelay = ((n - 1 - gy) * D(25)) / STEP_MS;
       brick.enter = true;
     }
-    this.replenishTimer = params.replenishTimer;
+    this.line = lineState(params.replenishTimer);
     this.comboRemaining = params.comboRemaining;
     this.popsTotal = params.comboRemaining;
     this.bricksTotal = params.brickCount;
-    this.subtractGoal = params.subtractGoal;
+    this.goal = { subtractGoal: params.subtractGoal, subtractDone: 0, goalAwarded: false };
 
     this.state = "animation";
     this.animation = "begin";
@@ -644,16 +624,13 @@ export class GameScene implements Scene {
   /** `board_populate_tutorial.gml` */
   private populateTutorial(): void {
     const l = this.board.layout;
-    const spec = TUTORIAL_LEVELS[this.ctx.session.level];
-    for (let i = 0; i < 4; i++) {
-      const brick = new Brick(i === 3 ? spec.target : spec.board);
-      this.board.placeByIndex(i, brick);
-    }
+    const spec = tutorialSpec(this.ctx.session.level);
+    for (let i = 0; i < TUTORIAL_CELLS; i++) this.board.placeByIndex(i, new Brick(tutorialBrick(spec, i)));
     const rep = new Brick(spec.replenish);
     this.board.replenishList = [rep];
     this.board.resetBlockPositions();
     for (const b of this.board.allBricks()) b.settle();
-    this.replenishNum = 1;
+    this.line = { ...this.line, num: 1 };
     this.selected = this.board.cellNum;
     this.selX = cellX(l, this.selected);
     this.selectedBrick = null;
@@ -758,22 +735,18 @@ export class GameScene implements Scene {
       if (this.comboRemaining <= 0) {
         this.beginLevelComplete();
       } else if (this.state === "rest") {
-        if (this.replenishNum === 0) {
-          block = this.spawnReplenishBrick();
-        }
-        if (this.readyToPush) {
-          if (this.replenishLine > this.pushCountdown()) {
+        // The original held the timer whenever progress dropped below its
+        // high-water mark (after every brick used), which read as a freeze.
+        const step = stepLine(this.line, n, this.board.replenishList.length, this.accel);
+        for (const ev of step.events) {
+          if (ev === "push") {
             this.doPush();
-            this.readyToPush = false;
-            this.replenishLine = 0;
+            break;
           }
-        } else if (this.replenishLine > this.replenishTimer) {
-          if (this.replenishNum < n) {
-            block = this.spawnReplenishBrick();
-            this.ctx.audio.event("fill");
-          }
-          this.replenishLine = 0;
+          block = this.spawnReplenishBrick();
+          if (ev === "fill") this.ctx.audio.event("fill");
         }
+        if (!step.events.includes("push")) this.line = step.state;
         if (block) {
           if (this.ctx.palette.kind === "generated") {
             // The paint has set: the brick pops into its well.
@@ -781,45 +754,25 @@ export class GameScene implements Scene {
             this.tweens.set(f, { s: 0.2 });
             this.tweens.to(f, { s: 1 }, D(280), easeOutBack);
           } else {
-            block.inactiveTimer = this.replenishTimer;
-            block.inactiveDuration = this.replenishTimer;
+            block.inactiveTimer = this.line.timer;
+            block.inactiveDuration = this.line.timer;
           }
-        }
-        this.replenishNum = this.board.replenishList.length;
-        if (this.replenishNum >= n && !this.readyToPush) {
-          // The line is full: arm the push straight away.
-          this.readyToPush = true;
-          this.replenishLine = 0;
         }
       }
 
       this.board.comboLength = 0;
       this.board.comboBonus = 0;
-      if (this.heat > 0) {
-        this.heat -= 1 / CHAIN_DECAY_FRAMES;
-        if (this.heat <= 0) {
-          this.heat = 0;
-          this.chain = 0;
-        }
-      }
-      // The original held the timer whenever progress dropped below its
-      // high-water mark (after every brick used), which read as a freeze.
-      this.replenishLine += this.accel;
+      this.meter = coolChain(this.meter);
     }
 
     // The original only ran the timer at rest, so a fast player kept it
     // frozen behind their own combines and pops. Let it tick through board
     // animations too; spawning and pushing still wait for rest.
     if (this.state === "animation" && this.animation !== "push" && this.animation !== "begin" && this.animation !== "fadeout") {
-      if (this.replenishLine < (this.readyToPush ? this.pushCountdown() : this.replenishTimer)) this.replenishLine += 1;
+      this.line = tickThroughAnimation(this.line);
     }
 
-    if (this.board.countBricks() + this.board.replenishList.length > 0) {
-      this.currentPercentage =
-        this.replenishLine !== 0
-          ? (this.replenishNum - 1 + (this.readyToPush ? 1 : 0)) / n + this.replenishLine / (this.readyToPush ? this.pushCountdown() : this.replenishTimer) / n
-          : 0;
-    }
+    if (this.board.countBricks() + this.board.replenishList.length > 0) this.currentPercentage = lineProgress(this.line, n);
     this.maxPercentage = this.currentPercentage;
   }
 
@@ -845,8 +798,7 @@ export class GameScene implements Scene {
   private doPush(): void {
     const result = this.board.push();
     for (const b of this.board.bricks()) b.settle();
-    this.replenishNum = 0;
-    this.replenishLine = 0;
+    this.line = linePushed(this.line);
     this.selectedBrick = null;
     this.selected = this.board.cellNum;
     this.state = "animation";
@@ -1030,7 +982,7 @@ export class GameScene implements Scene {
   /** Geometry of the modern level-complete card: a column of rows with the three buttons along the bottom. */
   private levelCardLayout(): { x: number; y: number; w: number; h: number; rows: number } {
     const vp = this.ctx.view;
-    const rows = 2 + (this.subtractGoal > 0 || this.tally.subtract > 0 ? 1 : 0);
+    const rows = 2 + (this.goal.subtractGoal > 0 || this.tally.subtract > 0 ? 1 : 0);
     const w = Math.min(420, vp.w - 24);
     const h = 128 + 22 + rows * 24 + 34 + 60 + 24;
     return { x: vp.w / 2 - w / 2, y: Math.max(8, vp.h / 2 - h / 2), w, h, rows };
@@ -1168,15 +1120,22 @@ export class GameScene implements Scene {
     const l = this.board.layout;
     const pal = this.ctx.palette;
     const scoring = res.score !== 0;
-    let mult = 1;
-    if (scoring) {
-      this.chain += 1;
-      this.heat = 1;
-      mult = this.chainMultiplier();
-    }
+    if (scoring) this.meter = heatChain(this.meter);
+    const chain = this.meter.chain;
+    const score = scorePop(
+      {
+        score: res.score,
+        brickValue: res.brickValue,
+        groups: res.groups.map((g) => ({ size: g.length, black: g[0].color === BLACK, refined: g.some((b) => b.refined) })),
+      },
+      this.meter,
+      this.goal,
+      this.tally,
+    );
+    const { mult } = score;
     const generated = pal.kind === "generated";
     const total = res.groups.reduce((n, g) => n + g.length, 0);
-    const k = generated && scoring ? intensityFor(this.chain, total) : 0;
+    const k = generated && scoring ? intensityFor(chain, total) : 0;
 
     res.groups.forEach((g, gi) => {
       // Centroid, then pop outward from it in a spiral-ish distance order.
@@ -1207,9 +1166,8 @@ export class GameScene implements Scene {
           seed: Math.floor(Math.random() * 1e6),
         });
       }
-      if (g[0].color !== BLACK) {
-        const value = res.brickValue * mult * g.length;
-        this.addCallout(`+${value}`, cxg, cyg, {
+      if (score.groupValues[gi] > 0) {
+        this.addCallout(`+${score.groupValues[gi]}`, cxg, cyg, {
           delay: gi * 40 + 100,
           size: Math.max(14, l.cellH * 0.34) * (1 + 0.12 * (mult - 1)),
           color: pal.callout,
@@ -1220,9 +1178,9 @@ export class GameScene implements Scene {
 
     // A pop rewinds the current well instead of pausing the timer (the
     // original banked a pause, which read as the timer freezing).
-    if (!this.readyToPush) {
-      const from = clamp01(this.replenishLine / this.replenishTimer);
-      this.replenishLine = 0;
+    if (!this.line.readyToPush) {
+      const from = wellLevel(this.line);
+      this.line = rewindLine(this.line);
       this.maxPercentage = 0;
       this.tweens.set(this.levelFx, { v: from });
       this.tweens.to(this.levelFx, { v: 0 }, D(360), easeOutCubic);
@@ -1231,9 +1189,8 @@ export class GameScene implements Scene {
     this.state = "animation";
     this.animation = "pop";
 
-    let gained = res.score * mult;
-    this.tally.pops += res.score;
-    this.tally.chain += res.score * (mult - 1);
+    this.tally = score.tally;
+    this.goal = score.goal;
     this.bestChain = Math.max(this.bestChain, mult);
     if (scoring) {
       this.comboRemaining -= 1;
@@ -1242,7 +1199,7 @@ export class GameScene implements Scene {
       const impact: PopImpact = {
         k,
         mult,
-        semitones: Math.min(7, this.chain - 1),
+        semitones: Math.min(7, chain - 1),
         color: res.groups[0][0].color,
         dir: [c0.x - (l.boardX + l.boardW / 2), c0.y - (l.boardY + l.boardH / 2)],
       };
@@ -1254,16 +1211,11 @@ export class GameScene implements Scene {
         this.tweens.to(this.badgeFx, { s: 1 }, D(650), easeOutElastic);
       }
 
-      const refined = res.groups.filter((g) => g[0].color !== BLACK && g.some((b) => b.refined));
-      for (const g of refined) {
-        const bonus = REFINED_BONUS * mult;
-        gained += bonus;
-        this.tally.subtract += bonus;
-        this.subtractDone += 1;
-        const c = this.groupCentre(g);
-        this.addCallout(`SUBTRACT +${bonus}`, c.x, c.y + l.cellH * 1.05, { delay: 220, size: 15, color: pal.goalAccent, dur: 900, rise: 34 });
+      for (const gi of score.refinedGroups) {
+        const c = this.groupCentre(res.groups[gi]);
+        this.addCallout(`SUBTRACT +${score.refinedBonus}`, c.x, c.y + l.cellH * 1.05, { delay: 220, size: 15, color: pal.goalAccent, dur: 900, rise: 34 });
       }
-      if (this.chain >= 2) {
+      if (chain >= 2) {
         const c = this.groupCentre(res.groups[0]);
         const colors = pal.multColors;
         this.addCallout(`CHAIN x${mult}`, c.x, c.y - l.cellH * 1.1, {
@@ -1276,10 +1228,7 @@ export class GameScene implements Scene {
         });
       }
 
-      if (this.subtractGoal > 0 && !this.goalAwarded && this.subtractDone >= this.subtractGoal) {
-        this.goalAwarded = true;
-        gained += GOAL_BONUS;
-        this.tally.subtract += GOAL_BONUS;
+      if (score.goalJustDone) {
         this.toast("Subtract goal done", pal.goalAccent);
         this.ctx.audio.event("achieve");
         this.addCallout(`SUBTRACT GOAL +${GOAL_BONUS}`, l.boardX + l.boardW / 2, l.boardY + l.boardH * 0.4, {
@@ -1292,7 +1241,7 @@ export class GameScene implements Scene {
         });
       }
     }
-    this.ctx.session.score += gained;
+    this.ctx.session.score += score.gained;
     if (!this.hiToasted && this.ctx.save.hiscore > 0 && this.ctx.session.score > this.ctx.save.hiscore) {
       this.hiToasted = true;
       this.toast("New high score", pal.overlayAccent);
@@ -1310,10 +1259,10 @@ export class GameScene implements Scene {
     if (generated && p.k >= 0.35) this.ctx.audio.duck(0.25 + 0.35 * p.k, 500 + 400 * p.k);
     if (p.mult >= 2) this.effects.flash(pal.flashFromBrick ? pal.brickColors[p.color] : pal.flash, 30, generated ? sc.flash : 1);
     if (generated) {
-      if (this.chain >= 2 || p.k > 0.25) this.effects.shake(sc.shake, p.dir);
-      if (this.chain >= 3) this.effects.wash(pal.brickColors[p.color], 450 + 250 * p.k);
+      if (this.meter.chain >= 2 || p.k > 0.25) this.effects.shake(sc.shake, p.dir);
+      if (this.meter.chain >= 3) this.effects.wash(pal.brickColors[p.color], 450 + 250 * p.k);
       this.lastK = p.k;
-    } else if (this.chain >= 3) {
+    } else if (this.meter.chain >= 3) {
       this.effects.shake(3, [0, 0]);
     }
   }
@@ -1537,7 +1486,7 @@ export class GameScene implements Scene {
     }
     const key = `${sel.color}:${gx}:${gy}`;
     if (this.preview?.key === key) return;
-    const rules = this.state === "tutorial" ? TUTORIAL_LEVELS[this.ctx.session.level] : undefined;
+    const rules = this.state === "tutorial" ? tutorialSpec(this.ctx.session.level) : undefined;
     const p = groupIfPlaced(this.board, sel.color, gx, gy, rules?.canAdd ?? true, rules?.canSubtract ?? true);
     this.preview = p && p.members.length >= POP_GROUP_SIZE ? { key, members: new Set(p.members), t0: this.ctx.clock.t } : null;
   }
@@ -1590,8 +1539,7 @@ export class GameScene implements Scene {
       sel.inactiveDuration = 0;
       this.placeHeld();
       this.board.resetBlockPositions();
-      this.replenishNum = list.length;
-      if (this.replenishNum < this.board.cellNum) this.readyToPush = false;
+      this.line = lineShortened(this.line, list.length, this.board.cellNum);
       this.deselect();
       this.ctx.audio.event("select");
     } else if (this.held) {
@@ -1626,11 +1574,8 @@ export class GameScene implements Scene {
       if (result === "combined" && fromHold) this.held = null;
       this.deselect();
     } else if (this.state === "tutorial" && this.tutorialPhase === "add") {
-      const spec = TUTORIAL_LEVELS[level];
-      // The final exercise only accepts the blue brick as a target.
-      if (level === 5) {
-        if (dest && dest.color !== BLUE) return;
-      }
+      const spec = tutorialSpec(level);
+      if (!acceptsTarget(level, dest?.color ?? null)) return;
       const result = this.board.combine(this.selectedBrick, this.cx, this.cy, spec.canAdd, spec.canSubtract);
       this.handleCombine(result, dest);
       this.deselect();
@@ -1660,8 +1605,8 @@ export class GameScene implements Scene {
       case "combined": {
         const from = this.selectedBrick;
         this.selectedBrick = null;
-        this.replenishNum = this.board.replenishList.length;
-        this.readyToPush = false;
+        // a brick left the line: a push that was counting down stands down
+        this.line = { ...this.line, num: this.board.replenishList.length, readyToPush: false };
         this.state = "animation";
         this.animation = "combine";
         this.animFrame = 0;
@@ -1833,10 +1778,10 @@ export class GameScene implements Scene {
 
   /** Timer level 0..1 shown in the next well: nothing while a push is pending, the rewind tween while rewinding, eight steps when pixelated. */
   private wellLevel(): number {
-    if (this.readyToPush) return 0;
+    if (this.line.readyToPush) return 0;
     const rewinding = this.ctx.clock.t < this.rewindUntil;
-    const smooth = rewinding ? this.levelFx.v : clamp01(this.replenishLine / this.replenishTimer);
-    return this.ctx.palette.pixelated ? Math.floor(smooth * 8) / 8 : smooth;
+    if (!rewinding) return wellLevel(this.line, this.ctx.palette.pixelated);
+    return this.ctx.palette.pixelated ? Math.floor(this.levelFx.v * 8) / 8 : this.levelFx.v;
   }
 
   /** `BrickDieAnim` step event: a pop is over once its last brick has shrunk away. */
@@ -1880,25 +1825,21 @@ export class GameScene implements Scene {
   private stepTutorial(): void {
     if (this.state !== "tutorial" || this.tutorialPhase !== "add") return;
     const s = this.ctx.session;
-    const spec = TUTORIAL_LEVELS[s.level];
-    const repName = COLOR_NAMES[spec.replenish];
-    const targetName = COLOR_NAMES[spec.target];
+    const spec = tutorialSpec(s.level);
 
     switch (this.tutorialState) {
       case 0:
         this.selectedBrick = null;
         this.populateTutorial();
-        this.tutorialText = `To begin, please select the ${repName}\nBlock from the Replenish Line.`;
+        this.tutorialText = tutorialText(spec, "select");
         this.tutorialState = 1;
         break;
       case 2:
-        this.tutorialText = spec.canAdd
-          ? `Now add the selected Block to the\n${targetName} Block on the Board.`
-          : `Now subtract the selected Block from the\n${targetName} Block on the Board.`;
+        this.tutorialText = tutorialText(spec, "combine");
         this.tutorialState = 3;
         break;
       case 4:
-        this.tutorialText = "Congratulations!";
+        this.tutorialText = tutorialText(spec, "done");
         this.tutorialTimer = 0;
         this.tutorialState = 5;
         break;
@@ -1908,7 +1849,7 @@ export class GameScene implements Scene {
         if (this.tutorialTimer > 30) {
           s.level += 1;
           this.deselect();
-          this.board.resize(4);
+          this.board.resize(TUTORIAL_CELLS);
           this.tutorialState = 0;
           this.tutorialText = "";
           if (s.level >= TUTORIAL_LEVELS.length) {
@@ -1954,7 +1895,7 @@ export class GameScene implements Scene {
     this.toasts = this.toasts.filter((c) => t - c.t0 < D(TOAST_MS));
     const pal = this.ctx.palette;
     const mult = this.chainMultiplier();
-    this.effects.setBleed(mult >= 3 && this.heat > 0 ? pal.multColors[mult] : null, this.heat);
+    this.effects.setBleed(mult >= 3 && this.meter.heat > 0 ? pal.multColors[mult] : null, this.meter.heat);
     if (pal.fx.liftRibbon) {
       const l = this.board.layout;
       const sel = this.selectedBrick;
@@ -2816,9 +2757,9 @@ export class GameScene implements Scene {
         const ry = replenishY(l);
         tray(g, l.boardX - 8, ry - 8, l.boardW + 16, l.cellH + 16);
         const t0 = this.ctx.clock.t;
-        if (this.readyToPush) {
+        if (this.line.readyToPush) {
           // The tray reddens and pulses as the push gets closer.
-          const near = clamp01(this.replenishLine / this.pushCountdown());
+          const near = clamp01(this.line.line / pushCountdown(this.line));
           const pulse = 0.8 + 0.2 * Math.sin(t0 / 110);
           fillRoundRect(
             g,
@@ -2847,7 +2788,7 @@ export class GameScene implements Scene {
           const ww = l.cellW - pad * 2;
           const wh = l.cellH - pad * 2;
           well(g, wx, wy, ww, wh);
-          if (x !== filling || this.readyToPush) continue;
+          if (x !== filling || this.line.readyToPush) continue;
           if (fill) {
             fill(g, wx, wy, ww, wh, level, colour, t0);
             continue;
@@ -3072,10 +3013,10 @@ export class GameScene implements Scene {
   /** One star per subtract pop the level asks for, filled as they are earned. */
   private renderStars(g: CanvasRenderingContext2D, r: HudRail): void {
     const pal = this.ctx.palette;
-    const n = this.subtractGoal;
+    const { subtractGoal: n, subtractDone, goalAwarded } = this.goal;
     const size = r.textSize * 0.42;
     for (let i = 0; i < n; i++) {
-      const done = this.goalAwarded || i < this.subtractDone;
+      const done = goalAwarded || i < subtractDone;
       g.save();
       g.strokeStyle = pal.goalAccent;
       g.fillStyle = done ? pal.goalAccent : "rgba(0,0,0,0)";
@@ -3084,10 +3025,10 @@ export class GameScene implements Scene {
     }
     const lx = r.starsX + (n - 0.5) * r.starStep + r.side * 8;
     // Upright, the band is tight: the stars stand for themselves and the label is one word.
-    const label = this.board.layout.portrait ? (this.goalAwarded ? "GOAL DONE" : "GOAL") : this.goalAwarded ? "SUBTRACT GOAL DONE" : "SUBTRACT GOAL";
+    const label = this.board.layout.portrait ? (goalAwarded ? "GOAL DONE" : "GOAL") : goalAwarded ? "SUBTRACT GOAL DONE" : "SUBTRACT GOAL";
     drawText(g, label, lx, r.starsY + 1, {
       size: r.textSize * 0.5,
-      color: this.goalAwarded ? pal.goalAccent : pal.hudMuted,
+      color: goalAwarded ? pal.goalAccent : pal.hudMuted,
       weight: 700,
       align: r.side > 0 ? "left" : "right",
     });
@@ -3104,7 +3045,7 @@ export class GameScene implements Scene {
     const n = Math.max(8, Math.min(24, Math.floor(w / 8)));
     const sw = (w - gap * (n - 1)) / n;
     const h = 7;
-    const lit = vuLit(this.heat, n);
+    const lit = vuLit(this.meter.heat, n);
     this.vuPeak = vuPeak(this.vuPeak, lit, t);
     const peak = this.vuPeak.seg - 1;
     const color = pal.multColors[mult];
@@ -3185,8 +3126,9 @@ export class GameScene implements Scene {
       if (pal.fx.meter === "vu") {
         this.renderVuMeter(g, meterX, meterY, meterW, mult, t);
       } else fillRoundRect(g, meterX, meterY - meterH / 2, meterW, meterH, pillRadius(pal.ui, meterH), pal.track);
-      if (this.heat > 0 && pal.fx.meter === "bar") {
-        const fillW = Math.max(meterH, meterW * this.heat);
+      const { chain, heat } = this.meter;
+      if (heat > 0 && pal.fx.meter === "bar") {
+        const fillW = Math.max(meterH, meterW * heat);
         if (pal.glow) {
           g.save();
           g.shadowColor = pal.multColors[mult];
@@ -3214,7 +3156,7 @@ export class GameScene implements Scene {
       }
       // caption on the left, the multiplier as a badge on the right so x3 reads without watching the bar
       drawText(g, "CHAIN", meterX, meterY + 12, { size: textSize * 0.55, color: pal.hudMuted, weight: 700, align: "left" });
-      if (this.chain > 0) {
+      if (chain > 0) {
         const bw = textSize * 2.1;
         const bh = textSize * 1.05;
         g.save();
@@ -3261,17 +3203,18 @@ export class GameScene implements Scene {
         tabular: true,
         align: r.goalAlign,
       });
-      if (this.subtractGoal > 0) this.renderStars(g, r);
+      if (this.goal.subtractGoal > 0) this.renderStars(g, r);
     } else {
       drawText(g, `Score:\n${shown}`, cx, r.scoreY, { size: textSize, color: pal.hudText, tabular: true });
       const meterW = r.meterW;
+      const { chain, heat } = this.meter;
       g.fillStyle = "rgba(0,0,0,0.15)";
       g.fillRect(cx - meterW / 2, r.chainY - 2, meterW, 4);
-      if (this.heat > 0) {
+      if (heat > 0) {
         g.fillStyle = pal.multColors[mult];
-        g.fillRect(cx - meterW / 2, r.chainY - 2, meterW * this.heat, 4);
+        g.fillRect(cx - meterW / 2, r.chainY - 2, meterW * heat, 4);
       }
-      if (this.chain > 0) {
+      if (chain > 0) {
         g.save();
         g.translate(cx, r.chainY - 10);
         g.scale(this.badgeFx.s, this.badgeFx.s);
@@ -3279,9 +3222,10 @@ export class GameScene implements Scene {
         g.restore();
       }
       drawText(g, `Level ${s.world}-${s.level + 1}`, cx, r.levelY, { size: textSize * 0.8, color: pal.hudMuted, bold: false });
-      if (this.subtractGoal > 0) {
+      const { subtractGoal, subtractDone, goalAwarded } = this.goal;
+      if (subtractGoal > 0) {
         drawText(g, "Subtract pops", cx, r.goalLabelY, { size: textSize * 0.65, color: pal.hudMuted, bold: false });
-        drawText(g, this.goalAwarded ? `${this.subtractGoal}/${this.subtractGoal} done` : `${this.subtractDone}/${this.subtractGoal}`, cx, r.goalY, {
+        drawText(g, goalAwarded ? `${subtractGoal}/${subtractGoal} done` : `${subtractDone}/${subtractGoal}`, cx, r.goalY, {
           size: textSize * 0.85,
           color: pal.hudText,
           tabular: true,
@@ -3292,7 +3236,7 @@ export class GameScene implements Scene {
 
     const bar = sp.progressbar_sprite;
     const barX = Math.floor(l.boardX);
-    const current = Math.max(0, this.readyToPush ? 1 - this.replenishLine / this.pushCountdown() : this.currentPercentage);
+    const current = this.line.readyToPush ? barFill(this.line, n) : Math.max(0, this.currentPercentage);
     const maxP = Math.max(0, this.maxPercentage);
     const barFlash = t - this.barFlashT0;
 
@@ -3308,7 +3252,7 @@ export class GameScene implements Scene {
       const barY = Math.round(gb + (gap - barH) / 2);
       const barW = l.boardW;
       const r = barH / 2;
-      const draining = this.readyToPush;
+      const draining = this.line.readyToPush;
       fillRoundRect(g, barX, barY + 1, barW, barH, r, "rgba(0,0,0,0.3)");
       g.save();
       g.beginPath();
@@ -3488,7 +3432,7 @@ export class GameScene implements Scene {
       drawText(g, sub, cx + 6, y + 64, subStyle);
     }
     // stars, popping in one after another
-    const run = { bestChain: this.bestChain, subtractGoal: this.subtractGoal, goalDone: this.goalAwarded };
+    const run = { bestChain: this.bestChain, subtractGoal: this.goal.subtractGoal, goalDone: this.goal.goalAwarded };
     const stars = levelStars(run);
     const starY = y + 102;
     for (let i = 0; i < MAX_STARS; i++) {
