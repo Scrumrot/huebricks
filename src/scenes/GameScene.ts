@@ -21,160 +21,60 @@ import { COLD_CHAIN, coolChain, EMPTY_TALLY, GOAL_BONUS, heatChain, multiplier, 
 import { acceptsTarget, TUTORIAL_CELLS, TUTORIAL_LEVELS, tutorialBrick, tutorialSpec, tutorialText } from "../core/tutorial";
 import type { MusicName, SpriteName } from "../engine/assets";
 import { ButtonFeel } from "../engine/buttonFeel";
-import { drawBlock, drawBlockTransformed, drawCard, drawLine, drawSprite, drawText, fillRoundRect, measureText, type PillButton } from "../engine/draw";
+import { drawCard, drawSprite, drawText, type PillButton } from "../engine/draw";
 import { fillScreen } from "../engine/view";
-import { backOut, clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart, easeInBack, lerp } from "../engine/easing";
+import { clamp01, easeOutBack, easeOutCubic, easeOutElastic, easeOutQuart } from "../engine/easing";
 import type { VuPeak } from "../engine/vuMeter";
-import { furnitureOf } from "../engine/backdrops";
 import { Effects } from "../engine/effects";
 import { hudControls, hudRail, type Controls, type HudRail } from "../engine/hudLayout";
-import { ICONS } from "../engine/icons";
 import { clearWave } from "../engine/clearWave";
-import { ageRibbon, drawRibbon, pushRibbon, type RibbonPoint } from "../engine/ribbon";
+import { ageRibbon, pushRibbon, type RibbonPoint } from "../engine/ribbon";
 import { intensityFor, popScale, TUNING } from "../engine/fxTuning";
-import { drawMix } from "../engine/mixFx";
 import { Tweens } from "../engine/tween";
 import { cardButtonAt, cardOffset, dimBehindCard, drawCardButtons, drawMessageCard, CARD_MS } from "../engine/overlayCard";
 import { drawSlides, slideNav, slideRect } from "../engine/slides";
 import { PauseCard, type PauseInfo } from "./game/pauseCard";
+import { BrickView, type BoardFrame, type BrickFx, type PreviewGroup, type Callout, type DieAnim, type Toast } from "./game/brickView";
+import {
+  ARRIVE_MS,
+  CARD_HOLD_FRAMES,
+  COUNT_MS,
+  D,
+  DEG,
+  DESAT_MS,
+  DIM_MS,
+  FADE_MS,
+  FLARE_MS,
+  GRAVITY,
+  HOLD,
+  LAND_SETTLE_MS,
+  LAND_SQUASH_MS,
+  LEVEL_CARD_FRAMES,
+  PICK_MS,
+  POP_GROW_MS,
+  POP_HOLD_MS,
+  POP_STAGGER_MS,
+  POP_TOTAL_MS,
+  PREVIEW_COUNT,
+  PUSH_ANTICIPATE_MS,
+  PUSH_FRAMES,
+  RING_MS,
+  ROTATE_FRAMES,
+  SCORE_MS,
+  SHOCK_MS,
+  STEP_MS,
+  TOAST_MS,
+} from "./game/timing";
 import { drawBoardBackdrop, type Stain } from "./game/backdrop";
-import { CONTROL_ART, drawControls, drawKeycap, type SideButton } from "./game/controls";
+import { CONTROL_ART, drawControls, type SideButton } from "./game/controls";
 import { drawHud } from "./game/hud";
 import { drawLevelCard, levelButtons, levelCardLayout, type LevelCardLayout } from "./game/levelCard";
 import type { GameContext, Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
-import { pillRadius, cardRadius } from "../engine/draw";
 
 type State = "rest" | "animation" | "menu" | "tutorial" | "lost";
 type Animation = "none" | "fall" | "rotate" | "pop" | "combine" | "noadd" | "begin" | "push" | "fadeout";
 type TutorialPhase = "intro" | "add" | "outro";
-
-// ---------------------------------------------------------------------------
-// Timing
-// ---------------------------------------------------------------------------
-
-/**
- * Playback rate of the feel layer relative to the durations below. 1 is the
- * tuned feel; higher is snappier.
- */
-const ANIM_SPEED = 1;
-const STEP_MS = 1000 / FPS;
-/** Duration in ms after the playback rate. */
-const D = (ms: number): number => ms / ANIM_SPEED;
-/** Sim steps that cover `ms` of real time. */
-const frames = (ms: number): number => Math.max(1, Math.round(D(ms) / STEP_MS));
-
-/** Fall acceleration, px per sim step squared (the GML 1.7, sped up). */
-const GRAVITY = 2.7 * ANIM_SPEED;
-
-const PICK_MS = 90;
-const DIM_MS = 120;
-const WIPE_MS = 160;
-const RING_MS = 220;
-const NOADD_MS = 260;
-const POP_GROW_MS = 70;
-const POP_HOLD_MS = 30;
-const POP_SHRINK_MS = 140;
-const POP_STAGGER_MS = 20;
-const POP_TOTAL_MS = POP_GROW_MS + POP_HOLD_MS + POP_SHRINK_MS;
-const SHOCK_MS = 300;
-const SCORE_MS = 600;
-const LAND_SQUASH_MS = 60;
-/** Tube brightness per 40 ms step after a landing: dark, hot, dark, bright, settle. */
-const LAND_FLICKER = [0.3, 1.3, 0.45, 1.15, 0.85, 1] as const;
-const LAND_SETTLE_MS = 160;
-const ROTATE_ANTICIPATE_MS = 60;
-const ROTATE_MS = 260;
-const PUSH_ANTICIPATE_MS = 110;
-const PUSH_MS = 220;
-const FADE_MS = 180;
-/** The HUD slides in from its edge over this long when a level opens (generated themes). */
-const ARRIVE_MS = 420;
-const COUNT_MS = 500;
-const DESAT_MS = 400;
-const BREATHE_MS = 1400;
-/** Period of the group preview's shared breath. */
-const PREVIEW_MS = 720;
-/** Idle breathing of resting bricks: cycle length and amplitude (logical px). */
-const IDLE_MS = 2600;
-const IDLE_AMP = 0.9;
-/** How long the backdrop and particles celebrate a level clear. */
-const FLARE_MS = 1800;
-/** How long a toast chip stays at the top of the board. */
-const TOAST_MS = 2000;
-/** Sim steps the level-complete card waits while the celebration plays. */
-const CARD_HOLD_FRAMES = 18;
-
-const ROTATE_FRAMES = frames(ROTATE_ANTICIPATE_MS + ROTATE_MS);
-const PUSH_FRAMES = frames(PUSH_ANTICIPATE_MS + PUSH_MS);
-const LEVEL_CARD_FRAMES = frames(2800);
-
-// ---------------------------------------------------------------------------
-// Scoring additions
-// ---------------------------------------------------------------------------
-
-/** `selected` value meaning "the brick in the hold slot". */
-const HOLD = -1;
-/** Upcoming replenish colours shown as ghosts in the empty slots. */
-const PREVIEW_COUNT = 3;
-
-// ---------------------------------------------------------------------------
-// Feel-layer records
-// ---------------------------------------------------------------------------
-
-/** Per-brick cosmetic state driven by tweens; the sim never reads it. */
-interface BrickFx {
-  /** Uniform scale (pick-up lift, punches). */
-  s: number;
-  /** Squash / stretch. */
-  sx: number;
-  sy: number;
-  rot: number;
-  /** Offset from the interpolated sim position (slides, shakes). */
-  dx: number;
-  dy: number;
-  /** 0 = resting, 1 = lifted (shadow grows, chip rises). */
-  lift: number;
-  /** Alpha multiplier (other replenish bricks dim while one is held). */
-  dim: number;
-  /** Game time the colour wipe started, or -1. */
-  wipeT0: number;
-  /** Game time the invalid-move shake started, or -1. */
-  noaddT0: number;
-  fallFrom: number;
-  wasFalling: boolean;
-  /** Game time the brick last landed, or -1 (tube flicker / pixel flash). */
-  landT0: number;
-}
-
-interface DieAnim {
-  x: number;
-  y: number;
-  color: Color;
-  /** Game time this brick starts its pop (staggered within the group). */
-  t0: number;
-  burst: boolean;
-  /** Rotation drift direction. */
-  spin: number;
-  /** Moment size 0..1 for the burst. */
-  k: number;
-  /** Part of the level-clear wave: a smaller burst. */
-  wave?: boolean;
-}
-
-/** Floating label that pops in, rises and fades (scores, chain, bonuses). */
-interface Callout {
-  text: string;
-  x: number;
-  y: number;
-  t0: number;
-  dur: number;
-  color: string;
-  size: number;
-  tilt: number;
-  rise: number;
-  display: boolean;
-}
 
 /** Sound, hit-stop, flash and shake for one scoring pop. */
 interface PopImpact {
@@ -184,10 +84,6 @@ interface PopImpact {
   color: Color;
   dir: [number, number];
 }
-
-const DEG = Math.PI / 180;
-const ROTATE_EASE = backOut(0.95);
-const PUSH_EASE = backOut(0.6);
 
 /** Breathing room above the grid, around the fill timer and under the tray (generated themes only). */
 const GENERATED_SPACING: LayoutSpacing = { top: 8, gap: 14, bottom: 14 };
@@ -199,13 +95,6 @@ function spacingFor(kind: "classic" | "generated"): LayoutSpacing {
 /** The board's viewport: the classic theme keeps its side rails even on an upright phone. */
 function viewportFor(v: { w: number; h: number; portrait: boolean }, kind: "classic" | "generated"): Viewport {
   return { w: v.w, h: v.h, portrait: v.portrait && kind === "generated" };
-}
-
-/** A small chip that slides in at the top of the board for a moment: "Subtract goal done", "New high score". */
-interface Toast {
-  text: string;
-  color: string;
-  t0: number;
 }
 
 /** Fields of the modern HUD geometry the classic column has no use for. */
@@ -277,7 +166,7 @@ export class GameScene implements Scene {
   private held: Brick | null = null;
   private holdHover = false;
   /** The group a drop on the hovered cell would complete, while a brick is selected. */
-  private preview: { key: string; members: Set<Brick>; t0: number } | null = null;
+  private preview: PreviewGroup | null = null;
   /** Vertical squash of the whole board about its bottom edge, for the push heave. */
   private readonly heaveFx = { sy: 1 };
   /** Trail behind the brick ghost being dragged across the board. */
@@ -324,7 +213,7 @@ export class GameScene implements Scene {
   private readonly tweens = new Tweens();
   private readonly effects: Effects;
   private readonly feel: ButtonFeel;
-  private readonly fx = new Map<number, BrickFx>();
+  private readonly view: BrickView;
   private dieAnims: DieAnim[] = [];
   private stains: Stain[] = [];
   private callouts: Callout[] = [];
@@ -363,6 +252,7 @@ export class GameScene implements Scene {
     this.selX = cellX(this.board.layout, this.selected);
     for (let i = 0; i < PREVIEW_COUNT; i++) this.nextColors.push(randomSpawnColor());
     this.feel = new ButtonFeel(this.tweens);
+    this.view = new BrickView(ctx, this.board);
     this.effects = new Effects(ctx, 400);
     this.effects.collider = (x, y) => this.solidTop(x, y);
     this.scoreFx.v = ctx.session.score;
@@ -512,12 +402,7 @@ export class GameScene implements Scene {
   }
 
   private fxOf(b: Brick): BrickFx {
-    let f = this.fx.get(b.id);
-    if (!f) {
-      f = { s: 1, sx: 1, sy: 1, rot: 0, dx: 0, dy: 0, lift: 0, dim: 1, wipeT0: -1, noaddT0: -1, fallFrom: 0, wasFalling: false, landT0: -1 };
-      this.fx.set(b.id, f);
-    }
-    return f;
+    return this.view.fxOf(b);
   }
 
   /** `board_populate.gml`; rows drop in from the top, bottom row first. */
@@ -936,7 +821,7 @@ export class GameScene implements Scene {
       cyg /= g.length;
       const ordered = [...g].sort((a, b) => Math.hypot(a.x - cxg, a.y - cyg) - Math.hypot(b.x - cxg, b.y - cyg));
       ordered.forEach((b, i) => {
-        this.fx.delete(b.id);
+        this.view.fx.delete(b.id);
         this.dieAnims.push({ x: b.x, y: b.y, color: b.color, t0: t + D(gi * 40 + i * POP_STAGGER_MS), burst: false, spin: i % 2 === 0 ? 1 : -1, k });
       });
       this.effects.burstRing(cxg, cyg, l.cellW, pal.callout, k, D(gi * 40 + 60), D(SHOCK_MS), g[0].color);
@@ -1275,11 +1160,6 @@ export class GameScene implements Scene {
     const rules = this.state === "tutorial" ? tutorialSpec(this.ctx.session.level) : undefined;
     const p = groupIfPlaced(this.board, sel.color, gx, gy, rules?.canAdd ?? true, rules?.canSubtract ?? true);
     this.preview = p && p.members.length >= POP_GROUP_SIZE ? { key, members: new Set(p.members), t0: this.ctx.clock.t } : null;
-  }
-
-  /** 0..1 shared breath of the previewed group. */
-  private previewBreath(): number {
-    return 0.5 - 0.5 * Math.cos((this.ctx.clock.t / D(PREVIEW_MS)) * Math.PI * 2);
   }
 
   /** Lift the newly selected brick, drop the old one, dim the rest of the line. */
@@ -1738,7 +1618,7 @@ export class GameScene implements Scene {
     steps.forEach((s, i) => {
       const b = s.item;
       this.board.set(b.gridX, b.gridY, null);
-      this.fx.delete(b.id);
+      this.view.fx.delete(b.id);
       this.dieAnims.push({ x: b.x, y: b.y, color: b.color, t0: t + D(s.delay), burst: false, spin: i % 2 === 0 ? 1 : -1, k: 0.15, wave: true });
       this.effects.later(D(s.delay), () => this.ctx.audio.cue("sparkle", 0.25, s.rate));
     });
@@ -1782,9 +1662,10 @@ export class GameScene implements Scene {
       return;
     }
 
+    this.view.frame = this.boardFrame();
     const silhouette = this.effects.silhouette;
     if (silhouette) {
-      this.renderImpactFrame(g, silhouette);
+      this.view.renderImpactFrame(g, silhouette);
       return;
     }
 
@@ -1795,7 +1676,7 @@ export class GameScene implements Scene {
     this.effects.renderUnder(g);
     if (world !== 0) {
       this.renderButtons(g);
-      this.renderPreview(g);
+      this.view.renderPreview(g);
     }
 
     const l = this.board.layout;
@@ -1805,34 +1686,34 @@ export class GameScene implements Scene {
 
     // Board bricks, as one transform while rotating.
     g.save();
-    this.applyBoardTransform(g);
+    this.view.applyBoardTransform(g);
     if (desat > 0) g.filter = `saturate(${Math.round((1 - desat * 0.9) * 100)}%)`;
-    if (pal.brickStyle !== "flat") for (const b of boardBricks) this.renderShadow(g, b);
-    for (const b of boardBricks) this.renderBrick(g, b);
-    if (pal.fuse) this.renderSeams(g, boardBricks);
-    if (this.preview) this.renderPreviewLinks(g);
-    for (const d of this.dieAnims) this.renderDieAnim(g, d);
+    if (pal.brickStyle !== "flat") for (const b of boardBricks) this.view.renderShadow(g, b);
+    for (const b of boardBricks) this.view.renderBrick(g, b);
+    if (pal.fuse) this.view.renderSeams(g, boardBricks);
+    if (this.preview) this.view.renderPreviewLinks(g);
+    for (const d of this.dieAnims) this.view.renderDieAnim(g, d);
     g.filter = "none";
     g.restore();
 
     // Replenish line.
-    if (pal.brickStyle !== "flat") for (const b of lineBricks) this.renderShadow(g, b);
-    for (const b of lineBricks) this.renderBrick(g, b);
+    if (pal.brickStyle !== "flat") for (const b of lineBricks) this.view.renderShadow(g, b);
+    for (const b of lineBricks) this.view.renderBrick(g, b);
     this.effects.renderWorld(g);
 
-    if (world !== 0) this.renderHoldSlot(g);
+    if (world !== 0) this.view.renderHoldSlot(g);
     if (this.selectedBrick && this.selectedBrick !== this.held) {
-      if (pal.kind === "generated") this.renderHeldGlow(g, this.selectedBrick);
-      if (pal.brickStyle !== "flat") this.renderShadow(g, this.selectedBrick);
-      this.renderBrick(g, this.selectedBrick);
+      if (pal.kind === "generated") this.view.renderHeldGlow(g, this.selectedBrick);
+      if (pal.brickStyle !== "flat") this.view.renderShadow(g, this.selectedBrick);
+      this.view.renderBrick(g, this.selectedBrick);
     }
 
     this.effects.renderWash(g, l.boardX, l.boardY, l.boardW, l.boardH);
     this.effects.renderFlash(g, l.boardX, l.boardY, l.boardW, l.boardH);
 
-    this.renderSelector(g);
-    this.renderCallouts(g);
-    this.renderToasts(g);
+    this.view.renderSelector(g);
+    this.view.renderCallouts(g);
+    this.view.renderToasts(g);
     if (world > 0 && this.state !== "tutorial") this.renderHud(g);
     this.effects.renderVignette(g);
     g.restore();
@@ -1863,6 +1744,41 @@ export class GameScene implements Scene {
     this.renderFade(g);
   }
 
+  /** What the board view draws this frame. */
+  private boardFrame(): BoardFrame {
+    return {
+      selectedBrick: this.selectedBrick,
+      held: this.held,
+      preview: this.preview,
+      dieAnims: this.dieAnims,
+      callouts: this.callouts,
+      toasts: this.toasts,
+      rotateT0: this.rotateT0,
+      rotateDir: this.rotateDir,
+      pushT0: this.pushT0,
+      pushing: this.state === "animation" && this.animation === "push",
+      heaveSy: this.heaveFx.sy,
+      lost: this.state === "lost",
+      rail: this.rail(),
+      holdHover: this.holdHover,
+      keyboardUsed: this.keyboardUsed,
+      nextColors: this.nextColors,
+      wellLevel: this.wellLevel(),
+      selector: {
+        visible: this.selected !== this.board.cellNum && this.selected !== HOLD,
+        x: this.selX,
+        scale: this.selFx.s,
+        flashT0: this.selFlashT0,
+        showGhost: this.state === "rest" || (this.state === "animation" && this.animation === "combine"),
+        alpha: this.selAlpha,
+        ghostX: this.bx,
+        ghostY: this.by,
+      },
+      ribbon: this.ribbon,
+      ribbonColor: this.ribbonColor,
+    };
+  }
+
   /** Fade from the background colour when the scene starts. */
   private renderFade(g: CanvasRenderingContext2D): void {
     if (this.ctx.palette.kind !== "classic") return;
@@ -1873,644 +1789,11 @@ export class GameScene implements Scene {
     g.globalAlpha = 1;
   }
 
-  /** Anticipation squeeze, then the quarter turn with a small overshoot. */
-  private applyBoardTransform(g: CanvasRenderingContext2D): void {
-    if (this.heaveFx.sy !== 1) {
-      const bottom = gridBottom(this.board.layout);
-      g.translate(0, bottom);
-      g.scale(1, this.heaveFx.sy);
-      g.translate(0, -bottom);
-    }
-    if (this.rotateT0 < 0) return;
-    const l = this.board.layout;
-    const n = l.cellNum;
-    const e = this.ctx.clock.t - this.rotateT0;
-    const cx = l.boardX + (n * (l.cellW + l.cellSep) - l.cellSep) / 2;
-    const cy = l.boardY + (n * (l.cellH + l.cellSep) - l.cellSep) / 2;
-    let scale: number;
-    let angle: number;
-    const a0 = D(ROTATE_ANTICIPATE_MS);
-    if (e < a0) {
-      scale = 1 - 0.03 * easeOutCubic(e / a0);
-      angle = -this.rotateDir * Math.PI * 0.5;
-    } else {
-      const q = clamp01((e - a0) / D(ROTATE_MS));
-      scale = 0.97 + 0.03 * easeOutCubic(q);
-      angle = -this.rotateDir * Math.PI * 0.5 * (1 - ROTATE_EASE(q));
-    }
-    g.translate(cx, cy);
-    g.rotate(angle);
-    g.scale(scale, scale);
-    g.translate(-cx, -cy);
-  }
-
-  /** Soft pulsing halo in the brick's own colour while it is picked up. */
-  private renderHeldGlow(g: CanvasRenderingContext2D, b: Brick): void {
-    const l = this.board.layout;
-    const f = this.fxOf(b);
-    const p = this.drawPos(b, f);
-    const s = this.brickScale(b, f);
-    if (s <= 0.02) return;
-    const colour = this.ctx.palette.brickColors[b.color];
-    const pulse = 0.5 + 0.5 * Math.sin(this.ctx.clock.t / 170);
-    const w = l.cellW * s;
-    const h = l.cellH * s;
-    const cx = p.x + l.cellW / 2;
-    const cy = p.y + l.cellH / 2;
-    g.save();
-    g.shadowColor = colour;
-    g.shadowBlur = l.cellW * (0.3 + 0.25 * pulse);
-    g.globalAlpha = 0.4 + 0.4 * pulse;
-    fillRoundRect(g, cx - w / 2, cy - h / 2, w, h, l.cellW * 0.18, colour);
-    g.restore();
-  }
-
-  /** Where a brick is drawn this frame: interpolated sim position plus feel-layer offsets. */
-  private drawPos(b: Brick, f: BrickFx): { x: number; y: number } {
-    const alpha = this.ctx.clock.alpha;
-    const x = lerp(b.prevX, b.spriteX, alpha) + f.dx;
-    let y = lerp(b.prevY, b.spriteY, alpha) + f.dy - 4 * f.lift;
-    // Resting bricks breathe by under a pixel on a slow stagger so a quiet board still feels alive.
-    if (this.ctx.palette.kind === "generated" && b.gridX >= 0 && b !== this.selectedBrick && this.state !== "lost") {
-      y += Math.sin((this.ctx.clock.t / IDLE_MS) * Math.PI * 2 + b.gridX * 0.9 + b.gridY * 1.7) * IDLE_AMP;
-    }
-    if (this.pushT0 >= 0 && b.gridX >= 0) {
-      const l = this.board.layout;
-      const pitch = l.cellH + l.cellSep;
-      const e = this.ctx.clock.t - this.pushT0;
-      const a0 = D(PUSH_ANTICIPATE_MS);
-      if (e < a0) {
-        y += pitch + (b.gridY === l.cellNum - 1 ? 2 * Math.sin((e / a0) * Math.PI * 4) : 0);
-      } else {
-        // Generated themes let the columns lag a little so the push rolls across the board.
-        const lag = this.ctx.palette.kind === "generated" ? b.gridX * D(14) : 0;
-        y += pitch * (1 - PUSH_EASE(clamp01((e - a0 - lag) / D(PUSH_MS))));
-      }
-    }
-    return { x, y };
-  }
-
-  private brickScale(b: Brick, f: BrickFx): number {
-    const grow = b.inactiveDuration ? easeOutCubic(1 - b.inactiveTimer / b.inactiveDuration) : 1;
-    let s = grow * f.s;
-    if (b === this.selectedBrick) s *= 1 + 0.015 * (1 - Math.cos((this.ctx.clock.t / D(BREATHE_MS)) * Math.PI * 2));
-    if (this.preview?.members.has(b)) s *= 1 + 0.04 * this.previewBreath();
-    return s;
-  }
-
-  private noaddOffset(f: BrickFx): number {
-    if (f.noaddT0 < 0) return 0;
-    const e = this.ctx.clock.t - f.noaddT0;
-    const p = clamp01(e / D(NOADD_MS));
-    if (p >= 1) return 0;
-    return 6 * Math.sin((e / 1000) * Math.PI * 2 * 18) * (1 - p);
-  }
-
-  /** Extrusion depth of a toy brick: deeper when lifted, squashed on landing. */
-  private depthOf(f: BrickFx): number {
-    const base = 6 + 4 * f.lift;
-    return lerp(3, base, clamp01((f.sy - 0.85) / 0.15));
-  }
-
-  /**
-   * What sits under a brick: a hard offset shadow for paint chips, or the
-   * ambient shadow plus the extruded side for toy bricks. Both grow when the
-   * brick is lifted.
-   */
-  private renderShadow(g: CanvasRenderingContext2D, b: Brick): void {
-    const l = this.board.layout;
-    const f = this.fxOf(b);
-    const p = this.drawPos(b, f);
-    const s = this.brickScale(b, f);
-    if (s <= 0.02) return;
-    const pal = this.ctx.palette;
-    const pad = l.cellW * 0.04;
-    const w = (l.cellW - pad * 2) * s * f.sx;
-    const h = (l.cellH - pad * 2) * s * f.sy;
-    const cx = p.x + l.cellW / 2 + this.noaddOffset(f);
-    const faceCy = p.y + l.cellH / 2;
-    const groundCy = faceCy + 4 * f.lift;
-    g.globalAlpha = f.dim;
-    if (pal.brickStyle === "chip" && pal.brickShadow) {
-      const sw = l.cellW * s * (1.1 + 0.3 * f.lift);
-      g.globalAlpha = f.dim * (0.45 + 0.55 * f.lift);
-      drawSprite(g, this.ctx.sprites.brick_shadow_sprite, 0, cx - sw / 2, groundCy - sw / 2 + 7 + 10 * f.lift, sw, sw);
-      g.globalAlpha = f.dim;
-      fillRoundRect(g, cx - w / 2, groundCy - h / 2 + 4 + 6 * f.lift, w, h, w * 0.18, pal.brickShadow);
-    } else if (pal.brickStyle === "gel") {
-      // Outer bloom at 25% of the colour, stronger while lifted.
-      const gw = l.cellW * 1.4 * s;
-      g.globalAlpha = f.dim * (0.5 + 0.5 * f.lift);
-      drawSprite(g, this.ctx.sprites.brick_glow_sprite, colorFrame(b.color), cx - gw / 2, faceCy - gw / 2, gw, gw);
-    } else if (pal.brickStyle === "extruded" && pal.brickSide) {
-      const spread = s * (1 + 0.14 * f.lift);
-      const sw = l.cellW * spread;
-      drawSprite(g, this.ctx.sprites.brick_shadow_sprite, 0, cx - sw / 2, groundCy - sw / 2 + 8 + 4 * f.lift, sw, sw);
-      fillRoundRect(g, cx - w / 2, faceCy - h / 2 + this.depthOf(f), w, h, w * 0.2, pal.brickSide[b.color]);
-    }
-    g.globalAlpha = 1;
-  }
-
-  /** A brick sitting still in its cell, wearing its own colour. */
-  private settled(b: Brick): boolean {
-    if (b.gridX < 0 || b.spriteColor !== b.color) return false;
-    const f = this.fxOf(b);
-    if (f.lift > 0 || f.noaddT0 >= 0 || this.brickScale(b, f) < 0.98) return false;
-    const l = this.board.layout;
-    const p = this.drawPos(b, f);
-    const slack = l.cellW * 0.08;
-    return Math.abs(p.x - cellX(l, b.gridX)) < slack && Math.abs(p.y - cellY(l, b.gridY)) < slack;
-  }
-
   /**
    * Fused seams: settled bricks of one colour lose the lead between them,
    * so a growing group reads as one pane. Drawn after the faces, before
    * anything that moves.
    */
-  /** Faint links between the bricks a drop would pop together, pulsing with their shared breath. */
-  private renderPreviewLinks(g: CanvasRenderingContext2D): void {
-    const pv = this.preview;
-    if (!pv) return;
-    const l = this.board.layout;
-    const fadeIn = clamp01((this.ctx.clock.t - pv.t0) / D(140));
-    const col = this.ctx.palette.ring;
-    const w = Math.max(2, l.cellW * 0.07);
-    const centre = (b: Brick) => {
-      const p = this.drawPos(b, this.fxOf(b));
-      return { x: p.x + l.cellW / 2, y: p.y + l.cellH / 2 };
-    };
-    g.save();
-    g.globalAlpha = fadeIn * (0.26 + 0.24 * this.previewBreath());
-    g.fillStyle = col;
-    for (const b of pv.members) {
-      const c = centre(b);
-      for (const nb of [this.board.get(b.gridX + 1, b.gridY), this.board.get(b.gridX, b.gridY + 1)]) {
-        if (!nb || !pv.members.has(nb)) continue;
-        const d = centre(nb);
-        drawLine(g, c.x, c.y, d.x, d.y, w, col);
-      }
-      g.beginPath();
-      g.arc(c.x, c.y, w * 0.9, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.restore();
-  }
-
-  /**
-   * The impact frame: for a couple of frames at a huge pop the scene is flat
-   * ink on the popped colour, every brick a solid block, before the normal
-   * burst plays.
-   */
-  private renderImpactFrame(g: CanvasRenderingContext2D, paper: string): void {
-    const l = this.board.layout;
-    fillScreen(g, paper);
-    const ink = "#15120F";
-    const pad = l.cellW * 0.04;
-    const box = (x: number, y: number, s = 1) => {
-      const w = (l.cellW - pad * 2) * s;
-      const h = (l.cellH - pad * 2) * s;
-      fillRoundRect(g, x + l.cellW / 2 - w / 2, y + l.cellH / 2 - h / 2, w, h, l.cellW * 0.18, ink);
-    };
-    g.save();
-    this.applyBoardTransform(g);
-    for (const b of this.board.bricks()) {
-      const p = this.drawPos(b, this.fxOf(b));
-      box(p.x, p.y);
-    }
-    for (const d of this.dieAnims) if (!d.burst) box(d.x, d.y, 1.18);
-    g.restore();
-    for (const b of this.board.replenishList) {
-      const p = this.drawPos(b, this.fxOf(b));
-      box(p.x, p.y);
-    }
-    if (this.held) {
-      const p = this.drawPos(this.held, this.fxOf(this.held));
-      box(p.x, p.y);
-    }
-    g.fillStyle = ink;
-    g.fillRect(l.boardX, replenishY(l) - l.cellSep * 1.5, l.boardW, Math.max(2, l.cellSep * 0.6));
-  }
-
-  private renderSeams(g: CanvasRenderingContext2D, bricks: Brick[]): void {
-    const l = this.board.layout;
-    const pal = this.ctx.palette;
-    const across = l.cellSep + l.cellW * 0.2;
-    const along = l.cellW * 0.52;
-    for (const b of bricks) {
-      if (!this.settled(b)) continue;
-      const color = pal.brickColors[b.color];
-      for (const [dx, dy] of [
-        [1, 0],
-        [0, 1],
-      ] as const) {
-        const nb = this.board.get(b.gridX + dx, b.gridY + dy);
-        if (!nb || nb.color !== b.color || !this.settled(nb)) continue;
-        const cx = (cellX(l, b.gridX) + cellX(l, nb.gridX) + l.cellW) / 2;
-        const cy = (cellY(l, b.gridY) + cellY(l, nb.gridY) + l.cellH) / 2;
-        const w = dx ? across : along;
-        const h = dx ? along : across;
-        g.fillStyle = color;
-        g.fillRect(cx - w / 2, cy - h / 2, w, h);
-        g.fillStyle = "rgba(255,255,255,0.1)";
-        g.fillRect(cx - w / 2, cy - h / 2, w, h);
-      }
-    }
-  }
-
-  /** `Brick` draw event, plus the refined marker. */
-  private renderBrick(g: CanvasRenderingContext2D, b: Brick): void {
-    const l = this.board.layout;
-    const f = this.fxOf(b);
-    const p = this.drawPos(b, f);
-    const s = this.brickScale(b, f);
-    if (s <= 0.02) return;
-    const sp = this.ctx.sprites;
-    const brick = sp.brick_sprite;
-    const xo = this.noaddOffset(f);
-    const xs = s * f.sx;
-    const ys = s * f.sy;
-    const alpha = f.dim;
-    const t = this.ctx.clock.t;
-
-    const wiping = b.spriteColor !== b.color && f.wipeT0 >= 0;
-    if (wiping && this.ctx.palette.fx.mix !== "wipe") {
-      const pal = this.ctx.palette;
-      const q = clamp01((t - f.wipeT0) / D(WIPE_MS));
-      const w = l.cellW * xs;
-      const h = l.cellH * ys;
-      g.save();
-      g.translate(p.x + l.cellW / 2 + xo, p.y + l.cellH / 2);
-      g.rotate(f.rot);
-      g.globalAlpha *= alpha;
-      drawMix(g, pal.fx.mix, w, q, pal.brickColors[b.spriteColor], pal.brickColors[b.color], {
-        old: () => drawSprite(g, brick, colorFrame(b.spriteColor), -w / 2, -h / 2, w, h),
-        next: () => drawSprite(g, brick, colorFrame(b.color), -w / 2, -h / 2, w, h),
-      });
-      g.restore();
-    } else if (wiping) {
-      // Radial wipe: the new colour grows out of the centre over the old one.
-      const q = easeOutCubic(clamp01((t - f.wipeT0) / D(WIPE_MS)));
-      drawBlockTransformed(g, brick, colorFrame(b.spriteColor), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
-      g.save();
-      g.beginPath();
-      g.arc(p.x + l.cellW / 2 + xo, p.y + l.cellH / 2, l.cellW * 0.78 * q * xs, 0, Math.PI * 2);
-      g.clip();
-      drawBlockTransformed(g, brick, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
-      g.restore();
-    } else {
-      drawBlockTransformed(g, brick, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, xs, ys, f.rot, xo, 0, alpha);
-    }
-
-    if (f.landT0 >= 0) this.renderLanding(g, f, t - f.landT0, p.x + l.cellW / 2 + xo, p.y + l.cellH / 2, xs, ys, f.rot, alpha);
-
-    if (f.noaddT0 >= 0) {
-      const e = t - f.noaddT0;
-      const tint = e < D(100) ? 0.2 * (1 - e / D(100)) : 0;
-      if (tint > 0) {
-        const pad = l.cellW * 0.04;
-        g.globalAlpha = tint;
-        fillRoundRect(g, p.x + pad + xo, p.y + pad, (l.cellW - pad * 2) * xs, (l.cellH - pad * 2) * ys, l.cellW * 0.18, "#E04A3F");
-        g.globalAlpha = 1;
-      }
-    }
-
-    if (b.refined && !wiping) {
-      this.drawSpark(g, p.x + l.cellW * 0.78 + xo, p.y + l.cellH * 0.22, l.cellW * 0.085 * s);
-    }
-  }
-
-  /**
-   * What a landing brick does besides the squash. Neon's tube strikes: dark,
-   * a hot flash, dark again, then steady. Pixel's brick is solid white for
-   * one frame.
-   */
-  private renderLanding(g: CanvasRenderingContext2D, f: BrickFx, e: number, cx: number, cy: number, xs: number, ys: number, rot: number, alpha: number): void {
-    const pal = this.ctx.palette;
-    const l = this.board.layout;
-    const kind = pal.fx.landFx;
-    let over: number;
-    let color = "#ffffff";
-    if (kind === "flash") {
-      if (e >= D(40)) {
-        f.landT0 = -1;
-        return;
-      }
-      over = 0.92;
-    } else if (kind === "flicker") {
-      if (e >= D(240) || TUNING.motion < 1) {
-        f.landT0 = -1;
-        return;
-      }
-      const on = LAND_FLICKER[Math.min(LAND_FLICKER.length - 1, Math.floor(e / D(40)))];
-      if (on < 1) {
-        over = 1 - on;
-        color = pal.background;
-      } else {
-        over = on - 1;
-      }
-    } else {
-      return;
-    }
-    if (over <= 0.01) return;
-    const pad = l.cellW * 0.04;
-    g.save();
-    g.translate(cx, cy);
-    g.rotate(rot);
-    g.scale(xs, ys);
-    g.globalAlpha = over * alpha;
-    fillRoundRect(g, -l.cellW / 2 + pad, -l.cellH / 2 + pad, l.cellW - pad * 2, l.cellH - pad * 2, pal.pixelated ? 0 : l.cellW * 0.18, color);
-    g.restore();
-  }
-
-  /** Four-point star used to mark refined bricks. */
-  private drawSpark(g: CanvasRenderingContext2D, x: number, y: number, r: number): void {
-    if (r <= 0) return;
-    const k = r * 0.3;
-    g.beginPath();
-    g.moveTo(x, y - r);
-    g.lineTo(x + k, y - k);
-    g.lineTo(x + r, y);
-    g.lineTo(x + k, y + k);
-    g.lineTo(x, y + r);
-    g.lineTo(x - k, y + k);
-    g.lineTo(x - r, y);
-    g.lineTo(x - k, y - k);
-    g.closePath();
-    g.fillStyle = "#ffffff";
-    g.strokeStyle = "rgba(0,0,0,0.6)";
-    g.lineWidth = 1;
-    g.fill();
-    g.stroke();
-  }
-
-  /** Ghosts of the next replenish colours in the empty slots of the line. */
-  private renderPreview(g: CanvasRenderingContext2D): void {
-    if (this.state === "animation" && this.animation === "push") return;
-    const l = this.board.layout;
-    const n = this.board.cellNum;
-    const start = this.board.replenishList.length;
-    const ry = replenishY(l);
-    const pal = this.ctx.palette;
-    // while a bespoke well fill is showing the next colour, its ghost would only sit on top of it
-    const bespoke = pal.timer === "wells" && furnitureOf(pal).fill !== undefined && this.wellLevel() > 0;
-    for (let k = bespoke ? 1 : 0; k < PREVIEW_COUNT; k++) {
-      const i = start + k;
-      if (i >= n) break;
-      const s = 0.58 - k * 0.08;
-      const alpha = 0.42 - k * 0.1;
-      drawBlock(g, this.ctx.sprites.brick_sprite, colorFrame(this.nextColors[k]), cellX(l, i), ry, l.cellW, l.cellH, s, s, 0, 0, alpha);
-    }
-  }
-
-  /** The hold slot in the left rail and the brick parked in it. */
-  private renderHoldSlot(g: CanvasRenderingContext2D): void {
-    const l = this.board.layout;
-    const r = this.rail();
-    const pal = this.ctx.palette;
-    const x = r.cx - r.slot / 2;
-    const y = r.holdY - r.slot / 2;
-    const active = this.holdHover && (this.selectedBrick !== null || this.held !== null);
-    // an empty slot invites a selected brick with a slow pulse of its active edge
-    const invite = pal.kind === "generated" && !this.held && this.selectedBrick !== null && !active && TUNING.motion > 0;
-    const pulse = invite ? 0.5 + 0.5 * Math.sin(this.ctx.clock.t / 260) : 0;
-    if (pal.kind === "generated") {
-      // Dashed while empty, so it reads as a place to put something.
-      g.save();
-      if (!this.held) g.setLineDash([6, 5]);
-      const slotR = cardRadius(pal.ui, 10);
-      fillRoundRect(g, x, y, r.slot, r.slot, slotR, active ? pal.wellActive : pal.well, active ? pal.wellActiveEdge : pal.wellEdge, this.held ? 1.5 : 2);
-      if (pulse > 0) {
-        g.globalAlpha = pulse * 0.7;
-        fillRoundRect(g, x, y, r.slot, r.slot, slotR, "rgba(0,0,0,0)", pal.overlayAccent, 2);
-        g.globalAlpha = 1;
-      }
-      g.restore();
-      drawText(g, "HOLD", r.holdLabelX, r.holdLabelY, { size: Math.max(10, r.textSize * 0.62), color: pal.hudMuted, weight: 700, align: r.holdLabelAlign });
-      if (this.keyboardUsed && !l.portrait) drawKeycap(g, pal, "H", r.holdLabelX + r.side * 11, r.holdLabelY - 22);
-    } else {
-      drawSprite(g, this.ctx.sprites.replenish_frame_sprite, 0, x - 2, y - 2, r.slot + 4, r.slot + 4);
-      if (active) fillRoundRect(g, x, y, r.slot, r.slot, 4, "rgba(255,255,255,0.18)");
-      drawText(g, "Hold", r.cx, r.holdLabelY, { size: 12, color: pal.hudMuted, bold: false });
-    }
-    if (!this.held) {
-      if (pal.kind === "generated") {
-        g.save();
-        g.strokeStyle = pal.wellHint;
-        g.fillStyle = pal.wellHint;
-        ICONS.hold(g, r.cx, r.holdY, r.slot * 0.27);
-        if (pulse > 0) {
-          g.globalAlpha = pulse * 0.5;
-          g.strokeStyle = pal.overlayAccent;
-          g.fillStyle = pal.overlayAccent;
-          ICONS.hold(g, r.cx, r.holdY, r.slot * 0.27);
-        }
-        g.restore();
-      } else {
-        drawText(g, "H", r.cx, r.holdY, { size: r.slot * 0.4, color: pal.wellHint, bold: true });
-      }
-      return;
-    }
-    const b = this.held;
-    const f = this.fxOf(b);
-    const p = this.drawPos(b, f);
-    const s = (r.slot / l.cellW) * this.brickScale(b, f);
-    const sel = this.selectedBrick === b;
-    const xo = this.noaddOffset(f);
-    if (pal.brickStyle === "chip" && pal.brickShadow) {
-      const pad = l.cellW * 0.04;
-      const w = (l.cellW - pad * 2) * s;
-      fillRoundRect(g, p.x + l.cellW / 2 - w / 2 + xo, p.y + l.cellH / 2 - w / 2 + 4 + 6 * f.lift, w, w, w * 0.18, pal.brickShadow);
-    } else if (pal.brickStyle === "extruded" && pal.brickSide) {
-      const pad = l.cellW * 0.04;
-      const w = (l.cellW - pad * 2) * s;
-      fillRoundRect(g, p.x + l.cellW / 2 - w / 2 + xo, p.y + l.cellH / 2 - w / 2 + this.depthOf(f) * s, w, w, w * 0.2, pal.brickSide[b.color]);
-    } else if (pal.brickStyle === "gel") {
-      const gw = l.cellW * 1.4 * s;
-      g.globalAlpha = 0.5 + 0.5 * f.lift;
-      drawSprite(g, this.ctx.sprites.brick_glow_sprite, colorFrame(b.color), p.x + l.cellW / 2 - gw / 2 + xo, p.y + l.cellH / 2 - gw / 2, gw, gw);
-      g.globalAlpha = 1;
-    }
-    if (sel) drawBlock(g, this.ctx.sprites.replenish_selector_sprite, 7, p.x, p.y, l.cellW, l.cellH, s * 1.1, s * 1.1, xo);
-    drawBlock(g, this.ctx.sprites.brick_sprite, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, s, s, xo);
-    if (sel) drawBlock(g, this.ctx.sprites.replenish_selector_sprite, colorFrame(b.color), p.x, p.y, l.cellW, l.cellH, s * 1.1, s * 1.1, xo);
-    if (b.refined) this.drawSpark(g, p.x + l.cellW / 2 + r.slot * 0.28 + xo, p.y + l.cellH / 2 - r.slot * 0.28, r.slot * 0.085);
-  }
-
-  private renderCallouts(g: CanvasRenderingContext2D): void {
-    if (this.callouts.length === 0) return;
-    const t = this.ctx.clock.t;
-    const pal = this.ctx.palette;
-    g.save();
-    for (const c of this.callouts) {
-      const e = t - c.t0;
-      if (e < 0) continue;
-      const p = clamp01(e / c.dur);
-      const scale = 0.6 + 0.4 * easeOutBack(clamp01(e / D(120)));
-      const fadeLen = D(200) / c.dur;
-      const alpha = p > 1 - fadeLen ? (1 - p) / fadeLen : 1;
-      const y = c.y - c.rise * easeOutCubic(p);
-      g.save();
-      g.translate(c.x, y);
-      g.rotate(c.tilt);
-      g.scale(scale, scale);
-      g.globalAlpha = alpha;
-      drawText(g, c.text, 0, 0, {
-        size: c.size,
-        color: c.color,
-        shadow: pal.calloutShadow,
-        weight: c.display ? 600 : 800,
-        font: c.display ? pal.display : pal.font,
-        tabular: true,
-      });
-      g.restore();
-    }
-    g.restore();
-  }
-
-  /** Pop: grow, hold, shrink away with a little spin. The particles burst as the shrink starts. */
-  private renderDieAnim(g: CanvasRenderingContext2D, d: DieAnim): void {
-    const l = this.board.layout;
-    const sp = this.ctx.sprites;
-    const grow = D(POP_GROW_MS);
-    const hold = D(POP_HOLD_MS);
-    const shrink = D(POP_SHRINK_MS);
-    let e = this.ctx.clock.t - d.t0;
-    if (this.ctx.palette.fx.stepped && e > 0) {
-      // four stepped frames instead of a tween
-      const step = (grow + hold + shrink) / 4;
-      e = Math.min(grow + hold + shrink, Math.floor(e / step) * step + 1);
-    }
-    if (this.ctx.palette.fx.unravel && e > 0) {
-      this.renderUnravel(g, d, e / (grow + hold + shrink));
-      return;
-    }
-    const q = clamp01((e - grow - hold) / shrink);
-    const s = e <= 0 ? 1 : e < grow ? 1 + 0.18 * easeOutCubic(e / grow) : e < grow + hold ? 1.18 : 1.18 * (1 - easeInBack(q));
-    const rot = e < grow + hold ? 0 : d.spin * 8 * DEG * q;
-    if (s <= 0.02) return;
-    const pal = this.ctx.palette;
-    const pad = l.cellW * 0.04;
-    const w = (l.cellW - pad * 2) * s;
-    let hop = 0;
-    if (pal.brickStyle === "chip" && pal.brickShadow) {
-      const sw = l.cellW * s * 1.1;
-      g.globalAlpha = 0.45;
-      drawSprite(g, sp.brick_shadow_sprite, 0, d.x + l.cellW / 2 - sw / 2, d.y + l.cellH / 2 - sw / 2 + 7, sw, sw);
-      g.globalAlpha = 1;
-      fillRoundRect(g, d.x + l.cellW / 2 - w / 2, d.y + l.cellH / 2 - w / 2 + 4, w, w, w * 0.18, pal.brickShadow);
-    } else if (pal.brickStyle === "extruded" && pal.brickSide) {
-      // Toy bricks hop up as their extrusion collapses, then shrink in the air.
-      const rise = e <= 0 ? 0 : e < grow ? easeOutCubic(e / grow) : 1;
-      hop = 6 * rise;
-      const depth = 6 * (1 - rise);
-      const sw = l.cellW * s;
-      drawSprite(g, sp.brick_shadow_sprite, 0, d.x + l.cellW / 2 - sw / 2, d.y + l.cellH / 2 - sw / 2 + 8, sw, sw);
-      if (depth > 0.5) fillRoundRect(g, d.x + l.cellW / 2 - w / 2, d.y + l.cellH / 2 - w / 2 - hop + depth, w, w, w * 0.2, pal.brickSide[d.color]);
-    }
-    if (pal.brickStyle === "gel") {
-      const gw = l.cellW * 1.4 * s;
-      g.globalAlpha = 0.5;
-      drawSprite(g, sp.brick_glow_sprite, colorFrame(d.color), d.x + l.cellW / 2 - gw / 2, d.y + l.cellH / 2 - gw / 2, gw, gw);
-      g.globalAlpha = 1;
-    }
-    const fading = pal.fx.fragments && e > grow + hold;
-    drawBlockTransformed(g, sp.brick_sprite, colorFrame(d.color), d.x, d.y - hop, l.cellW, l.cellH, s, s, rot, 0, 0, fading ? 1 - q : 1);
-    if ((pal.brickStyle === "gel" || pal.fx.popFlash) && e >= grow && e < grow + hold + D(40)) {
-      // Flare to white just before the shrink.
-      const q = clamp01((e - grow) / (hold + D(40)));
-      g.globalAlpha = 0.95 * (1 - q * 0.6);
-      fillRoundRect(g, d.x + l.cellW / 2 - w / 2, d.y + l.cellH / 2 - w / 2 - hop, w, w, w * 0.22, "#ffffff");
-      g.globalAlpha = 1;
-    }
-  }
-
-  /**
-   * A knitted square comes undone: rows unravel from the top, each pulling
-   * out from its right end as a wavy strand, and what is left fades as the
-   * yarn debris takes over.
-   */
-  private renderUnravel(g: CanvasRenderingContext2D, d: DieAnim, u: number): void {
-    const l = this.board.layout;
-    const sp = this.ctx.sprites;
-    const rows = 4;
-    const rowH = l.cellH / rows;
-    const progress = Math.min(u, 1) * rows;
-    const gone = Math.min(rows - 1, Math.floor(progress));
-    const within = progress - gone;
-    const rowTop = d.y + gone * rowH;
-    const alpha = u > 0.7 ? Math.max(0, 1 - (u - 0.7) / 0.3) : 1;
-    if (alpha <= 0) return;
-    const pad = l.cellW * 0.04;
-    g.save();
-    g.beginPath();
-    // what is still knitted: the rows below, plus the shortening row being pulled out
-    g.rect(d.x - 2, rowTop + rowH, l.cellW + 4, l.cellH - (gone + 1) * rowH + 2);
-    g.rect(d.x - 2, rowTop, Math.max(0, l.cellW * (1 - within) + 2 - pad), rowH + 0.5);
-    g.clip();
-    drawBlockTransformed(g, sp.brick_sprite, colorFrame(d.color), d.x, d.y, l.cellW, l.cellH, 1, 1, 0, 0, 0, alpha);
-    g.restore();
-    // the strand: from the end of the row out to the right and up, longer with every row gone
-    const t = this.ctx.clock.t;
-    const sx = d.x + l.cellW * (1 - within);
-    const sy = rowTop + rowH / 2;
-    const len = l.cellW * (0.35 + 0.65 * within + 0.4 * gone);
-    g.save();
-    g.globalAlpha = alpha;
-    g.strokeStyle = this.ctx.palette.brickColors[d.color];
-    g.lineWidth = Math.max(1.5, rowH * 0.32);
-    g.lineCap = "round";
-    g.beginPath();
-    g.moveTo(sx, sy);
-    g.bezierCurveTo(sx + len * 0.4, sy + Math.sin(t / 40) * rowH * 0.6, sx + len * 0.7, sy - len * 0.5, sx + len, sy - len * 0.55 + Math.cos(t / 55) * 2);
-    g.stroke();
-    g.restore();
-  }
-
-  /** `ReplenishSelector` draw event. */
-  private renderSelector(g: CanvasRenderingContext2D): void {
-    const sp = this.ctx.sprites;
-    const l = this.board.layout;
-    const sel = sp.replenish_selector_sprite;
-    const frame = this.selectedBrick ? colorFrame(this.selectedBrick.color) : 6;
-    const ry = replenishY(l);
-    const t = this.ctx.clock.t;
-
-    if (this.selected !== this.board.cellNum && this.selected !== HOLD) {
-      const sb = this.selectedBrick;
-      const f = sb ? this.fxOf(sb) : null;
-      const ss = 1.1 * this.selFx.s * (sb && f ? this.brickScale(sb, f) : 1);
-      const lift = f ? -4 * f.lift : 0;
-      drawBlock(g, sel, 7, this.selX, ry, l.cellW, l.cellH, ss, ss, 0, lift);
-      drawBlock(g, sel, frame, this.selX, ry, l.cellW, l.cellH, ss, ss, 0, lift);
-      const flash = t - this.selFlashT0;
-      if (flash < D(200)) {
-        g.globalAlpha = 1 - flash / D(200);
-        fillRoundRect(g, this.selX - l.cellW * 0.05, ry - l.cellH * 0.05, l.cellW * 1.1, l.cellH * 1.1, l.cellW * 0.2, "rgba(0,0,0,0)", "#E04A3F", 4);
-        g.globalAlpha = 1;
-      }
-    }
-
-    if (this.ribbon.length > 1) {
-      g.save();
-      if (this.ctx.palette.particlesAdditive) g.globalCompositeOperation = "lighter";
-      drawRibbon(g, this.ribbon, t, l.cellW * 0.4, this.ribbonColor);
-      g.restore();
-    }
-    const showGhost = this.state === "rest" || (this.state === "animation" && this.animation === "combine");
-    if (showGhost && this.selAlpha > 0.01) {
-      g.save();
-      g.globalAlpha = Math.min(1, this.selAlpha);
-      const col = this.ctx.palette.crosshair;
-      const bx = this.bx;
-      const by = this.by;
-      drawLine(g, l.boardX, by + l.cellH / 2, bx, by + l.cellH / 2, 3, col);
-      drawLine(g, bx + l.cellW / 2, l.boardY, bx + l.cellW / 2, by, 3, col);
-      drawLine(g, bx + l.cellW, by + l.cellH / 2, l.boardX + l.boardW, by + l.cellH / 2, 3, col);
-      drawLine(g, bx + l.cellW / 2, by + l.cellH, bx + l.cellW / 2, l.boardY + l.boardW, 3, col);
-      drawBlock(g, sel, frame, bx, by, l.cellW, l.cellH, 1.1, 1.1);
-      g.restore();
-    }
-  }
 
   /** The backdrop: paper, empty cells and the replenish ledge (modern) or the original sprites (classic). */
   private renderBackground(g: CanvasRenderingContext2D): void {
@@ -2610,34 +1893,6 @@ export class GameScene implements Scene {
     const h = 236 + (accent ? 22 : 0) - (buttons ? 0 : 50);
     drawMessageCard(g, pal, { title, lines, accent, x: vp.w / 2 - w / 2, y: vp.h / 2 - 110, w, h }, off);
     if (buttons && (this.state !== "lost" || this.lostTimer > 20)) drawCardButtons(g, pal, this.ctx.input, this.feel, this.overlayButtons(), off);
-  }
-
-  /** Toast chips sliding in over the top row of the board, newest lowest. */
-  private renderToasts(g: CanvasRenderingContext2D): void {
-    if (this.toasts.length === 0) return;
-    const l = this.board.layout;
-    const pal = this.ctx.palette;
-    const t = this.ctx.clock.t;
-    const style = { size: 13, weight: 700 as const };
-    this.toasts.forEach((c, i) => {
-      const e = t - c.t0;
-      const enter = easeOutBack(clamp01(e / D(220)));
-      const leave = clamp01((e - D(TOAST_MS - 260)) / D(260));
-      const alpha = (1 - leave) * clamp01(e / D(80));
-      if (alpha <= 0) return;
-      const tw = measureText(g, c.text, style);
-      const w = tw + 28;
-      const h = 26;
-      const cx = l.boardX + l.boardW / 2;
-      const cy = l.boardY + 16 + i * (h + 6) - (1 - enter) * 24;
-      g.save();
-      g.globalAlpha = alpha;
-      const tr = pillRadius(pal.ui, h);
-      fillRoundRect(g, cx - w / 2, cy - h / 2 + 2, w, h, tr, pal.ui.cardShadow);
-      fillRoundRect(g, cx - w / 2, cy - h / 2, w, h, tr, pal.ui.card, c.color, 1.5);
-      drawText(g, c.text, cx, cy + 1, { ...style, color: c.color });
-      g.restore();
-    });
   }
 
   private renderLevelComplete(g: CanvasRenderingContext2D): void {
