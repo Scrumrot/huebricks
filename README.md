@@ -310,6 +310,9 @@ src/
     Board.ts     grid, groups, popping, pushing, rotation, gravity
     Brick.ts     per-brick state and animation flags
     level.ts     difficulty curve per world/level
+    replenish.ts the replenish line's timer: fills, the push countdown, rewinds, progress
+    scoring.ts   chain meter and multiplier, pop scoring, refined bonus, subtract goal, level tally
+    tutorial.ts  the six tutorial exercises, their rules and captions
     layout.ts    board geometry
     arcade.ts    arcade mode catalogue (names, rules)
     well.ts      tall well of cells for Dr. Hue / Hue Trist (lines, groups, gravity)
@@ -344,6 +347,8 @@ src/
     hudLayout.ts    pure HUD and control geometry (landscape rails, portrait bands, left-handed mirror)
     themePicker.ts   theme swatches: strip, grid and drawing
     keycaps.ts       keyboard hint row
+    overlayCard.ts   the message card every scene shows (dim, slide-in, title, lines, buttons)
+    slides.ts        3:2 picture slides with back / next corners (tutorial, help)
     modeGlyph.ts     the brick glyph each game mode borrows
     modernSkin.ts  generated "Pigment" sprite set and shared drawing helpers
     blockySkin.ts  generated "Blocky" sprite set
@@ -363,7 +368,15 @@ src/
   scenes/
     TitleScene.ts  logo / Play / Continue -> mode -> world menus, arcade grid, theme picker, settings, credits
     ui.test.ts     title pills, theme picker, pause card and reduce-motion regressions
-    GameScene.ts   gameplay state machine, replenish line, tutorial, pause
+    GameScene.ts   gameplay state machine, input, tutorial flow and the feel-layer hooks
+    game/
+      brickView.ts   everything drawn on the board from a per-frame BoardFrame: bricks, pops, selector, hold slot, callouts
+      hud.ts         score, chain meter / VU meter, level pill, goal ring, stars, progress bar from a HudModel
+      controls.ts    side buttons, rotate pill, hurry ring, keycap
+      backdrop.ts    scenery, wells, tray and stains, or the classic frame
+      levelCard.ts   level-complete card layout, buttons and drawing
+      pauseCard.ts   the pause card and its themes / help pages, answering the scene with one action
+      timing.ts      the durations the sim and the view share
     FxLabScene.ts  effects lab behind `?fx`: fire each effect on demand, edit tuning live
     arcade/
       ArcadeScene.ts   shared well layout, HUD, cards, controls and effects
@@ -384,6 +397,12 @@ src/
 - **Scenes are thin shells** over those functions plus the shared feel layer
   (`easing`, `tween`, `particles`, `clock`). New behaviour goes in a rule
   function with a test first, then a scene hook that calls it.
+- **Drawing takes a model, not the scene.** The game scene's presenters under
+  `scenes/game/` (`hud.ts`, `brickView.ts`, `backdrop.ts`, `levelCard.ts`)
+  draw from a small record the scene builds each frame, so a renderer never
+  reaches into scene state and the scene never knows how a thing looks. The
+  only render-side state they keep (the VU peak, the well tick, how many
+  stars have chimed) is passed in and handed back.
 - **Behaviour is tested through the public surface.** Core modules get plain
   unit tests. Scene behaviour (state machines, input handling) is tested with
   `src/test/harness.ts`, which drives `update()` with scripted input and a
