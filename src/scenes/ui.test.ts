@@ -6,6 +6,7 @@ import { internals, makeHarness, type Harness } from "../test/harness";
 import { GameScene } from "./GameScene";
 import type { Scene } from "./Scene";
 import { TitleScene } from "./TitleScene";
+import type { PauseCard } from "./game/pauseCard";
 
 /** Press and release at a point, one step each, the way a tap arrives. */
 function tap(h: Harness, scene: Scene, x: number, y: number): void {
@@ -80,10 +81,8 @@ describe("title screen", () => {
 
 interface GameInternals {
   state: string;
-  confirmQuit: boolean;
   keyboardUsed: boolean;
-  menuPage: string;
-  pauseLayout(off?: number): { resume: PillButton; restart: PillButton; quit: PillButton; keep: PillButton };
+  pause: PauseCard;
 }
 
 function startGame(score = 0): { h: Harness; scene: GameScene; g: GameInternals } {
@@ -115,14 +114,14 @@ describe("pause card", () => {
     const { h, scene, g } = startGame();
     h.input.tap("Escape");
     h.step(scene, 25);
-    let L = g.pauseLayout();
+    let L = g.pause.layout(h.ctx, 0, g.keyboardUsed);
     tap(h, scene, L.quit.cx, L.quit.cy);
-    expect(g.confirmQuit).toBe(true);
+    expect(g.pause.confirmQuit).toBe(true);
     expect(h.next).toBeNull();
-    L = g.pauseLayout();
+    L = g.pause.layout(h.ctx, 0, g.keyboardUsed);
     tap(h, scene, L.keep.cx, L.keep.cy);
-    expect(g.confirmQuit).toBe(false);
-    L = g.pauseLayout();
+    expect(g.pause.confirmQuit).toBe(false);
+    L = g.pause.layout(h.ctx, 0, g.keyboardUsed);
     tap(h, scene, L.quit.cx, L.quit.cy);
     tap(h, scene, L.quit.cx, L.quit.cy);
     expect(h.next).toBeInstanceOf(TitleScene);
@@ -133,7 +132,7 @@ describe("pause card", () => {
     h.ctx.session.score = 1750;
     h.input.tap("Escape");
     h.step(scene, 25);
-    const L = g.pauseLayout();
+    const L = g.pause.layout(h.ctx, 0, g.keyboardUsed);
     tap(h, scene, L.restart.cx, L.restart.cy);
     expect(h.next).toBeInstanceOf(GameScene);
     expect(h.ctx.session.score).toBe(1200);

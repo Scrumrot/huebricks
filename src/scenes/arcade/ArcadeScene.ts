@@ -5,8 +5,9 @@ import type { MusicName, SpriteName } from "../../engine/assets";
 import { BACKDROPS } from "../../engine/backdrops";
 import { ButtonFeel } from "../../engine/buttonFeel";
 import { Effects } from "../../engine/effects";
-import { drawCard, drawPillButton, drawSprite, drawText, fillRoundRect, measureText, type PillButton, type TextStyle, pillRadius } from "../../engine/draw";
-import { backOut, clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
+import { drawCard, drawSprite, drawText, fillRoundRect, measureText, type PillButton, type TextStyle, pillRadius } from "../../engine/draw";
+import { clamp01, easeOutBack, easeOutCubic } from "../../engine/easing";
+import { cardButtonAt, cardOffset, dimBehindCard, drawCardButtons, drawMessageCard } from "../../engine/overlayCard";
 import { rgba } from "../../engine/modernSkin";
 import { popScale, TUNING } from "../../engine/fxTuning";
 import { drawTile, type TileOptions, type TileShape } from "../../engine/tiles";
@@ -85,8 +86,6 @@ export type ArcadeState = "play" | "menu" | "lost" | "won" | "intro";
 const FADE_MS = 180;
 /** The HUD settles in over this long as a mode opens (generated themes). */
 const ARRIVE_MS = 420;
-const CARD_MS = 420;
-const CARD_EASE = backOut(1.2);
 const COUNT_MS = 500;
 const WIPE_MS = 160;
 
@@ -205,7 +204,7 @@ export abstract class ArcadeScene implements Scene {
     const inp = this.ctx.input;
     if (this.state !== "play") {
       const off = this.cardOffset();
-      return this.overlayButtons().some((b) => inp.inCentered(b.cx, b.cy + off, b.w, b.h)) ? "pointer" : "default";
+      return cardButtonAt(inp, this.overlayButtons(), off) ? "pointer" : "default";
     }
     if (this.spriteButtons.some((b) => b.hilite) || this.controls.some((c) => c.hilite)) return "pointer";
     return this.inWell(inp.x, inp.y) ? "crosshair" : "default";
@@ -454,7 +453,7 @@ export abstract class ArcadeScene implements Scene {
     // buttons are hit where they are drawn: offset while the card slides in, hidden early on the game-over card
     if (this.state === "lost" && this.lostTimer <= 20) return;
     const off = this.cardOffset();
-    const hit = this.overlayButtons().find((b) => inp.released && inp.inCentered(b.cx, b.cy + off, b.w, b.h));
+    const hit = inp.released ? cardButtonAt(inp, this.overlayButtons(), off) : undefined;
     if (!hit) return;
     this.ctx.audio.event("tap");
     if (hit.id === "resume") this.state = "play";
@@ -883,10 +882,7 @@ export abstract class ArcadeScene implements Scene {
   // ---------------------------------------------------------------------------
 
   private cardOffset(): number {
-    const e = this.ctx.clock.t - this.cardT0;
-    const vh = this.ctx.view.h;
-    if (e < 0) return vh;
-    return (1 - CARD_EASE(clamp01(e / CARD_MS))) * vh * 0.6;
+    return cardOffset(this.ctx.clock.t - this.cardT0, this.ctx.view.h);
   }
 
   private cardHeight(): number {
@@ -901,36 +897,19 @@ export abstract class ArcadeScene implements Scene {
   }
 
   private renderCard(g: CanvasRenderingContext2D, title: string, lines: string[], accent?: string, footer?: string): void {
-    const inp = this.ctx.input;
     const pal = this.ctx.palette;
-    const e = this.ctx.clock.t - this.cardT0;
-    g.globalAlpha = clamp01(e / 200);
-    fillScreen(g, pal.ui.dim);
-    g.globalAlpha = 1;
+    dimBehindCard(g, pal, this.ctx.clock.t - this.cardT0);
     const off = this.cardOffset();
     const vp = this.ctx.view;
     const w = Math.min(460, vp.w - 24);
     const h = this.cardHeight();
-    const x = vp.w / 2 - w / 2;
-    const y = vp.h / 2 - h / 2 + off;
-    drawCard(g, pal.ui, x, y, w, h, 20);
-    drawText(g, title, vp.w / 2, y + 46, { size: 30, color: pal.overlayText, weight: 600, font: pal.display });
-    lines.forEach((line, i) => drawText(g, line, vp.w / 2, y + 90 + i * 24, { size: 16, color: pal.hudMuted, weight: 500, tabular: true }));
-    if (accent) drawText(g, accent, vp.w / 2, y + 90 + lines.length * 24, { size: 16, color: pal.overlayAccent, weight: 700 });
-    if (footer) drawText(g, footer, vp.w / 2, y + h - 18, { size: 11, color: pal.hudMuted, weight: 500 });
+    drawMessageCard(g, pal, { title, lines, accent, footer, x: vp.w / 2 - w / 2, y: vp.h / 2 - h / 2, w, h }, off);
     if (this.state === "lost" && this.lostTimer <= 20) return;
-    for (const b of this.overlayButtons()) {
-      b.cy += off;
-      const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
-      const pressed = hover && inp.down;
-      b.scale = this.feel.scale(`overlay:${b.id}`, hover, pressed);
-      drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
-    }
+    drawCardButtons(g, pal, this.ctx.input, this.feel, this.overlayButtons(), off);
   }
 
   /** How-to-play card shown before the first piece moves. */
   private renderIntro(g: CanvasRenderingContext2D): void {
-    const inp = this.ctx.input;
     const pal = this.ctx.palette;
     {
       const cw = Math.min(500, this.ctx.view.w - 24);
@@ -938,10 +917,7 @@ export abstract class ArcadeScene implements Scene {
       for (const rule of this.info.rules) hh += wrapText(g, rule, cw - 90, { size: 13, weight: 500 }).length * 18 + 6;
       this.introRulesHeight = hh;
     }
-    const e = this.ctx.clock.t - this.cardT0;
-    g.globalAlpha = clamp01(e / 200);
-    fillScreen(g, pal.ui.dim);
-    g.globalAlpha = 1;
+    dimBehindCard(g, pal, this.ctx.clock.t - this.cardT0);
     const off = this.cardOffset();
     const vp = this.ctx.view;
     const w = Math.min(500, vp.w - 24);
@@ -962,13 +938,7 @@ export abstract class ArcadeScene implements Scene {
       ly += 6;
     });
     drawText(g, this.info.keys, vp.w / 2, y + h - 78, { size: 11, color: pal.hudMuted, weight: 500 });
-    for (const b of this.overlayButtons()) {
-      b.cy += off;
-      const hover = inp.inCentered(b.cx, b.cy, b.w, b.h);
-      const pressed = hover && inp.down;
-      b.scale = this.feel.scale(`overlay:${b.id}`, hover, pressed);
-      drawPillButton(g, pal.ui, b, hover, pressed, pal.font);
-    }
+    drawCardButtons(g, pal, this.ctx.input, this.feel, this.overlayButtons(), off);
   }
 
   /** Accent colour for a brick colour, for callouts and rings. */
