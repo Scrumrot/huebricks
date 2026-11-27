@@ -25,6 +25,7 @@ export type ThemeName =
   | "knit"
   | "neon"
   | "seaglass"
+  | "fractals"
   | "pixel"
   | "blocky"
   | "spectra";
@@ -47,6 +48,7 @@ export const THEME_ORDER: readonly ThemeName[] = [
   "knit",
   "neon",
   "seaglass",
+  "fractals",
   "pixel",
   "spectra",
   "blocky",
@@ -76,6 +78,7 @@ export const THEME_LABELS: Record<ThemeName, string> = {
   knit: "Knit",
   neon: "Neon",
   seaglass: "Sea Glass",
+  fractals: "Fractals",
   pixel: "Pixel",
   blocky: "Blocky",
   spectra: "Spectra",
@@ -124,6 +127,7 @@ export interface Palette {
     | "knit"
     | "neon"
     | "seaglass"
+    | "fractals"
     | "pixel";
   /** How bricks are drawn around their face sprite. */
   brickStyle: "flat" | "chip" | "extruded" | "gel";
@@ -1578,6 +1582,77 @@ export const SEAGLASS: Palette = {
   sound: MATERIALS.snow,
 };
 
+/** "Fractals": self-similar geometry glowing out of a void. */
+export const FRACTALS: Palette = {
+  name: "fractals",
+  popStyle: "shards",
+  kind: "generated",
+  backdrop: "fractals",
+  brickStyle: "gel",
+  timer: "wells",
+  titleDeco: "bubbles",
+  titleDim: "rgba(7,10,24,0.74)",
+  background: "#070A18",
+  hudText: "#EEF1FF",
+  hudMuted: "#8E97BF",
+  gridLine: "#EEF1FF",
+  gridAlpha: 0,
+  crosshair: "rgba(94,230,216,0.6)",
+  titleText: "#EEF1FF",
+  titleMuted: "#8E97BF",
+  overlayText: "#EEF1FF",
+  overlayAccent: "#B36BFF",
+  tutorialText: "#EEF1FF",
+  tutorialShadow: "rgba(0,0,0,0.6)",
+  font: 'Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  display: 'Orbitron, Audiowide, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ui: {
+    card: "#111833",
+    cardEdge: "rgba(94,230,216,0.55)",
+    cardShadow: "rgba(0,0,0,0.5)",
+    dim: "rgba(4,6,16,0.64)",
+    primary: "#5EE6D8",
+    primaryHover: "#8FF0E6",
+    primaryText: "#070A18",
+    secondary: "rgba(94,230,216,0.12)",
+    secondaryHover: "rgba(94,230,216,0.24)",
+    secondaryEdge: "rgba(94,230,216,0.5)",
+    secondaryText: "#EEF1FF",
+  },
+  brickShadow: null,
+  brickSide: null,
+  emptyCell: null,
+  ledge: null,
+  flash: "#FFFFFF",
+  flashAlpha: 0.22,
+  callout: "#EEF1FF",
+  calloutShadow: "rgba(0,0,0,0.85)",
+  multColors: ["", "#EEF1FF", "#FFD23F", "#FF8C42", "#FF4D6D", "#B36BFF"],
+  brickColors: { 1: "#FF4D6D", 2: "#3D7BFF", 3: "#A66BFF", 4: "#FFD23F", 5: "#FF8C42", 6: "#3DE8A0", 7: "#AEB8D9" },
+  well: "rgba(17,24,51,0.85)",
+  wellEdge: "rgba(94,230,216,0.22)",
+  wellActive: "rgba(94,230,216,0.18)",
+  wellActiveEdge: "#5EE6D8",
+  wellHint: "rgba(238,241,255,0.2)",
+  pill: "rgba(179,107,255,0.14)",
+  pillEdge: "rgba(179,107,255,0.45)",
+  track: "rgba(238,241,255,0.12)",
+  trackMax: "rgba(238,241,255,0.25)",
+  barFlash: "#FFFFFF",
+  goalAccent: "#5EE6D8",
+  ring: "#EEF1FF",
+  dust: ["rgba(238,241,255,0.8)", "rgba(94,230,216,0.5)"],
+  glow: true,
+  flashFromBrick: true,
+  particlesAdditive: true,
+  stains: false,
+  stainColor: null,
+  pixelated: false,
+  fuse: false,
+  fx: fxProfile({ sparks: "#FFFFFF", bloom: true, vignette: "#000000", signature: "flare" }),
+  sound: MATERIALS.bells,
+};
+
 /** "Pixel": sixteen-colour chunky bricks, bevelled like an old console. */
 export const PIXEL: Palette = {
   name: "pixel",
@@ -1681,6 +1756,7 @@ export const PALETTES: Record<ThemeName, Palette> = {
   knit: KNIT,
   neon: NEON,
   seaglass: SEAGLASS,
+  fractals: FRACTALS,
   pixel: PIXEL,
   blocky: BLOCKY,
   spectra: SPECTRA,

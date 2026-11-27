@@ -21,6 +21,7 @@ import { buildCircuitSprites } from "./engine/circuitSkin";
 import { buildKnitSprites } from "./engine/knitSkin";
 import { buildNeonSprites } from "./engine/neonSkin";
 import { buildSeaGlassSprites } from "./engine/seaGlassSkin";
+import { buildFractalsSprites } from "./engine/fractalsSkin";
 import { buildPixelSprites } from "./engine/pixelSkin";
 import { buildOrigamiSprites } from "./engine/origamiSkin";
 import { buildBlankGlow, buildBlankShadow, buildClassicArcadeButton, buildClassicSoundButton } from "./engine/classicExtras";
@@ -233,6 +234,7 @@ async function boot(): Promise<void> {
     knit: buildKnitSprites,
     neon: buildNeonSprites,
     seaglass: buildSeaGlassSprites,
+    fractals: buildFractalsSprites,
     pixel: buildPixelSprites,
     origami: buildOrigamiSprites,
   };

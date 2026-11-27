@@ -11,6 +11,7 @@ import { drawCircuitBackdrop, drawCircuitTray, drawCircuitWell } from "./circuit
 import { drawKnitBackdrop, drawKnitFill, drawKnitTray, drawKnitWell } from "./knitSkin";
 import { drawNeonBackdrop, drawNeonFill, drawNeonTray, drawNeonWell } from "./neonSkin";
 import { drawSeaBackdrop, drawSeaTray, drawSeaWell } from "./seaGlassSkin";
+import { drawFractalsBackdrop, drawFractalsFill, drawFractalsTray, drawFractalsWell } from "./fractalsSkin";
 import { drawPixelBackdrop, drawPixelTray, drawPixelWell } from "./pixelSkin";
 import { drawOrigamiBackdrop, drawOrigamiFill, drawOrigamiTray, drawOrigamiWell } from "./origamiSkin";
 import { drawVintageBackdrop, drawVintageTray, drawVintageWell } from "./vintageSkin";
@@ -72,6 +73,7 @@ export const BACKDROPS: Record<BackdropName, Backdrop> = {
   knit: drawKnitBackdrop,
   neon: drawNeonBackdrop,
   seaglass: drawSeaBackdrop,
+  fractals: drawFractalsBackdrop,
   pixel: drawPixelBackdrop,
   origami: drawOrigamiBackdrop,
 };
@@ -99,6 +101,7 @@ export const FURNITURE: Partial<Record<BackdropName, Furniture>> = {
   knit: { well: drawKnitWell, tray: drawKnitTray, fill: drawKnitFill },
   neon: { well: drawNeonWell, tray: drawNeonTray, fill: drawNeonFill },
   seaglass: { well: drawSeaWell, tray: drawSeaTray },
+  fractals: { well: drawFractalsWell, tray: drawFractalsTray, fill: drawFractalsFill },
   pixel: { well: drawPixelWell, tray: drawPixelTray },
   origami: { well: drawOrigamiWell, tray: drawOrigamiTray, fill: drawOrigamiFill },
 };

@@ -158,7 +158,7 @@ Switch themes any time: the theme pill in the top-right of the title screen
 opens a picker, the pause card has a swatch strip and an "All" grid, and the
 `T` key cycles. The choice is remembered.
 
-Twenty themes:
+Twenty-one themes:
 
 - **Delicious** (`src/engine/deliciousSkin.ts`): frosted tarts with fluted
   crusts, piped-icing glyphs and sprinkles, macaron buttons and eclair mode
@@ -222,6 +222,14 @@ Twenty themes:
   when tapped, water-drop buttons and a tide-pool tray. Pops ripple, burst
   into rising bubbles and leave a wet patch that dries back to sand; a level
   clear brings the tide up the sand. Display text is Quicksand.
+- **Fractals** (`src/engine/fractalsSkin.ts`): lit glass tiles ruled into a
+  Sierpinski lattice over a deep void, Koch-snowflake buttons and a dark
+  glass tray whose next well fills cell by cell as a Sierpinski carpet.
+  Behind everything a carpet zooms out of the screen's centre forever (it
+  is self-similar, so each x3 step lands back on itself) while a fractal
+  canopy sways in the corner and leans toward the pointer; taps ripple out
+  as rings within rings. Pops split the tile into its eight smaller copies
+  and throw glass shards. Display text is Orbitron.
 - **Pixel** (`src/engine/pixelSkin.ts`): sixteen-colour bevelled bricks
   drawn at 32 px and scaled up with smoothing off, a 4 px dithered night
   sky over a blocky skyline with blinking stars and scanlines, a parallax
@@ -358,6 +366,7 @@ src/
     skinKit.ts      shared builder the seasonal themes are made from
     stainedGlassSkin.ts, lanternSkin.ts, origamiSkin.ts  three themes from the design sheets, on the same kit
     circuitSkin.ts, knitSkin.ts, neonSkin.ts, seaGlassSkin.ts  four more from the sheets
+    fractalsSkin.ts self-similar geometry: Sierpinski tiles and carpet fill, Koch buttons, the endless zoom
     pixelSkin.ts    the console theme: low-res sprites, dither, stepped pops
     halloweenSkin.ts, winterSkin.ts, christmasSkin.ts,
     gooeySkin.ts, vintageSkin.ts, natureSkin.ts

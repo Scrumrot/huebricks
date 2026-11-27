@@ -54,7 +54,7 @@ describe("theme registry", () => {
     expect(PALETTES.knit.fx.unravel).toBe(true);
     expect(PALETTES.classic.fx.landFx).toBe("none");
     expect(PALETTES.classic.fx.meter).toBe("bar");
-    for (const name of ["stainedglass", "lantern", "origami", "knit", "neon"] as const) expect(FURNITURE[name]?.fill).toBeTypeOf("function");
+    for (const name of ["stainedglass", "lantern", "origami", "knit", "neon", "fractals"] as const) expect(FURNITURE[name]?.fill).toBeTypeOf("function");
     expect(
       Object.values(PALETTES)
         .filter((p) => p.pixelated)
